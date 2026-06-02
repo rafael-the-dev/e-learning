@@ -1,0 +1,765 @@
+// =============================================================================
+// SCHOOL MANAGEMENT SAAS - DATABASE SCHEMA
+// Provider: SQL Server | ORM: Prisma
+// Note: SQL Server does not support enums OR multiple cascade paths.
+//       All status fields use String. All relations use NoAction except where
+//       a single-path cascade is safe (Account→User, InvoiceItem→Invoice).
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+}
+
+// =============================================================================
+// ORGANIZATIONS & TENANCY
+// =============================================================================
+
+model Organization {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  email     String?
+  phone     String?
+  address   String?
+  logoUrl   String?
+  // OrganizationStatus: TRIAL | ACTIVE | SUSPENDED | CANCELLED
+  status    String    @default("TRIAL")
+  // SubscriptionPlan: FREE | STARTER | PROFESSIONAL | ENTERPRISE
+  plan      String    @default("FREE")
+  timezone  String    @default("UTC")
+  locale    String    @default("en")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  branches          Branch[]
+  userOrganizations UserOrganization[]
+  students          Student[]
+  teachers          Teacher[]
+  courses           Course[]
+  vehicles          Vehicle[]
+  invoices          Invoice[]
+  payments          Payment[]
+  roles             Role[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  settings          OrganizationSettings?
+
+  @@map("organizations")
+}
+
+model Branch {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  code           String?
+  address        String?
+  phone          String?
+  email          String?
+  isDefault      Boolean   @default(false)
+  // BranchStatus: ACTIVE | INACTIVE
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroups  ClassGroup[]
+  students     Student[]
+  teachers     Teacher[]
+  vehicles     Vehicle[]
+
+  @@map("branches")
+}
+
+model OrganizationSettings {
+  id                String   @id @default(cuid())
+  organizationId    String   @unique
+  currencyCode      String   @default("MZN")
+  currencySymbol    String   @default("MT")
+  dateFormat        String   @default("DD/MM/YYYY")
+  taxRate           Decimal? @db.Decimal(5, 2)
+  taxName           String?
+  invoicePrefix     String   @default("INV")
+  receiptPrefix     String   @default("REC")
+  allowLatePayments Boolean  @default(true)
+  gracePeriodDays   Int      @default(7)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("organization_settings")
+}
+
+// =============================================================================
+// AUTHENTICATION (Auth.js / NextAuth compatible)
+// =============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  avatarUrl     String?
+  phone         String?
+  passwordHash  String?
+  emailVerified DateTime?
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  accounts          Account[]
+  sessions          Session[]
+  userOrganizations UserOrganization[]
+  userRoles         UserRole[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]         @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.NVarChar(Max)
+  access_token      String? @db.NVarChar(Max)
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.NVarChar(Max)
+  session_state     String?
+
+  // Cascade is safe here — single path User → Account
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  // Cascade is safe here — single path User → Session
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model UserOrganization {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String
+  isOwner        Boolean  @default(false)
+  joinedAt       DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, organizationId])
+  @@map("user_organizations")
+}
+
+// =============================================================================
+// ROLES & PERMISSIONS (RBAC)
+// =============================================================================
+
+model Role {
+  id             String   @id @default(cuid())
+  organizationId String?
+  name           String
+  description    String?
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization    Organization?    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@unique([organizationId, name])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  module      String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String @id @default(cuid())
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id             String   @id @default(cuid())
+  userId         String
+  roleId         String
+  organizationId String
+  branchId       String?
+  assignedAt     DateTime @default(now())
+  assignedBy     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role Role @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, roleId, organizationId])
+  @@map("user_roles")
+}
+
+// =============================================================================
+// STUDENTS
+// =============================================================================
+
+model Student {
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String?
+  code           String?
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String?
+  dateOfBirth    DateTime?
+  // Gender: MALE | FEMALE | OTHER
+  gender         String?
+  address        String?
+  photoUrl       String?
+  idType         String?
+  idNumber       String?
+  // StudentStatus: PENDING | ACTIVE | SUSPENDED | COMPLETED | DROPPED
+  status         String    @default("PENDING")
+  notes          String?   @db.NVarChar(Max)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+  updatedBy      String?
+
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch           Branch?            @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollments      Enrollment[]
+  attendances      AttendanceRecord[]
+  practicalLessons PracticalLesson[]
+  payments         Payment[]
+  invoices         Invoice[]
+
+  @@map("students")
+}
+
+// =============================================================================
+// TEACHERS
+// =============================================================================
+
+model Teacher {
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String?
+  code           String?
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String?
+  dateOfBirth    DateTime?
+  // Gender: MALE | FEMALE | OTHER
+  gender         String?
+  address        String?
+  photoUrl       String?
+  idType         String?
+  idNumber       String?
+  licenseNumber  String?
+  specialization String?
+  // TeacherStatus: ACTIVE | INACTIVE | ON_LEAVE
+  status         String    @default("ACTIVE")
+  notes          String?   @db.NVarChar(Max)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+  updatedBy      String?
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch           Branch?           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacherSubjects  TeacherSubject[]
+  classGroups      ClassGroup[]
+  practicalLessons PracticalLesson[]
+
+  @@map("teachers")
+}
+
+// =============================================================================
+// COURSES
+// =============================================================================
+
+model Course {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  code           String?
+  description    String?   @db.NVarChar(Max)
+  durationWeeks  Int?
+  totalHours     Int?
+  price          Decimal?  @db.Decimal(10, 2)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levels       CourseLevel[]
+  classGroups  ClassGroup[]
+  enrollments  Enrollment[]
+
+  @@map("courses")
+}
+
+model CourseLevel {
+  id            String   @id @default(cuid())
+  courseId      String
+  name          String
+  code          String?
+  description   String?
+  order         Int      @default(0)
+  durationWeeks Int?
+  totalHours    Int?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subjects    Subject[]
+  classGroups ClassGroup[]
+  enrollments Enrollment[]
+
+  @@map("course_levels")
+}
+
+model Subject {
+  id            String   @id @default(cuid())
+  courseLevelId String
+  name          String
+  code          String?
+  description   String?
+  hoursRequired Int?
+  order         Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  courseLevel     CourseLevel        @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacherSubjects TeacherSubject[]
+  attendances     AttendanceRecord[]
+
+  @@map("subjects")
+}
+
+model TeacherSubject {
+  id         String   @id @default(cuid())
+  teacherId  String
+  subjectId  String
+  assignedAt DateTime @default(now())
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([teacherId, subjectId])
+  @@map("teacher_subjects")
+}
+
+// =============================================================================
+// CLASS GROUPS & SCHEDULES
+// =============================================================================
+
+model ClassGroup {
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String?
+  courseId       String
+  courseLevelId  String?
+  teacherId      String?
+  name           String
+  code           String?
+  capacity       Int       @default(30)
+  currentCount   Int       @default(0)
+  startDate      DateTime?
+  endDate        DateTime?
+  // ClassGroupStatus: FORMING | ACTIVE | COMPLETED | CANCELLED
+  status         String    @default("FORMING")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+
+  branch      Branch?           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course      Course            @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel CourseLevel?      @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacher     Teacher?          @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  schedules   ClassSchedule[]
+  enrollments Enrollment[]
+  attendances AttendanceRecord[]
+
+  @@map("class_groups")
+}
+
+model ClassSchedule {
+  id           String   @id @default(cuid())
+  classGroupId String
+  // 0=Sunday … 6=Saturday
+  dayOfWeek    Int
+  startTime    String
+  endTime      String
+  room         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  classGroup ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("class_schedules")
+}
+
+// =============================================================================
+// ENROLLMENTS
+// =============================================================================
+
+model Enrollment {
+  id             String    @id @default(cuid())
+  organizationId String
+  studentId      String
+  courseId       String
+  courseLevelId  String?
+  classGroupId   String?
+  enrollmentDate DateTime  @default(now())
+  startDate      DateTime?
+  endDate        DateTime?
+  // EnrollmentStatus: DRAFT | PENDING_PAYMENT | ACTIVE | COMPLETED | SUSPENDED | CANCELLED
+  status         String    @default("DRAFT")
+  notes          String?   @db.NVarChar(Max)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+  updatedBy      String?
+
+  student       Student                   @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course        Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel   CourseLevel?              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup    ClassGroup?               @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoices      Invoice[]
+  statusHistory EnrollmentStatusHistory[]
+
+  @@map("enrollments")
+}
+
+model EnrollmentStatusHistory {
+  id           String    @id @default(cuid())
+  enrollmentId String
+  fromStatus   String?
+  toStatus     String
+  reason       String?
+  changedBy    String?
+  changedAt    DateTime  @default(now())
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("enrollment_status_history")
+}
+
+// =============================================================================
+// ATTENDANCE
+// =============================================================================
+
+model AttendanceRecord {
+  id             String   @id @default(cuid())
+  organizationId String
+  classGroupId   String
+  studentId      String
+  subjectId      String?
+  date           DateTime
+  // AttendanceStatus: PRESENT | ABSENT | LATE | EXCUSED
+  status         String   @default("ABSENT")
+  justification  String?
+  markedBy       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  classGroup ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject    Subject?   @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([classGroupId, studentId, date, subjectId])
+  @@map("attendance_records")
+}
+
+// =============================================================================
+// VEHICLES
+// =============================================================================
+
+model Vehicle {
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String?
+  plate          String
+  brand          String?
+  model          String?
+  year           Int?
+  color          String?
+  category       String?
+  transmission   String?
+  // VehicleStatus: ACTIVE | MAINTENANCE | INACTIVE
+  status         String    @default("ACTIVE")
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch           Branch?           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  practicalLessons PracticalLesson[]
+
+  @@map("vehicles")
+}
+
+// =============================================================================
+// PRACTICAL LESSONS
+// =============================================================================
+
+model PracticalLesson {
+  id              String    @id @default(cuid())
+  organizationId  String
+  studentId       String
+  teacherId       String?
+  vehicleId       String?
+  date            DateTime
+  startTime       String
+  endTime         String
+  durationMinutes Int?
+  // PracticalLessonStatus: SCHEDULED | IN_PROGRESS | COMPLETED | CANCELLED | NO_SHOW
+  status          String    @default("SCHEDULED")
+  evaluation      String?   @db.NVarChar(Max)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  createdBy       String?
+
+  student Student  @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacher Teacher? @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("practical_lessons")
+}
+
+// =============================================================================
+// FINANCIAL MODULE
+// =============================================================================
+
+model Invoice {
+  id             String    @id @default(cuid())
+  organizationId String
+  studentId      String?
+  enrollmentId   String?
+  number         String    @unique
+  issueDate      DateTime  @default(now())
+  dueDate        DateTime?
+  subtotal       Decimal   @db.Decimal(10, 2)
+  taxAmount      Decimal   @db.Decimal(10, 2) @default(0)
+  discount       Decimal   @db.Decimal(10, 2) @default(0)
+  total          Decimal   @db.Decimal(10, 2)
+  paidAmount     Decimal   @db.Decimal(10, 2) @default(0)
+  // InvoiceStatus: PENDING | PARTIALLY_PAID | PAID | OVERDUE | CANCELLED
+  status         String    @default("PENDING")
+  notes          String?   @db.NVarChar(Max)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+  updatedBy      String?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student?      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // Cascade is safe here — Invoice is the single owner of its items
+  items        InvoiceItem[]
+  payments     Payment[]
+  paymentPlan  PaymentPlan?
+  receipts     Receipt[]
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Decimal @db.Decimal(10, 2) @default(1)
+  unitPrice   Decimal @db.Decimal(10, 2)
+  discount    Decimal @db.Decimal(10, 2) @default(0)
+  total       Decimal @db.Decimal(10, 2)
+  order       Int     @default(0)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
+}
+
+model PaymentPlan {
+  id           String   @id @default(cuid())
+  invoiceId    String   @unique
+  totalAmount  Decimal  @db.Decimal(10, 2)
+  installments Int
+  createdAt    DateTime @default(now())
+
+  invoice         Invoice       @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  installmentList Installment[]
+
+  @@map("payment_plans")
+}
+
+model Installment {
+  id            String    @id @default(cuid())
+  paymentPlanId String
+  number        Int
+  dueDate       DateTime
+  amount        Decimal   @db.Decimal(10, 2)
+  paidAmount    Decimal   @db.Decimal(10, 2) @default(0)
+  // InstallmentStatus: PENDING | PARTIALLY_PAID | PAID | OVERDUE
+  status        String    @default("PENDING")
+  paidAt        DateTime?
+
+  paymentPlan PaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payments    Payment[]
+
+  @@map("installments")
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  organizationId String
+  studentId      String?
+  invoiceId      String?
+  installmentId  String?
+  amount         Decimal  @db.Decimal(10, 2)
+  // PaymentMethod: CASH | BANK_TRANSFER | MPESA | EMOLA | POS | OTHER
+  method         String   @default("CASH")
+  reference      String?
+  paymentDate    DateTime @default(now())
+  // PaymentStatus: PENDING | CONFIRMED | CANCELLED | REFUNDED
+  status         String   @default("CONFIRMED")
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student?     @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  installment  Installment? @relation(fields: [installmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  receipt      Receipt?
+
+  @@map("payments")
+}
+
+model Receipt {
+  id        String   @id @default(cuid())
+  invoiceId String
+  paymentId String   @unique
+  number    String   @unique
+  issuedAt  DateTime @default(now())
+  issuedBy  String?
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("receipts")
+}
+
+// =============================================================================
+// NOTIFICATIONS
+// =============================================================================
+
+model Notification {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String?
+  // NotificationType: ENROLLMENT_APPROVED | ENROLLMENT_CANCELLED | PAYMENT_RECEIVED |
+  //                   PAYMENT_OVERDUE | CLASS_SCHEDULED | CLASS_CANCELLED | DOCUMENT_READY | GENERAL
+  type           String
+  // NotificationChannel: IN_APP | EMAIL | SMS | WHATSAPP
+  channel        String    @default("IN_APP")
+  title          String
+  body           String    @db.NVarChar(Max)
+  data           String?   @db.NVarChar(Max)
+  isRead         Boolean   @default(false)
+  readAt         DateTime?
+  sentAt         DateTime?
+  // NotificationStatus: PENDING | SENT | FAILED | READ
+  status         String    @default("PENDING")
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("notifications")
+}
+
+// =============================================================================
+// AUDIT LOGS
+// =============================================================================
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  actorId        String?
+  entity         String
+  entityId       String
+  action         String
+  oldValues      String?  @db.NVarChar(Max)
+  newValues      String?  @db.NVarChar(Max)
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actor        User?         @relation("AuditActor", fields: [actorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, entity, entityId])
+  @@index([organizationId, actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
