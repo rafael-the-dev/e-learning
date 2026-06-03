@@ -22,23 +22,13 @@ export class RemoveUserFromOrganizationCommand extends BaseCommand<
     );
     if (!user) throw new NotFoundError("Utilizador", this.input.userId);
 
-    // Prevent removing last ORG_ADMIN
+    // Prevent removing last ORG_ADMIN (covers self-removal too)
     const isOrgAdmin = user.roles.some((r) => r.name === "ORG_ADMIN");
     if (isOrgAdmin) {
       const adminCount = await countOrgAdmins(this.context.organizationId);
       if (adminCount <= 1) {
         throw new BusinessRuleError(
           "Não é possível remover o último administrador da organização"
-        );
-      }
-    }
-
-    // Prevent self-removal if actor is the last ORG_ADMIN
-    if (this.input.userId === this.context.userId) {
-      const adminCount = await countOrgAdmins(this.context.organizationId);
-      if (adminCount <= 1) {
-        throw new BusinessRuleError(
-          "Não é possível remover a sua própria conta — é o último administrador"
         );
       }
     }

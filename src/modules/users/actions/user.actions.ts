@@ -6,10 +6,9 @@ import { requireOrganization } from "@/server/auth/context";
 import { CreateOrganizationUserCommand } from "@/modules/users/commands/create-org-user.command";
 import { UpdateOrganizationUserCommand } from "@/modules/users/commands/update-org-user.command";
 import { DisableOrganizationUserCommand } from "@/modules/users/commands/disable-org-user.command";
+import { EnableOrganizationUserCommand } from "@/modules/users/commands/enable-org-user.command";
 import { AssignUserRoleCommand } from "@/modules/users/commands/assign-user-role.command";
 import { RemoveUserFromOrganizationCommand } from "@/modules/users/commands/remove-user-from-org.command";
-import { setUserActiveStatus } from "@/modules/users/repositories/user.repository";
-import { auditService } from "@/modules/audit-logs/services/audit.service";
 import type { CreateUserSchema, UpdateUserSchema } from "@/modules/users/schemas/user.schema";
 import type { ActionResult } from "@/shared/types/common";
 import type { OrgUser } from "@/modules/users/types";
@@ -60,13 +59,8 @@ export async function enableOrgUserAction(
 ): Promise<ActionResult<void>> {
   return runAction(async () => {
     const context = await requireOrganization();
-    await setUserActiveStatus(userId, true);
-    await auditService.log(context, {
-      entity: "User",
-      entityId: userId,
-      action: "STATUS_CHANGED",
-      newValues: { isActive: true },
-    });
+    const cmd = new EnableOrganizationUserCommand({ userId }, context);
+    await cmd.run();
     revalidatePath("/users");
     revalidatePath(`/users/${userId}`);
   });

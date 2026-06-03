@@ -1,4 +1,4 @@
-import { BaseCommand, AuthorizationError, ValidationError, NotFoundError } from "@/shared/lib/command";
+import { BaseCommand, AuthorizationError, ValidationError, BusinessRuleError, NotFoundError } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
@@ -7,6 +7,7 @@ import {
   findRoleById,
   deleteUserRolesInOrg,
   createUserRoleLink,
+  countOrgAdmins,
 } from "@/modules/users/repositories/user.repository";
 import type { AssignRoleSchema } from "@/modules/users/schemas/user.schema";
 
@@ -30,6 +31,17 @@ export class AssignUserRoleCommand extends BaseCommand<AssignRoleSchema, void> {
       throw new ValidationError("Dados inválidos", {
         roleId: ["Não é permitido atribuir o papel de Super Admin"],
       });
+    }
+
+    // Prevent downgrading the last ORG_ADMIN to a non-admin role
+    const isTargetCurrentAdmin = user.roles.some((r) => r.name === "ORG_ADMIN");
+    if (isTargetCurrentAdmin && role.name !== "ORG_ADMIN") {
+      const adminCount = await countOrgAdmins(this.context.organizationId);
+      if (adminCount <= 1) {
+        throw new BusinessRuleError(
+          "Não é possível alterar o papel do último administrador da organização"
+        );
+      }
     }
   }
 
