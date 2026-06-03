@@ -46,11 +46,27 @@ const STATUS_MAP: Record<string, BadgeProps["variant"]> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  PENDING_PAYMENT: "Pending Payment",
-  PARTIALLY_PAID: "Partially Paid",
-  IN_PROGRESS: "In Progress",
-  NO_SHOW: "No Show",
-  ON_LEAVE: "On Leave",
+  ACTIVE: "Ativo",
+  PENDING: "Pendente",
+  SUSPENDED: "Suspenso",
+  COMPLETED: "Concluído",
+  DROPPED: "Abandonado",
+  INACTIVE: "Inativo",
+  ON_LEAVE: "Em Licença",
+  DRAFT: "Rascunho",
+  PENDING_PAYMENT: "Pagamento Pendente",
+  CANCELLED: "Cancelado",
+  PAID: "Pago",
+  PARTIALLY_PAID: "Parcialmente Pago",
+  OVERDUE: "Em Atraso",
+  CONFIRMED: "Confirmado",
+  REFUNDED: "Reembolsado",
+  SCHEDULED: "Agendado",
+  FORMING: "Em Formação",
+  IN_PROGRESS: "Em Curso",
+  NO_SHOW: "Não Compareceu",
+  MAINTENANCE: "Em Manutenção",
+  TRIAL: "Experimental",
 };
 
 interface StatusBadgeProps {

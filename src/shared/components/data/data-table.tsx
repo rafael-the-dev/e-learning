@@ -86,7 +86,7 @@ export function DataTable<TData, TValue>({
                   colSpan={columns.length}
                   className="h-32 text-center text-muted-foreground"
                 >
-                  Loading...
+                  A carregar...
                 </td>
               </tr>
             ) : table.getRowModel().rows.length === 0 ? (
@@ -95,7 +95,7 @@ export function DataTable<TData, TValue>({
                   colSpan={columns.length}
                   className="h-32 text-center text-muted-foreground"
                 >
-                  No results found.
+                  Nenhum resultado encontrado.
                 </td>
               </tr>
             ) : (
@@ -119,7 +119,7 @@ export function DataTable<TData, TValue>({
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
           {totalRows === 0
-            ? "No records"
+            ? "Sem registos"
             : `${(pagination.pageIndex * pagination.pageSize) + 1}–${Math.min(
                 (pagination.pageIndex + 1) * pagination.pageSize,
                 totalRows
