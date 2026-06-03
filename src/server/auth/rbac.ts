@@ -50,3 +50,15 @@ export function createAbility(permissions: Set<string>) {
 }
 
 export type Ability = ReturnType<typeof createAbility>;
+
+export async function isSuperAdmin(userId: string): Promise<boolean> {
+  const db = await getDb();
+  const superAdminRole = await db.role.findFirst({
+    where: { name: "SUPER_ADMIN", isSystem: true },
+  });
+  if (!superAdminRole) return false;
+  const userRole = await db.userRole.findFirst({
+    where: { userId, roleId: superAdminRole.id },
+  });
+  return userRole !== null;
+}

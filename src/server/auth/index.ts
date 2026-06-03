@@ -2,19 +2,10 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/server/db";
-
-// =============================================================================
-// AUTH.JS CONFIGURATION
-// Strategy: JWT (no database sessions needed).
-// PrismaAdapter is intentionally omitted — JWT + Credentials doesn't require it.
-// User lookup is handled directly in authorize() via getDb().
-// =============================================================================
+import { authConfig } from "./config";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
-  },
+  ...authConfig,
   providers: [
     Credentials({
       name: "credentials",
@@ -48,14 +39,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) token.id = user.id;
-      return token;
-    },
-    async session({ session, token }) {
-      if (token?.id) session.user.id = token.id as string;
-      return session;
-    },
-  },
 });

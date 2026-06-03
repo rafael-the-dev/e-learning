@@ -23,8 +23,22 @@ export async function requireServiceContext(
   const headerList = await headers();
 
   return {
-    userId: session.user.id,
+    userId: session.user!.id!,
     organizationId,
+    ipAddress: headerList.get("x-forwarded-for") ?? undefined,
+    userAgent: headerList.get("user-agent") ?? undefined,
+  };
+}
+
+// For cross-org admin operations (SUPER_ADMIN only).
+// organizationId is "SYSTEM" — commands must verify SUPER_ADMIN role.
+export async function requireAdminContext(): Promise<ServiceContext> {
+  const session = await getSession();
+  const headerList = await headers();
+
+  return {
+    userId: session.user!.id!,
+    organizationId: "SYSTEM",
     ipAddress: headerList.get("x-forwarded-for") ?? undefined,
     userAgent: headerList.get("user-agent") ?? undefined,
   };
