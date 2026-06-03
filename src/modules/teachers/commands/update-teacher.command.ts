@@ -9,32 +9,33 @@ import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import {
   findByIdInOrganization,
-  updateStudent,
-  findStudentByIdNumber,
-} from "@/modules/students/repositories/student.repository";
+  updateTeacher,
+  findTeacherByIdNumber,
+  findTeacherByLicenseNumber,
+} from "@/modules/teachers/repositories/teacher.repository";
 import { findBranchById } from "@/modules/organizations/repositories/branch.repository";
 import {
-  updateStudentSchema,
-  type UpdateStudentSchema,
-} from "@/modules/students/schemas/student.schema";
-import type { Student } from "@/modules/students/types";
+  updateTeacherSchema,
+  type UpdateTeacherSchema,
+} from "@/modules/teachers/schemas/teacher.schema";
+import type { Teacher } from "@/modules/teachers/types";
 
-interface UpdateStudentInput extends UpdateStudentSchema {
-  studentId: string;
+interface UpdateTeacherInput extends UpdateTeacherSchema {
+  teacherId: string;
 }
 
-export class UpdateStudentCommand extends BaseCommand<UpdateStudentInput, Student> {
-  private _existing!: Student;
+export class UpdateTeacherCommand extends BaseCommand<UpdateTeacherInput, Teacher> {
+  private _existing!: Teacher;
 
   async validate(): Promise<void> {
     const existing = await findByIdInOrganization(
-      this.input.studentId,
+      this.input.teacherId,
       this.context.organizationId
     );
-    if (!existing) throw new NotFoundError("Aluno", this.input.studentId);
+    if (!existing) throw new NotFoundError("Professor", this.input.teacherId);
     this._existing = existing;
 
-    const result = updateStudentSchema.safeParse(this.input);
+    const result = updateTeacherSchema.safeParse(this.input);
     if (!result.success) {
       const fieldErrors: Record<string, string[]> = {};
       for (const issue of result.error.issues) {
@@ -50,19 +51,32 @@ export class UpdateStudentCommand extends BaseCommand<UpdateStudentInput, Studen
       this._existing.status !== "SUSPENDED"
     ) {
       throw new ValidationError("Dados inválidos", {
-        status: ["Para suspender o aluno, utilize a acção de suspensão."],
+        status: ["Para suspender o professor, utilize a acção de suspensão."],
       });
     }
 
     if (this.input.idNumber) {
-      const duplicate = await findStudentByIdNumber(
+      const duplicate = await findTeacherByIdNumber(
         this.context.organizationId,
         this.input.idNumber,
-        this.input.studentId
+        this.input.teacherId
       );
       if (duplicate) {
         throw new ValidationError("Dados inválidos", {
-          idNumber: ["Já existe um aluno com este número de documento nesta organização"],
+          idNumber: ["Já existe um professor com este número de documento nesta organização"],
+        });
+      }
+    }
+
+    if (this.input.licenseNumber) {
+      const duplicate = await findTeacherByLicenseNumber(
+        this.context.organizationId,
+        this.input.licenseNumber,
+        this.input.teacherId
+      );
+      if (duplicate) {
+        throw new ValidationError("Dados inválidos", {
+          licenseNumber: ["Já existe um professor com este número de licença nesta organização"],
         });
       }
     }
@@ -82,17 +96,17 @@ export class UpdateStudentCommand extends BaseCommand<UpdateStudentInput, Studen
       this.context.userId,
       this.context.organizationId
     );
-    if (!createAbility(perms).can(PERMISSIONS.STUDENTS_UPDATE)) {
+    if (!createAbility(perms).can(PERMISSIONS.TEACHERS_UPDATE)) {
       throw new AuthorizationError();
     }
   }
 
-  async execute(): Promise<Student> {
+  async execute(): Promise<Teacher> {
     const old = this._existing;
     const dateOfBirth =
       this.input.dateOfBirth ? new Date(this.input.dateOfBirth) : null;
 
-    const student = await updateStudent(this.input.studentId, {
+    const teacher = await updateTeacher(this.input.teacherId, this.context.organizationId, {
       firstName: this.input.firstName,
       lastName: this.input.lastName,
       email: this.input.email || null,
@@ -102,6 +116,8 @@ export class UpdateStudentCommand extends BaseCommand<UpdateStudentInput, Studen
       address: this.input.address || null,
       idType: this.input.idType || null,
       idNumber: this.input.idNumber || null,
+      licenseNumber: this.input.licenseNumber || null,
+      specialization: this.input.specialization || null,
       branchId: this.input.branchId || null,
       notes: this.input.notes || null,
       status: this.input.status,
@@ -109,9 +125,9 @@ export class UpdateStudentCommand extends BaseCommand<UpdateStudentInput, Studen
     });
 
     await auditService.log(this.context, {
-      entity: "Student",
-      entityId: student.id,
-      action: "UPDATED",
+      entity: "Teacher",
+      entityId: teacher.id,
+      action: "teacher.updated",
       oldValues: {
         firstName: old.firstName,
         lastName: old.lastName,
@@ -119,17 +135,21 @@ export class UpdateStudentCommand extends BaseCommand<UpdateStudentInput, Studen
         phone: old.phone,
         status: old.status,
         branchId: old.branch?.id ?? null,
+        licenseNumber: old.licenseNumber,
+        specialization: old.specialization,
       },
       newValues: {
-        firstName: student.firstName,
-        lastName: student.lastName,
-        email: student.email,
-        phone: student.phone,
-        status: student.status,
-        branchId: student.branch?.id ?? null,
+        firstName: teacher.firstName,
+        lastName: teacher.lastName,
+        email: teacher.email,
+        phone: teacher.phone,
+        status: teacher.status,
+        branchId: teacher.branch?.id ?? null,
+        licenseNumber: teacher.licenseNumber,
+        specialization: teacher.specialization,
       },
     });
 
-    return student;
+    return teacher;
   }
 }

@@ -18,31 +18,31 @@ import { FormSection } from "@/shared/components/form/form-section";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { toast } from "@/shared/hooks/use-toast";
 import {
-  createStudentSchema,
-  updateStudentSchema,
-  type CreateStudentSchema,
-  type UpdateStudentSchema,
-} from "@/modules/students/schemas/student.schema";
+  createTeacherSchema,
+  updateTeacherSchema,
+  type CreateTeacherSchema,
+  type UpdateTeacherSchema,
+} from "@/modules/teachers/schemas/teacher.schema";
 import {
-  createStudentAction,
-  updateStudentAction,
-} from "@/modules/students/actions/student.actions";
+  createTeacherAction,
+  updateTeacherAction,
+} from "@/modules/teachers/actions/teacher.actions";
 import {
   GENDER_LABELS,
   ID_TYPE_LABELS,
-  STUDENT_STATUS_LABELS,
-} from "@/modules/students/types";
-import type { Student, StudentBranch } from "@/modules/students/types";
+  TEACHER_STATUS_LABELS,
+} from "@/modules/teachers/types";
+import type { Teacher, TeacherBranch } from "@/modules/teachers/types";
 
 // =============================================================================
 // CREATE FORM
 // =============================================================================
 
-interface CreateStudentFormProps {
-  branches: StudentBranch[];
+interface CreateTeacherFormProps {
+  branches: TeacherBranch[];
 }
 
-export function CreateStudentForm({ branches }: CreateStudentFormProps) {
+export function CreateTeacherForm({ branches }: CreateTeacherFormProps) {
   const router = useRouter();
 
   const {
@@ -50,8 +50,8 @@ export function CreateStudentForm({ branches }: CreateStudentFormProps) {
     handleSubmit,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<CreateStudentSchema>({
-    resolver: zodResolver(createStudentSchema),
+  } = useForm<CreateTeacherSchema>({
+    resolver: zodResolver(createTeacherSchema),
     defaultValues: {
       firstName: "",
       lastName: "",
@@ -62,16 +62,18 @@ export function CreateStudentForm({ branches }: CreateStudentFormProps) {
       phone: "",
       email: "",
       address: "",
+      licenseNumber: "",
+      specialization: "",
       branchId: "",
       notes: "",
     },
   });
 
   const onSubmit = handleSubmit(async (data) => {
-    const result = await createStudentAction(data);
+    const result = await createTeacherAction(data);
     if (result.success) {
-      toast.success("Aluno registado com sucesso");
-      router.push(`/students/${result.data.id}`);
+      toast.success("Professor registado com sucesso");
+      router.push(`/teachers/${result.data.id}`);
       router.refresh();
     } else {
       toast.error(result.error);
@@ -128,14 +130,23 @@ export function CreateStudentForm({ branches }: CreateStudentFormProps) {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="email">E-mail</Label>
-          <Input id="email" type="email" placeholder="joao@exemplo.co.mz" {...register("email")} />
+          <Input
+            id="email"
+            type="email"
+            placeholder="joao@exemplo.co.mz"
+            {...register("email")}
+          />
           {errors.email && (
             <p className="text-xs text-destructive">{errors.email.message}</p>
           )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="address">Morada</Label>
-          <Input id="address" placeholder="Av. Eduardo Mondlane, Maputo" {...register("address")} />
+          <Input
+            id="address"
+            placeholder="Av. Eduardo Mondlane, Maputo"
+            {...register("address")}
+          />
         </div>
       </FormSection>
 
@@ -167,8 +178,32 @@ export function CreateStudentForm({ branches }: CreateStudentFormProps) {
         </div>
       </FormSection>
 
+      <FormSection title="Informação Profissional">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="licenseNumber">Número de Licença</Label>
+            <Input
+              id="licenseNumber"
+              placeholder="LIC-000000"
+              {...register("licenseNumber")}
+            />
+            {errors.licenseNumber && (
+              <p className="text-xs text-destructive">{errors.licenseNumber.message}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="specialization">Especialização</Label>
+            <Input
+              id="specialization"
+              placeholder="Condução Defensiva"
+              {...register("specialization")}
+            />
+          </div>
+        </div>
+      </FormSection>
+
       {branches.length > 0 && (
-        <FormSection title="Atribuição">
+        <FormSection title="Organização / Filial">
           <div className="space-y-1.5">
             <Label>Filial</Label>
             <Select onValueChange={(v) => setValue("branchId", v === "none" ? "" : v)}>
@@ -196,7 +231,7 @@ export function CreateStudentForm({ branches }: CreateStudentFormProps) {
           <Label htmlFor="notes">Observações</Label>
           <Textarea
             id="notes"
-            placeholder="Informações adicionais sobre o aluno..."
+            placeholder="Informações adicionais sobre o professor..."
             {...register("notes")}
           />
         </div>
@@ -207,7 +242,7 @@ export function CreateStudentForm({ branches }: CreateStudentFormProps) {
           Cancelar
         </Button>
         <Button type="submit" loading={isSubmitting}>
-          Registar Aluno
+          Registar Professor
         </Button>
       </div>
     </form>
@@ -218,12 +253,12 @@ export function CreateStudentForm({ branches }: CreateStudentFormProps) {
 // EDIT FORM
 // =============================================================================
 
-interface EditStudentFormProps {
-  student: Student;
-  branches: StudentBranch[];
+interface EditTeacherFormProps {
+  teacher: Teacher;
+  branches: TeacherBranch[];
 }
 
-export function EditStudentForm({ student, branches }: EditStudentFormProps) {
+export function EditTeacherForm({ teacher, branches }: EditTeacherFormProps) {
   const router = useRouter();
 
   const {
@@ -231,31 +266,33 @@ export function EditStudentForm({ student, branches }: EditStudentFormProps) {
     handleSubmit,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<UpdateStudentSchema>({
-    resolver: zodResolver(updateStudentSchema),
+  } = useForm<UpdateTeacherSchema>({
+    resolver: zodResolver(updateTeacherSchema),
     defaultValues: {
-      firstName: student.firstName,
-      lastName: student.lastName,
-      gender: student.gender ?? "",
-      dateOfBirth: student.dateOfBirth
-        ? new Date(student.dateOfBirth).toISOString().split("T")[0]
+      firstName: teacher.firstName,
+      lastName: teacher.lastName,
+      gender: teacher.gender ?? "",
+      dateOfBirth: teacher.dateOfBirth
+        ? new Date(teacher.dateOfBirth).toISOString().split("T")[0]
         : "",
-      idType: student.idType ?? "",
-      idNumber: student.idNumber ?? "",
-      phone: student.phone ?? "",
-      email: student.email ?? "",
-      address: student.address ?? "",
-      branchId: student.branch?.id ?? "",
-      notes: student.notes ?? "",
-      status: student.status as UpdateStudentSchema["status"],
+      idType: teacher.idType ?? "",
+      idNumber: teacher.idNumber ?? "",
+      phone: teacher.phone ?? "",
+      email: teacher.email ?? "",
+      address: teacher.address ?? "",
+      licenseNumber: teacher.licenseNumber ?? "",
+      specialization: teacher.specialization ?? "",
+      branchId: teacher.branch?.id ?? "",
+      notes: teacher.notes ?? "",
+      status: teacher.status as UpdateTeacherSchema["status"],
     },
   });
 
   const onSubmit = handleSubmit(async (data) => {
-    const result = await updateStudentAction(student.id, data);
+    const result = await updateTeacherAction(teacher.id, data);
     if (result.success) {
-      toast.success("Dados do aluno atualizados");
-      router.push(`/students/${student.id}`);
+      toast.success("Dados do professor atualizados");
+      router.push(`/teachers/${teacher.id}`);
       router.refresh();
     } else {
       toast.error(result.error);
@@ -285,7 +322,7 @@ export function EditStudentForm({ student, branches }: EditStudentFormProps) {
           <div className="space-y-1.5">
             <Label>Género</Label>
             <Select
-              defaultValue={student.gender ?? "none"}
+              defaultValue={teacher.gender ?? "none"}
               onValueChange={(v) => setValue("gender", v === "none" ? "" : v)}
             >
               <SelectTrigger>
@@ -331,7 +368,7 @@ export function EditStudentForm({ student, branches }: EditStudentFormProps) {
           <div className="space-y-1.5">
             <Label>Tipo de Documento</Label>
             <Select
-              defaultValue={student.idType ?? "none"}
+              defaultValue={teacher.idType ?? "none"}
               onValueChange={(v) => setValue("idType", v === "none" ? "" : v)}
             >
               <SelectTrigger>
@@ -357,13 +394,29 @@ export function EditStudentForm({ student, branches }: EditStudentFormProps) {
         </div>
       </FormSection>
 
-      <FormSection title="Atribuição">
+      <FormSection title="Informação Profissional">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-licenseNumber">Número de Licença</Label>
+            <Input id="edit-licenseNumber" {...register("licenseNumber")} />
+            {errors.licenseNumber && (
+              <p className="text-xs text-destructive">{errors.licenseNumber.message}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-specialization">Especialização</Label>
+            <Input id="edit-specialization" {...register("specialization")} />
+          </div>
+        </div>
+      </FormSection>
+
+      <FormSection title="Organização / Filial">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {branches.length > 0 && (
             <div className="space-y-1.5">
               <Label>Filial</Label>
               <Select
-                defaultValue={student.branch?.id ?? "none"}
+                defaultValue={teacher.branch?.id ?? "none"}
                 onValueChange={(v) => setValue("branchId", v === "none" ? "" : v)}
               >
                 <SelectTrigger>
@@ -386,14 +439,16 @@ export function EditStudentForm({ student, branches }: EditStudentFormProps) {
           <div className="space-y-1.5">
             <Label>Estado</Label>
             <Select
-              defaultValue={student.status}
-              onValueChange={(v) => setValue("status", v as NonNullable<UpdateStudentSchema["status"]>)}
+              defaultValue={teacher.status}
+              onValueChange={(v) =>
+                setValue("status", v as NonNullable<UpdateTeacherSchema["status"]>)
+              }
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(STUDENT_STATUS_LABELS).map(([value, label]) => (
+                {Object.entries(TEACHER_STATUS_LABELS).map(([value, label]) => (
                   <SelectItem key={value} value={value}>
                     {label}
                   </SelectItem>

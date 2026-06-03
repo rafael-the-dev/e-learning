@@ -35,7 +35,7 @@ export class SoftDeleteStudentCommand extends BaseCommand<DeleteStudentSchema, v
   }
 
   async execute(): Promise<void> {
-    await softDeleteStudent(this.input.studentId);
+    await softDeleteStudent(this.input.studentId, this.context.userId);
 
     await auditService.log(this.context, {
       entity: "Student",

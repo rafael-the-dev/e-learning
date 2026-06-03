@@ -8,10 +8,20 @@
       "Bash(Write-Output \"ok\")",
       "Bash(mkdir -p \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\new\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\edit\")",
       "Bash(touch \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\new\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\edit\\\\page.tsx\")",
-      "Bash(mkdir -p \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\students\\\\new\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\students\\\\[studentId]\\\\edit\" && echo \"ok\")"
+      "Bash(mkdir -p \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\students\\\\new\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\students\\\\[studentId]\\\\edit\" && echo \"ok\")",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\teachers\\\\types\")",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\teachers\\\\schemas\")",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\teachers\\\\repositories\")",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\teachers\\\\services\")",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\teachers\\\\commands\")",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\teachers\\\\actions\")",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\teachers\\\\components\")",
+      "Bash(Write-Output \"Done\")",
+      "Bash(mkdir -p \"c:/salc/web/mine/e-learning/src/app/\\(org\\)/teachers/new\" \"c:/salc/web/mine/e-learning/src/app/\\(org\\)/teachers/[teacherId]/edit\" \"c:/salc/web/mine/e-learning/docs\" && echo \"Done\")"
     ],
     "additionalDirectories": [
-      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]"
+      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]",
+      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\teachers\\[teacherId]"
     ]
   }
 }

@@ -1,9 +1,9 @@
-import type { TeacherStatus, Gender } from "@/shared/types/common";
+// =============================================================================
+// TEACHERS MODULE TYPES
+// =============================================================================
 
-export interface TeacherDto {
+export interface Teacher {
   id: string;
-  organizationId: string;
-  branchId: string | null;
   code: string | null;
   firstName: string;
   lastName: string;
@@ -11,39 +11,54 @@ export interface TeacherDto {
   email: string | null;
   phone: string | null;
   dateOfBirth: Date | null;
-  gender: Gender | null;
+  gender: string | null;
+  address: string | null;
+  idType: string | null;
+  idNumber: string | null;
   licenseNumber: string | null;
   specialization: string | null;
-  status: TeacherStatus;
+  status: string;
+  notes: string | null;
   createdAt: Date;
-  subjects?: { id: string; name: string }[];
+  updatedAt: Date;
+  branch: { id: string; name: string } | null;
 }
 
-export interface CreateTeacherInput {
-  organizationId: string;
-  branchId?: string;
-  firstName: string;
-  lastName: string;
-  email?: string;
-  phone?: string;
-  dateOfBirth?: Date;
-  gender?: Gender;
-  address?: string;
-  idType?: string;
-  idNumber?: string;
-  licenseNumber?: string;
-  specialization?: string;
-  notes?: string;
-  subjectIds?: string[];
+export interface TeacherWithSubjects extends Teacher {
+  teacherSubjects: TeacherSubjectItem[];
 }
 
-export interface UpdateTeacherInput {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  phone?: string;
-  licenseNumber?: string;
-  specialization?: string;
-  status?: TeacherStatus;
-  subjectIds?: string[];
+export interface TeacherSubjectItem {
+  id: string;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string | null;
+  courseLevelName: string;
+  courseName: string;
+  assignedAt: Date;
 }
+
+export interface TeacherBranch {
+  id: string;
+  name: string;
+  code: string | null;
+}
+
+export const TEACHER_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Ativo",
+  SUSPENDED: "Suspenso",
+  INACTIVE: "Inativo",
+};
+
+export const GENDER_LABELS: Record<string, string> = {
+  MALE: "Masculino",
+  FEMALE: "Feminino",
+  OTHER: "Outro",
+};
+
+export const ID_TYPE_LABELS: Record<string, string> = {
+  BI: "Bilhete de Identidade",
+  PASSPORT: "Passaporte",
+  NUIT: "NUIT",
+  OTHER: "Outro",
+};

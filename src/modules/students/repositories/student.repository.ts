@@ -182,11 +182,11 @@ export async function suspendStudent(id: string, updatedBy: string): Promise<Stu
   return mapToStudent(row);
 }
 
-export async function softDeleteStudent(id: string): Promise<void> {
+export async function softDeleteStudent(id: string, updatedBy: string): Promise<void> {
   const db = await getDb();
   await db.student.update({
     where: { id },
-    data: { deletedAt: new Date() },
+    data: { deletedAt: new Date(), updatedBy },
   });
 }
 

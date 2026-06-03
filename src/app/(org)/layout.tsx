@@ -3,12 +3,13 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getOrgSession } from "@/server/auth/session";
 import { Toaster } from "@/shared/components/ui/toaster";
-import { LayoutDashboard, Users, GraduationCap, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, BookUser, LogOut } from "lucide-react";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/users", label: "Utilizadores", icon: Users },
   { href: "/students", label: "Alunos", icon: GraduationCap },
+  { href: "/teachers", label: "Professores", icon: BookUser },
 ];
 
 export default async function OrgLayout({ children }: { children: React.ReactNode }) {
