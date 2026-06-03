@@ -106,6 +106,9 @@ export const PERMISSIONS = {
 
   // Audit Logs
   AUDIT_LOGS_VIEW: "audit_logs.view",
+
+  // Dashboard
+  DASHBOARD_VIEW: "dashboard.view",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

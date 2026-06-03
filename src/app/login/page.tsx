@@ -9,6 +9,7 @@ import { Label } from "@/shared/components/ui/label";
 import { Toaster } from "@/shared/components/ui/toaster";
 import { toast } from "@/shared/hooks/use-toast";
 import { LayoutDashboard } from "lucide-react";
+import { getPostLoginRedirect } from "./actions";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,10 +24,11 @@ export default function LoginPage() {
       password: form.get("password") as string,
       redirect: false,
     });
-    setLoading(false);
     if (result?.ok) {
-      router.push("/organizations");
+      const destination = await getPostLoginRedirect();
+      router.push(destination);
     } else {
+      setLoading(false);
       toast.error("E-mail ou palavra-passe inválidos");
     }
   }

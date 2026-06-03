@@ -27,42 +27,44 @@ export default async function OrganizationsPage({
   ]);
 
   return (
-    <div className="space-y-6">
+    <>
       <PageHeader
         title="Organizações"
         description="Gerir todas as escolas e centros de formação na plataforma."
         actions={<CreateOrganizationFormTrigger />}
       />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard
-          title="Total"
-          value={stats.total}
-          icon={<Building2 className="size-4" />}
-        />
-        <StatCard
-          title="Ativas"
-          value={stats.byStatus["ACTIVE"] ?? 0}
-          icon={<CheckCircle className="size-4" />}
-        />
-        <StatCard
-          title="Experimentais"
-          value={stats.byStatus["TRIAL"] ?? 0}
-          icon={<Clock className="size-4" />}
-        />
-        <StatCard
-          title="Suspensas"
-          value={stats.byStatus["SUSPENDED"] ?? 0}
-          icon={<PauseCircle className="size-4" />}
+      <div className="p-8 space-y-6">
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard
+            title="Total"
+            value={stats.total}
+            icon={<Building2 className="size-4" />}
+          />
+          <StatCard
+            title="Ativas"
+            value={stats.byStatus["ACTIVE"] ?? 0}
+            icon={<CheckCircle className="size-4" />}
+          />
+          <StatCard
+            title="Experimentais"
+            value={stats.byStatus["TRIAL"] ?? 0}
+            icon={<Clock className="size-4" />}
+          />
+          <StatCard
+            title="Suspensas"
+            value={stats.byStatus["SUSPENDED"] ?? 0}
+            icon={<PauseCircle className="size-4" />}
+          />
+        </div>
+
+        <OrganizationsTable
+          result={result}
+          defaultSearch={search}
+          defaultStatus={status}
         />
       </div>
-
-      <OrganizationsTable
-        result={result}
-        defaultSearch={search}
-        defaultStatus={status}
-      />
-    </div>
+    </>
   );
 }

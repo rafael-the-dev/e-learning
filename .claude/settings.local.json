@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node -e \"const z = require\\('c:/salc/web/mine/e-learning/node_modules/zod'\\); const s = z.string\\(\\).preprocess; console.log\\(typeof z.preprocess, typeof z.string\\(\\).min\\); console.log\\(z.ZodIssueCode ? 'has ZodIssueCode' : 'no ZodIssueCode'\\);\")"
+      "Bash(node -e \"const z = require\\('c:/salc/web/mine/e-learning/node_modules/zod'\\); const s = z.string\\(\\).preprocess; console.log\\(typeof z.preprocess, typeof z.string\\(\\).min\\); console.log\\(z.ZodIssueCode ? 'has ZodIssueCode' : 'no ZodIssueCode'\\);\")",
+      "Bash(npx tsc *)"
     ]
   }
 }

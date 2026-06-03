@@ -1,33 +1,36 @@
 import * as React from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/server/auth";
+import { getOrgSession } from "@/server/auth/session";
 import { Toaster } from "@/shared/components/ui/toaster";
-import { Building2, LayoutDashboard, Users, LogOut } from "lucide-react";
+import { LayoutDashboard, LogOut } from "lucide-react";
 
 const NAV = [
-  { href: "/organizations", label: "Organizações", icon: Building2 },
-  { href: "/users", label: "Utilizadores", icon: Users },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  // Add more routes as modules are implemented
 ];
 
-export default async function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
+export default async function OrgLayout({ children }: { children: React.ReactNode }) {
+  let session: Awaited<ReturnType<typeof getOrgSession>>;
+
+  try {
+    session = await getOrgSession();
+  } catch {
+    redirect("/login");
+  }
+
+  const { user, org } = session;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Sidebar */}
       <aside className="w-60 shrink-0 border-r flex flex-col">
-        {/* Brand */}
+        {/* Brand / org name */}
         <div className="h-14 flex items-center gap-2.5 px-5 border-b">
-          <div className="size-7 rounded-lg bg-primary flex items-center justify-center">
+          <div className="size-7 rounded-lg bg-primary flex items-center justify-center shrink-0">
             <LayoutDashboard className="size-4 text-primary-foreground" />
           </div>
-          <span className="font-semibold text-sm tracking-tight">SchoolAdmin</span>
+          <span className="font-semibold text-sm tracking-tight truncate">{org.name}</span>
         </div>
 
         {/* Nav */}
@@ -47,12 +50,12 @@ export default async function AdminLayout({
         {/* User */}
         <div className="border-t px-3 py-3">
           <div className="flex items-center gap-3 px-3 py-2 rounded-md">
-            <div className="size-7 rounded-full bg-muted flex items-center justify-center text-xs font-semibold uppercase">
-              {session.user.name?.charAt(0) ?? "?"}
+            <div className="size-7 rounded-full bg-muted flex items-center justify-center text-xs font-semibold uppercase shrink-0">
+              {user.name?.charAt(0) ?? "?"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium truncate">{session.user.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{session.user.email}</p>
+              <p className="text-xs font-medium truncate">{user.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </div>
             <Link
               href="/api/auth/signout"

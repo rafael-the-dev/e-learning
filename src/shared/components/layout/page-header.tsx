@@ -17,11 +17,19 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   return (
-    <div className={cn("flex flex-col gap-4 pb-6", className)}>
-      {breadcrumb && <div className="text-sm">{breadcrumb}</div>}
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+    <div
+      className={cn(
+        "sticky top-0 z-10",
+        "bg-background/95 backdrop-blur-sm",
+        "border-b",
+        "px-8 py-4",
+        className
+      )}
+    >
+      {breadcrumb && <div className="text-sm mb-1">{breadcrumb}</div>}
+      <div className="flex items-center justify-between gap-4">
+        <div className="space-y-0.5">
+          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
           {description && (
             <p className="text-sm text-muted-foreground">{description}</p>
           )}

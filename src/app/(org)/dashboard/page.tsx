@@ -1,0 +1,79 @@
+import { redirect } from "next/navigation";
+import { PageHeader } from "@/shared/components/layout/page-header";
+import { Button } from "@/shared/components/ui/button";
+import { requireOrgContext } from "@/server/auth/session";
+import { isOrgAdmin } from "@/server/auth/rbac";
+import { getDashboardData } from "@/modules/dashboard/services/dashboard.service";
+import { DashboardStatCards } from "@/modules/dashboard/components/dashboard-stat-cards";
+import { RecentActivity } from "@/modules/dashboard/components/recent-activity";
+import { FinancialOverview } from "@/modules/dashboard/components/financial-overview";
+import { OperationalAlerts } from "@/modules/dashboard/components/operational-alerts";
+import { UserPlus, BookOpen, CreditCard, CalendarPlus } from "lucide-react";
+
+export const metadata = { title: "Dashboard" };
+
+export default async function DashboardPage() {
+  let context: Awaited<ReturnType<typeof requireOrgContext>>;
+
+  try {
+    context = await requireOrgContext();
+  } catch {
+    redirect("/login");
+  }
+
+  const ok = await isOrgAdmin(context.userId, context.organizationId);
+  if (!ok) redirect("/login");
+
+  const data = await getDashboardData(context.organizationId);
+
+  return (
+    <>
+      <PageHeader
+        title="Dashboard"
+        description="Visão operacional da organização."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled>
+              <UserPlus className="size-4 mr-1.5" />
+              Novo Aluno
+            </Button>
+            <Button variant="outline" size="sm" disabled>
+              <BookOpen className="size-4 mr-1.5" />
+              Nova Matrícula
+            </Button>
+            <Button variant="outline" size="sm" disabled>
+              <CreditCard className="size-4 mr-1.5" />
+              Registar Pagamento
+            </Button>
+            <Button variant="outline" size="sm" disabled>
+              <CalendarPlus className="size-4 mr-1.5" />
+              Criar Turma
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="p-8 space-y-6">
+        {/* Stat Cards */}
+        <DashboardStatCards
+          stats={data.stats}
+          currencySymbol={data.financialOverview.currencySymbol}
+        />
+
+        {/* Main content grid */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Recent Activity — wider */}
+          <div className="lg:col-span-2">
+            <RecentActivity items={data.recentActivity} />
+          </div>
+
+          {/* Right column */}
+          <div className="flex flex-col gap-6">
+            <FinancialOverview data={data.financialOverview} />
+            <OperationalAlerts data={data.operationalAlerts} />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

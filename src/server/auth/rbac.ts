@@ -51,6 +51,30 @@ export function createAbility(permissions: Set<string>) {
 
 export type Ability = ReturnType<typeof createAbility>;
 
+export async function isOrgAdmin(userId: string, organizationId: string): Promise<boolean> {
+  const db = await getDb();
+  const orgAdminRole = await db.role.findFirst({
+    where: { name: "ORG_ADMIN", isSystem: true },
+  });
+  if (!orgAdminRole) return false;
+  const userRole = await db.userRole.findFirst({
+    where: { userId, roleId: orgAdminRole.id, organizationId },
+  });
+  return userRole !== null;
+}
+
+export async function getUserRoles(
+  userId: string,
+  organizationId: string
+): Promise<string[]> {
+  const db = await getDb();
+  const userRoles = await db.userRole.findMany({
+    where: { userId, organizationId },
+    include: { role: { select: { name: true } } },
+  });
+  return userRoles.map((ur) => ur.role.name);
+}
+
 export async function isSuperAdmin(userId: string): Promise<boolean> {
   const db = await getDb();
   const superAdminRole = await db.role.findFirst({

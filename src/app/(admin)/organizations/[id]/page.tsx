@@ -42,7 +42,7 @@ export default async function OrganizationDetailPage({
   );
 
   return (
-    <div className="space-y-6">
+    <>
       <PageHeader
         title={org.name}
         description={`/${org.slug}`}
@@ -50,111 +50,113 @@ export default async function OrganizationDetailPage({
         actions={<OrgDetailActions organization={org} />}
       />
 
-      {/* Summary row */}
-      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <StatusBadge status={org.status} />
-        <span className="capitalize border rounded-full px-2.5 py-0.5 text-xs">{org.plan.toLowerCase()}</span>
-        {org.email && (
+      <div className="p-8 space-y-6">
+        {/* Summary row */}
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <StatusBadge status={org.status} />
+          <span className="capitalize border rounded-full px-2.5 py-0.5 text-xs">{org.plan.toLowerCase()}</span>
+          {org.email && (
+            <span className="flex items-center gap-1.5">
+              <Mail className="size-3.5" />
+              {org.email}
+            </span>
+          )}
+          {org.phone && (
+            <span className="flex items-center gap-1.5">
+              <Phone className="size-3.5" />
+              {org.phone}
+            </span>
+          )}
+          {org.timezone && (
+            <span className="flex items-center gap-1.5">
+              <Globe className="size-3.5" />
+              {org.timezone}
+            </span>
+          )}
           <span className="flex items-center gap-1.5">
-            <Mail className="size-3.5" />
-            {org.email}
+            <Calendar className="size-3.5" />
+            Criado a {new Date(org.createdAt).toLocaleDateString("pt-PT")}
           </span>
-        )}
-        {org.phone && (
-          <span className="flex items-center gap-1.5">
-            <Phone className="size-3.5" />
-            {org.phone}
-          </span>
-        )}
-        {org.timezone && (
-          <span className="flex items-center gap-1.5">
-            <Globe className="size-3.5" />
-            {org.timezone}
-          </span>
-        )}
-        <span className="flex items-center gap-1.5">
-          <Calendar className="size-3.5" />
-          Criado a {new Date(org.createdAt).toLocaleDateString("pt-PT")}
-        </span>
-      </div>
+        </div>
 
-      <Separator />
+        <Separator />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard
-          title="Filiais"
-          value={branchCount}
-          icon={<GitBranch className="size-4" />}
-        />
-        <StatCard title="Alunos" value="—" />
-        <StatCard title="Formadores" value="—" />
-        <StatCard title="Matrículas Ativas" value="—" />
-      </div>
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard
+            title="Filiais"
+            value={branchCount}
+            icon={<GitBranch className="size-4" />}
+          />
+          <StatCard title="Alunos" value="—" />
+          <StatCard title="Formadores" value="—" />
+          <StatCard title="Matrículas Ativas" value="—" />
+        </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue={tab}>
-        <TabsList>
-          <TabsTrigger value="overview">
-            <Link href={`/organizations/${id}?tab=overview`} className="contents">
-              Resumo
-            </Link>
-          </TabsTrigger>
-          <TabsTrigger value="branches">
-            <Link href={`/organizations/${id}?tab=branches`} className="contents">
-              Filiais ({branchCount})
-            </Link>
-          </TabsTrigger>
-          <TabsTrigger value="settings">
-            <Link href={`/organizations/${id}?tab=settings`} className="contents">
-              Configurações
-            </Link>
-          </TabsTrigger>
-        </TabsList>
+        {/* Tabs */}
+        <Tabs defaultValue={tab}>
+          <TabsList>
+            <TabsTrigger value="overview">
+              <Link href={`/organizations/${id}?tab=overview`} className="contents">
+                Resumo
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="branches">
+              <Link href={`/organizations/${id}?tab=branches`} className="contents">
+                Filiais ({branchCount})
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="settings">
+              <Link href={`/organizations/${id}?tab=settings`} className="contents">
+                Configurações
+              </Link>
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Overview tab */}
-        <TabsContent value="overview">
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div className="rounded-xl border p-5 space-y-4">
-              <h3 className="text-sm font-semibold">Informações de Contacto</h3>
-              <dl className="space-y-2 text-sm">
-                <InfoRow icon={<Mail className="size-3.5" />} label="E-mail" value={org.email ?? "—"} />
-                <InfoRow icon={<Phone className="size-3.5" />} label="Telefone" value={org.phone ?? "—"} />
-                <InfoRow icon={<MapPin className="size-3.5" />} label="Morada" value={org.address ?? "—"} />
-              </dl>
+          {/* Overview tab */}
+          <TabsContent value="overview">
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="rounded-xl border p-5 space-y-4">
+                <h3 className="text-sm font-semibold">Informações de Contacto</h3>
+                <dl className="space-y-2 text-sm">
+                  <InfoRow icon={<Mail className="size-3.5" />} label="E-mail" value={org.email ?? "—"} />
+                  <InfoRow icon={<Phone className="size-3.5" />} label="Telefone" value={org.phone ?? "—"} />
+                  <InfoRow icon={<MapPin className="size-3.5" />} label="Morada" value={org.address ?? "—"} />
+                </dl>
+              </div>
+              <div className="rounded-xl border p-5 space-y-4">
+                <h3 className="text-sm font-semibold">Configuração</h3>
+                <dl className="space-y-2 text-sm">
+                  <InfoRow label="Fuso Horário" value={org.timezone} />
+                  <InfoRow label="Localidade" value={org.locale} />
+                  <InfoRow label="Plano" value={org.plan} />
+                  <InfoRow
+                    label="Moeda"
+                    value={
+                      settings
+                        ? `${settings.currencyCode} (${settings.currencySymbol})`
+                        : "Não configurado"
+                    }
+                  />
+                </dl>
+              </div>
             </div>
-            <div className="rounded-xl border p-5 space-y-4">
-              <h3 className="text-sm font-semibold">Configuração</h3>
-              <dl className="space-y-2 text-sm">
-                <InfoRow label="Fuso Horário" value={org.timezone} />
-                <InfoRow label="Localidade" value={org.locale} />
-                <InfoRow label="Plano" value={org.plan} />
-                <InfoRow
-                  label="Moeda"
-                  value={
-                    settings
-                      ? `${settings.currencyCode} (${settings.currencySymbol})`
-                      : "Não configurado"
-                  }
-                />
-              </dl>
+          </TabsContent>
+
+          {/* Branches tab */}
+          <TabsContent value="branches">
+            <BranchesTable branches={branches} organizationId={id} />
+          </TabsContent>
+
+          {/* Settings tab */}
+          <TabsContent value="settings">
+            <div className="max-w-2xl">
+              <SettingsForm organizationId={id} settings={settings} />
             </div>
-          </div>
-        </TabsContent>
-
-        {/* Branches tab */}
-        <TabsContent value="branches">
-          <BranchesTable branches={branches} organizationId={id} />
-        </TabsContent>
-
-        {/* Settings tab */}
-        <TabsContent value="settings">
-          <div className="max-w-2xl">
-            <SettingsForm organizationId={id} settings={settings} />
-          </div>
-        </TabsContent>
-      </Tabs>
-    </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </>
   );
 }
 
