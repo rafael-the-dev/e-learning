@@ -53,3 +53,4 @@ Inspired by:
 - Use loading states
 - Use responsive layouts
 - Prefer drawers over large modals
+- labels, alerts, errors and warning messages must be in portuguese portugal
