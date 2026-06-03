@@ -1,4 +1,5 @@
 import "dotenv/config";
+import bcrypt from "bcryptjs";
 import { getDb } from "../src/server/db";
 import { PERMISSIONS, ROLE_PERMISSIONS, SYSTEM_ROLES } from "../src/server/auth/permissions";
 
@@ -50,6 +51,44 @@ async function main() {
       });
     }
     console.log(`✓ Role "${roleName}" seeded with ${permissionsForRole.length} permissions`);
+  }
+
+  console.log("Seeding super admin user...");
+
+  const passwordHash = await bcrypt.hash("123456", 12);
+
+  const superAdmin = await db.user.upsert({
+    where: { email: "rafaeljossefativanejunior@gmail.com" },
+    update: {},
+    create: {
+      email: "rafaeljossefativanejunior@gmail.com",
+      name: "Rafael Fativane",
+      passwordHash,
+      isActive: true,
+    },
+  });
+
+  const superAdminRole = await db.role.findFirst({
+    where: { name: SYSTEM_ROLES.SUPER_ADMIN, isSystem: true },
+  });
+
+  if (superAdminRole) {
+    await db.userRole.upsert({
+      where: {
+        userId_roleId_organizationId: {
+          userId: superAdmin.id,
+          roleId: superAdminRole.id,
+          organizationId: "PLATFORM",
+        },
+      },
+      update: {},
+      create: {
+        userId: superAdmin.id,
+        roleId: superAdminRole.id,
+        organizationId: "PLATFORM",
+      },
+    });
+    console.log(`✓ Super admin user seeded: ${superAdmin.email}`);
   }
 
   console.log("Seed complete.");
