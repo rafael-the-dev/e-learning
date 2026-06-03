@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(node -e \"const z = require\\('c:/salc/web/mine/e-learning/node_modules/zod'\\); const s = z.string\\(\\).preprocess; console.log\\(typeof z.preprocess, typeof z.string\\(\\).min\\); console.log\\(z.ZodIssueCode ? 'has ZodIssueCode' : 'no ZodIssueCode'\\);\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(New-Item -Path \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\users\\\\types\\\\index.ts\" -ItemType File -Force)",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"ok\")",
+      "Bash(mkdir -p \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\new\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\edit\")",
+      "Bash(touch \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\new\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\edit\\\\page.tsx\")"
     ]
   }
 }

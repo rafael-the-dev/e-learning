@@ -25,6 +25,7 @@ export const PERMISSIONS = {
   USERS_UPDATE: "users.update",
   USERS_DELETE: "users.delete",
   USERS_INVITE: "users.invite",
+  USERS_DISABLE: "users.disable",
   USERS_RESET_PASSWORD: "users.reset_password",
 
   // Roles & Permissions

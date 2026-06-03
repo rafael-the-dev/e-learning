@@ -1,42 +1,37 @@
-export interface UserDto {
+// =============================================================================
+// USERS MODULE TYPES
+// =============================================================================
+
+export interface OrgUserRole {
   id: string;
-  email: string;
   name: string;
-  avatarUrl: string | null;
+}
+
+/** Flat DTO combining User + their membership in a specific organization. */
+export interface OrgUser {
+  id: string;
+  name: string;
+  email: string;
   phone: string | null;
   isActive: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
-  roles?: UserRoleDto[];
+  joinedAt: Date;
+  isOwner: boolean;
+  roles: OrgUserRole[];
 }
 
-export interface UserRoleDto {
-  roleId: string;
-  roleName: string;
-  organizationId: string;
-  branchId: string | null;
-}
-
-export interface CreateUserInput {
-  email: string;
+/** A role available for assignment within an organization. */
+export interface AssignableRole {
+  id: string;
   name: string;
-  password: string;
-  phone?: string;
-  organizationId: string;
-  roleId: string;
-  branchId?: string;
+  isSystem: boolean;
 }
 
-export interface UpdateUserInput {
-  name?: string;
-  phone?: string;
-  avatarUrl?: string;
-}
-
-export interface InviteUserInput {
-  email: string;
-  name: string;
-  organizationId: string;
-  roleId: string;
-  branchId?: string;
-}
+export const ROLE_LABELS: Record<string, string> = {
+  SUPER_ADMIN: "Super Admin",
+  ORG_ADMIN: "Administrador",
+  SECRETARY: "Secretária",
+  TEACHER: "Formador",
+  STUDENT: "Aluno",
+};

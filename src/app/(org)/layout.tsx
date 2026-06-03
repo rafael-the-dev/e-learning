@@ -3,11 +3,11 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getOrgSession } from "@/server/auth/session";
 import { Toaster } from "@/shared/components/ui/toaster";
-import { LayoutDashboard, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, LogOut } from "lucide-react";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  // Add more routes as modules are implemented
+  { href: "/users", label: "Utilizadores", icon: Users },
 ];
 
 export default async function OrgLayout({ children }: { children: React.ReactNode }) {
