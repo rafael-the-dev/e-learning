@@ -7,7 +7,11 @@
       "Bash(Out-Null)",
       "Bash(Write-Output \"ok\")",
       "Bash(mkdir -p \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\new\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\edit\")",
-      "Bash(touch \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\new\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\edit\\\\page.tsx\")"
+      "Bash(touch \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\new\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\page.tsx\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\users\\\\[userId]\\\\edit\\\\page.tsx\")",
+      "Bash(mkdir -p \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\students\\\\new\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\students\\\\[studentId]\\\\edit\" && echo \"ok\")"
+    ],
+    "additionalDirectories": [
+      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]"
     ]
   }
 }

@@ -1,9 +1,9 @@
-import type { StudentStatus, Gender } from "@/shared/types/common";
+// =============================================================================
+// STUDENTS MODULE TYPES
+// =============================================================================
 
-export interface StudentDto {
+export interface Student {
   id: string;
-  organizationId: string;
-  branchId: string | null;
   code: string | null;
   firstName: string;
   lastName: string;
@@ -11,49 +11,40 @@ export interface StudentDto {
   email: string | null;
   phone: string | null;
   dateOfBirth: Date | null;
-  gender: Gender | null;
+  gender: string | null;
   address: string | null;
-  photoUrl: string | null;
   idType: string | null;
   idNumber: string | null;
-  status: StudentStatus;
+  status: string;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
+  branch: { id: string; name: string } | null;
 }
 
-export interface CreateStudentInput {
-  organizationId: string;
-  branchId?: string;
-  firstName: string;
-  lastName: string;
-  email?: string;
-  phone?: string;
-  dateOfBirth?: Date;
-  gender?: Gender;
-  address?: string;
-  idType?: string;
-  idNumber?: string;
-  notes?: string;
+export interface StudentBranch {
+  id: string;
+  name: string;
+  code: string | null;
 }
 
-export interface UpdateStudentInput {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  phone?: string;
-  dateOfBirth?: Date;
-  gender?: Gender;
-  address?: string;
-  idType?: string;
-  idNumber?: string;
-  photoUrl?: string;
-  notes?: string;
-}
+export const STUDENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pendente",
+  ACTIVE: "Ativo",
+  SUSPENDED: "Suspenso",
+  COMPLETED: "Concluído",
+  DROPPED: "Abandonado",
+};
 
-export interface StudentFilters {
-  search?: string;
-  status?: StudentStatus;
-  branchId?: string;
-  courseId?: string;
-}
+export const GENDER_LABELS: Record<string, string> = {
+  MALE: "Masculino",
+  FEMALE: "Feminino",
+  OTHER: "Outro",
+};
+
+export const ID_TYPE_LABELS: Record<string, string> = {
+  BI: "Bilhete de Identidade",
+  PASSPORT: "Passaporte",
+  NUIT: "NUIT",
+  OTHER: "Outro",
+};
