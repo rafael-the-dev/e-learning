@@ -20,6 +20,7 @@ export async function generatePdf<TData>(
 ): Promise<PdfGenerateResult> {
   const { renderToBuffer } = await import("@react-pdf/renderer");
   const element = template.render(data);
-  const buffer = await renderToBuffer(element);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const buffer = await renderToBuffer(element as any);
   return { buffer: Buffer.from(buffer), filename };
 }
