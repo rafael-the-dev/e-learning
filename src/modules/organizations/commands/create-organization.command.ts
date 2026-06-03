@@ -1,5 +1,7 @@
+import bcrypt from "bcryptjs";
 import { BaseCommand, AuthorizationError, ValidationError } from "@/shared/lib/command";
 import { isSuperAdmin } from "@/server/auth/rbac";
+import { SYSTEM_ROLES } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import {
   findOrganizationBySlug,
@@ -11,7 +13,7 @@ import { getDb } from "@/server/db";
 import type { Organization } from "@prisma/client";
 
 export class CreateOrganizationCommand extends BaseCommand<
-  CreateOrganizationSchema & { ownerUserId?: string },
+  CreateOrganizationSchema,
   Organization
 > {
   async validate(): Promise<void> {
@@ -57,14 +59,38 @@ export class CreateOrganizationCommand extends BaseCommand<
       isDefault: true,
     });
 
-    // Assign the owner to the org if provided
-    if (this.input.ownerUserId) {
-      const db = await getDb();
-      await db.userOrganization.create({
+    const db = await getDb();
+
+    // Create the org admin user
+    const passwordHash = await bcrypt.hash(this.input.adminPassword, 12);
+    const adminUser = await db.user.create({
+      data: {
+        name: this.input.adminName,
+        email: this.input.adminEmail,
+        passwordHash,
+        isActive: true,
+      },
+    });
+
+    // Link admin as org owner
+    await db.userOrganization.create({
+      data: {
+        userId: adminUser.id,
+        organizationId: org.id,
+        isOwner: true,
+      },
+    });
+
+    // Assign ORG_ADMIN system role
+    const orgAdminRole = await db.role.findFirst({
+      where: { name: SYSTEM_ROLES.ORG_ADMIN, isSystem: true },
+    });
+    if (orgAdminRole) {
+      await db.userRole.create({
         data: {
-          userId: this.input.ownerUserId,
+          userId: adminUser.id,
+          roleId: orgAdminRole.id,
           organizationId: org.id,
-          isOwner: true,
         },
       });
     }

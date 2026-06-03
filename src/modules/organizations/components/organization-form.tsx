@@ -69,7 +69,7 @@ export function CreateOrganizationForm({
     formState: { errors, isSubmitting },
   } = useForm<CreateOrganizationSchema>({
     resolver: zodResolver(createOrganizationSchema),
-    defaultValues: { timezone: "UTC", locale: "en" },
+    defaultValues: { timezone: "UTC", locale: "en", adminName: "", adminEmail: "", adminPassword: "" },
   });
 
   const nameValue = watch("name");
@@ -147,6 +147,24 @@ export function CreateOrganizationForm({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </FormSection>
+
+            <FormSection title="Administrador da Organização">
+              <div className="space-y-1.5">
+                <Label htmlFor="adminName">Nome *</Label>
+                <Input id="adminName" placeholder="João Silva" {...register("adminName")} />
+                {errors.adminName && <p className="text-xs text-destructive">{errors.adminName.message}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="adminEmail">E-mail *</Label>
+                <Input id="adminEmail" type="email" placeholder="admin@escola.co.mz" {...register("adminEmail")} />
+                {errors.adminEmail && <p className="text-xs text-destructive">{errors.adminEmail.message}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="adminPassword">Palavra-passe *</Label>
+                <Input id="adminPassword" type="password" placeholder="Mínimo 8 caracteres" {...register("adminPassword")} />
+                {errors.adminPassword && <p className="text-xs text-destructive">{errors.adminPassword.message}</p>}
               </div>
             </FormSection>
           </SheetBody>

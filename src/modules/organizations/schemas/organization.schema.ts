@@ -16,6 +16,9 @@ export const createOrganizationSchema = z.object({
   address: z.string().max(255).optional(),
   timezone: z.string().optional(),
   locale: z.string().max(10).optional(),
+  adminName: z.string().min(2, "O nome deve ter pelo menos 2 caracteres").max(100),
+  adminEmail: z.string().email("Endereço de e-mail inválido"),
+  adminPassword: z.string().min(8, "A palavra-passe deve ter pelo menos 8 caracteres"),
 });
 
 export const updateOrganizationSchema = z.object({

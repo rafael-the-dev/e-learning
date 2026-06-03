@@ -18,10 +18,7 @@ export async function createOrganizationAction(
 ): Promise<ActionResult<Organization>> {
   return runAction(async () => {
     const context = await requireAdminContext();
-    const cmd = new CreateOrganizationCommand(
-      { ...input, ownerUserId: context.userId },
-      context
-    );
+    const cmd = new CreateOrganizationCommand(input, context);
     const org = await cmd.run();
     revalidatePath("/organizations");
     return org;
