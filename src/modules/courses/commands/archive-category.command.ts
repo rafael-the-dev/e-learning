@@ -42,6 +42,7 @@ export class ArchiveCourseCategoryCommand extends BaseCommand<
   async execute(): Promise<CourseCategory> {
     const category = await archiveCourseCategory(
       this.input.categoryId,
+      this.context.organizationId,
       this.context.userId
     );
 

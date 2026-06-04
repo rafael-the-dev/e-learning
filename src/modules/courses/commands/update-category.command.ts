@@ -71,7 +71,7 @@ export class UpdateCourseCategoryCommand extends BaseCommand<
   }
 
   async execute(): Promise<CourseCategory> {
-    const category = await updateCourseCategory(this.input.categoryId, {
+    const category = await updateCourseCategory(this.input.categoryId, this.context.organizationId, {
       name: this.input.name,
       description:
         this.input.description !== undefined

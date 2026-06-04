@@ -25,7 +25,7 @@ export class SoftDeleteCourseCategoryCommand extends BaseCommand<
     );
     if (!existing) throw new NotFoundError("Categoria", this.input.categoryId);
 
-    const count = await countCoursesUsingCategory(this.input.categoryId);
+    const count = await countCoursesUsingCategory(this.input.categoryId, this.context.organizationId);
     if (count > 0) {
       throw new BusinessRuleError(
         `Não é possível eliminar esta categoria. Existem ${count} curso(s) associado(s).`
@@ -44,7 +44,7 @@ export class SoftDeleteCourseCategoryCommand extends BaseCommand<
   }
 
   async execute(): Promise<void> {
-    await softDeleteCourseCategory(this.input.categoryId, this.context.userId);
+    await softDeleteCourseCategory(this.input.categoryId, this.context.organizationId, this.context.userId);
 
     await auditService.log(this.context, {
       entity: "CourseCategory",

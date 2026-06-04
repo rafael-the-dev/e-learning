@@ -90,10 +90,11 @@ export async function existsCategoryNameInOrganization(
 }
 
 export async function countCoursesUsingCategory(
-  categoryId: string
+  categoryId: string,
+  organizationId: string
 ): Promise<number> {
   const db = await getDb();
-  return db.course.count({ where: { categoryId, deletedAt: null } });
+  return db.course.count({ where: { categoryId, organizationId, deletedAt: null } });
 }
 
 export async function createCourseCategory(data: {
@@ -120,6 +121,7 @@ export async function createCourseCategory(data: {
 
 export async function updateCourseCategory(
   id: string,
+  organizationId: string,
   data: {
     name?: string;
     description?: string | null;
@@ -134,7 +136,7 @@ export async function updateCourseCategory(
   if (data.status !== undefined) updateData.status = data.status;
 
   const row = await db.courseCategory.update({
-    where: { id },
+    where: { id, organizationId },
     data: updateData,
     select: categorySelect,
   });
@@ -143,11 +145,12 @@ export async function updateCourseCategory(
 
 export async function archiveCourseCategory(
   id: string,
+  organizationId: string,
   updatedBy: string
 ): Promise<CourseCategory> {
   const db = await getDb();
   const row = await db.courseCategory.update({
-    where: { id },
+    where: { id, organizationId },
     data: { status: "ARCHIVED", updatedBy },
     select: categorySelect,
   });
@@ -156,11 +159,12 @@ export async function archiveCourseCategory(
 
 export async function softDeleteCourseCategory(
   id: string,
+  organizationId: string,
   updatedBy: string
 ): Promise<void> {
   const db = await getDb();
   await db.courseCategory.update({
-    where: { id },
+    where: { id, organizationId },
     data: { deletedAt: new Date(), updatedBy },
   });
 }
