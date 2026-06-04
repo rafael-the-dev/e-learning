@@ -3,17 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getOrgSession } from "@/server/auth/session";
 import { Toaster } from "@/shared/components/ui/toaster";
-import { LayoutDashboard, Users, GraduationCap, BookUser, BookOpen, Tags, Library, LogOut } from "lucide-react";
-
-const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/users", label: "Utilizadores", icon: Users },
-  { href: "/students", label: "Alunos", icon: GraduationCap },
-  { href: "/teachers", label: "Professores", icon: BookUser },
-  { href: "/courses", label: "Cursos", icon: BookOpen },
-  { href: "/courses/categories", label: "Categorias", icon: Tags },
-  { href: "/subjects", label: "Disciplinas", icon: Library },
-];
+import { LayoutDashboard, LogOut } from "lucide-react";
+import { NavLinks } from "./_components/nav-links";
 
 export default async function OrgLayout({ children }: { children: React.ReactNode }) {
   let session: Awaited<ReturnType<typeof getOrgSession>>;
@@ -40,16 +31,7 @@ export default async function OrgLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {NAV.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            >
-              <Icon className="size-4 shrink-0" />
-              {label}
-            </Link>
-          ))}
+          <NavLinks />
         </nav>
 
         {/* User */}
