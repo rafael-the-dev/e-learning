@@ -20,25 +20,24 @@ import {
 } from "@/modules/courses/actions/course.actions";
 import { toast } from "@/shared/hooks/use-toast";
 import { BookOpen } from "lucide-react";
-import {
-  COURSE_STATUS_LABELS,
-  COURSE_CATEGORY_LABELS,
-} from "@/modules/courses/types";
-import type { Course } from "@/modules/courses/types";
+import { COURSE_STATUS_LABELS } from "@/modules/courses/types";
+import type { Course, CourseCategory } from "@/modules/courses/types";
 import type { PaginatedResult } from "@/shared/types/common";
 
 interface CoursesTableProps {
   result: PaginatedResult<Course>;
+  categories: CourseCategory[];
   defaultSearch?: string;
   defaultStatus?: string;
-  defaultCategory?: string;
+  defaultCategoryId?: string;
 }
 
 export function CoursesTable({
   result,
+  categories,
   defaultSearch = "",
   defaultStatus = "",
-  defaultCategory = "",
+  defaultCategoryId = "",
 }: CoursesTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -119,19 +118,19 @@ export function CoursesTable({
           </SelectContent>
         </Select>
         <Select
-          value={defaultCategory || "all"}
+          value={defaultCategoryId || "all"}
           onValueChange={(v) =>
-            updateParams({ category: v === "all" ? "" : v })
+            updateParams({ categoryId: v === "all" ? "" : v })
           }
         >
-          <SelectTrigger className="w-45">
+          <SelectTrigger className="w-48">
             <SelectValue placeholder="Todas as categorias" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas as categorias</SelectItem>
-            {Object.entries(COURSE_CATEGORY_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
+            {categories.map((cat) => (
+              <SelectItem key={cat.id} value={cat.id}>
+                {cat.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -143,7 +142,7 @@ export function CoursesTable({
           icon={<BookOpen className="size-8" />}
           title="Nenhum curso encontrado"
           description={
-            defaultSearch || defaultStatus || defaultCategory
+            defaultSearch || defaultStatus || defaultCategoryId
               ? "Tente ajustar os filtros de pesquisa."
               : "Crie o primeiro curso da organização."
           }

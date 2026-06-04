@@ -1,14 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
-import {
-  MoreHorizontal,
-  Pencil,
-  ExternalLink,
-  Archive,
-  Trash2,
-} from "lucide-react";
+import { MoreHorizontal, Pencil, Archive, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -19,71 +12,33 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
-import type { Course } from "@/modules/courses/types";
+import type { CourseCategoryWithCount } from "@/modules/courses/types";
 
 interface GetColumnsOptions {
-  onArchive: (course: Course) => void;
-  onDelete: (course: Course) => void;
+  onEdit: (category: CourseCategoryWithCount) => void;
+  onArchive: (category: CourseCategoryWithCount) => void;
+  onDelete: (category: CourseCategoryWithCount) => void;
 }
 
-export function getCourseColumns({
+export function getCategoryColumns({
+  onEdit,
   onArchive,
   onDelete,
-}: GetColumnsOptions): ColumnDef<Course>[] {
+}: GetColumnsOptions): ColumnDef<CourseCategoryWithCount>[] {
   return [
     {
       accessorKey: "name",
       header: "Nome",
-      cell: ({ row }) => {
-        const c = row.original;
-        return (
-          <Link
-            href={`/courses/${c.id}`}
-            className="font-medium hover:underline"
-          >
-            {c.name}
-          </Link>
-        );
-      },
-    },
-    {
-      accessorKey: "code",
-      header: "Código",
       cell: ({ row }) => (
-        <span className="text-sm font-mono text-muted-foreground">
-          {row.original.code ?? "—"}
-        </span>
+        <span className="font-medium">{row.original.name}</span>
       ),
     },
     {
-      accessorKey: "categoryName",
-      header: "Categoria",
+      accessorKey: "description",
+      header: "Descrição",
       cell: ({ row }) => (
-        <span className="text-sm">
-          {row.original.categoryName ?? "—"}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "totalHours",
-      header: "Carga Horária",
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {row.original.totalHours ? `${row.original.totalHours}h` : "—"}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "price",
-      header: "Preço",
-      cell: ({ row }) => (
-        <span className="text-sm">
-          {row.original.price
-            ? parseFloat(row.original.price).toLocaleString("pt-PT", {
-                style: "currency",
-                currency: "MZN",
-              })
-            : "—"}
+        <span className="text-sm text-muted-foreground line-clamp-1">
+          {row.original.description ?? "—"}
         </span>
       ),
     },
@@ -91,6 +46,15 @@ export function getCourseColumns({
       accessorKey: "status",
       header: "Estado",
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+    {
+      accessorKey: "coursesCount",
+      header: "Cursos",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {row.original.coursesCount}
+        </span>
+      ),
     },
     {
       accessorKey: "createdAt",
@@ -117,17 +81,9 @@ export function getCourseColumns({
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Ações</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href={`/courses/${c.id}`}>
-                    <ExternalLink className="size-4" />
-                    Ver Detalhes
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href={`/courses/${c.id}/edit`}>
-                    <Pencil className="size-4" />
-                    Editar
-                  </Link>
+                <DropdownMenuItem onClick={() => onEdit(c)}>
+                  <Pencil className="size-4" />
+                  Editar
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {c.status !== "ARCHIVED" && (

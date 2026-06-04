@@ -15,7 +15,6 @@ import { CourseDetailActions } from "@/modules/courses/components/course-detail-
 import { LevelsTable } from "@/modules/courses/components/levels-table";
 import { SubjectsTable } from "@/modules/courses/components/subjects-table";
 import { NotFoundError } from "@/shared/lib/command";
-import { COURSE_CATEGORY_LABELS } from "@/modules/courses/types";
 import {
   Pencil,
   BookOpen,
@@ -96,10 +95,10 @@ export default async function CourseDetailPage({
               {course.code}
             </span>
           )}
-          {course.category && (
+          {course.categoryName && (
             <span className="text-sm border rounded-full px-2.5 py-0.5 flex items-center gap-1.5">
               <Tag className="size-3" />
-              {COURSE_CATEGORY_LABELS[course.category] ?? course.category}
+              {course.categoryName}
             </span>
           )}
         </div>

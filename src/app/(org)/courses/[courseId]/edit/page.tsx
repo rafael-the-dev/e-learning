@@ -3,7 +3,10 @@ import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { requirePermission } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
-import { getCourseById } from "@/modules/courses/services/course.service";
+import {
+  getCourseById,
+  getActiveCategoriesByOrganization,
+} from "@/modules/courses/services/course.service";
 import { EditCourseForm } from "@/modules/courses/components/course-form";
 import { NotFoundError } from "@/shared/lib/command";
 import type { AuthContext } from "@/server/auth/context";
@@ -32,6 +35,8 @@ export default async function EditCoursePage({
     throw e;
   }
 
+  const categories = await getActiveCategoriesByOrganization(context.organizationId);
+
   const breadcrumb = (
     <nav className="flex items-center gap-2 text-muted-foreground">
       <Link href="/courses" className="hover:text-foreground transition-colors">
@@ -58,7 +63,7 @@ export default async function EditCoursePage({
       />
 
       <div className="p-8 max-w-2xl">
-        <EditCourseForm course={course} />
+        <EditCourseForm course={course} categories={categories} />
       </div>
     </>
   );

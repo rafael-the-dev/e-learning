@@ -11,7 +11,7 @@ import type { Course, CourseWithCounts } from "@/modules/courses/types";
 export interface ListCoursesParams extends PaginationParams {
   search?: string;
   status?: string;
-  category?: string;
+  categoryId?: string;
 }
 
 const courseSelect = {
@@ -20,7 +20,8 @@ const courseSelect = {
   name: true,
   code: true,
   description: true,
-  category: true,
+  categoryId: true,
+  category: { select: { name: true } },
   totalHours: true,
   price: true,
   status: true,
@@ -34,7 +35,8 @@ function mapToCourse(row: {
   name: string;
   code: string | null;
   description: string | null;
-  category: string | null;
+  categoryId: string | null;
+  category: { name: string } | null;
   totalHours: number | null;
   price: { toString(): string } | null;
   status: string;
@@ -42,8 +44,18 @@ function mapToCourse(row: {
   updatedAt: Date;
 }): Course {
   return {
-    ...row,
+    id: row.id,
+    organizationId: row.organizationId,
+    name: row.name,
+    code: row.code,
+    description: row.description,
+    categoryId: row.categoryId,
+    categoryName: row.category?.name ?? null,
+    totalHours: row.totalHours,
     price: row.price ? row.price.toString() : null,
+    status: row.status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -65,7 +77,7 @@ export async function findCoursesByOrganization(
       ],
     }),
     ...(params.status && { status: params.status }),
-    ...(params.category && { category: params.category }),
+    ...(params.categoryId && { categoryId: params.categoryId }),
   };
 
   const [rows, total] = await Promise.all([
@@ -132,7 +144,7 @@ export async function createCourse(data: {
   name: string;
   code?: string | null;
   description?: string | null;
-  category?: string | null;
+  categoryId?: string | null;
   totalHours?: number | null;
   price?: string | null;
   status?: string;
@@ -145,7 +157,7 @@ export async function createCourse(data: {
       name: data.name,
       code: data.code ?? null,
       description: data.description ?? null,
-      category: data.category ?? null,
+      categoryId: data.categoryId ?? null,
       totalHours: data.totalHours ?? null,
       price: data.price ? parseFloat(data.price) : null,
       status: data.status ?? "DRAFT",
@@ -165,7 +177,7 @@ export async function updateCourse(
     name?: string;
     code?: string | null;
     description?: string | null;
-    category?: string | null;
+    categoryId?: string | null;
     totalHours?: number | null;
     price?: string | null;
     status?: string;
@@ -179,7 +191,7 @@ export async function updateCourse(
   if (data.name !== undefined) updateData.name = data.name;
   if (data.code !== undefined) updateData.code = data.code;
   if (data.description !== undefined) updateData.description = data.description;
-  if (data.category !== undefined) updateData.category = data.category;
+  if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
   if (data.totalHours !== undefined) updateData.totalHours = data.totalHours;
   if (data.price !== undefined)
     updateData.price = data.price ? parseFloat(data.price) : null;

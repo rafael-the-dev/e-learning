@@ -4,10 +4,14 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { requirePermission } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
-import { getCoursesByOrganization, getCourseStats } from "@/modules/courses/services/course.service";
+import {
+  getCoursesByOrganization,
+  getCourseStats,
+  getActiveCategoriesByOrganization,
+} from "@/modules/courses/services/course.service";
 import { CoursesTable } from "@/modules/courses/components/courses-table";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
-import { BookOpen, Plus } from "lucide-react";
+import { BookOpen, Plus, Tags } from "lucide-react";
 import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Cursos" };
@@ -19,7 +23,7 @@ export default async function CoursesPage({
     page?: string;
     search?: string;
     status?: string;
-    category?: string;
+    categoryId?: string;
   }>;
 }) {
   let context: AuthContext;
@@ -29,17 +33,18 @@ export default async function CoursesPage({
     redirect("/forbidden");
   }
 
-  const { page, search, status, category } = await searchParams;
+  const { page, search, status, categoryId } = await searchParams;
   const pagination = normalizePaginationParams(page);
 
-  const [result, stats] = await Promise.all([
+  const [result, stats, categories] = await Promise.all([
     getCoursesByOrganization(context.organizationId, {
       ...pagination,
       search,
       status,
-      category,
+      categoryId,
     }),
     getCourseStats(context.organizationId),
+    getActiveCategoriesByOrganization(context.organizationId),
   ]);
 
   const totalActive = stats["ACTIVE"] ?? 0;
@@ -52,12 +57,20 @@ export default async function CoursesPage({
         title="Cursos"
         description="Gerir os cursos e programas da organização."
         actions={
-          <Button asChild size="sm">
-            <Link href="/courses/new">
-              <Plus className="size-4 mr-1.5" />
-              Novo Curso
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/courses/categories">
+                <Tags className="size-4 mr-1.5" />
+                Categorias
+              </Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link href="/courses/new">
+                <Plus className="size-4 mr-1.5" />
+                Novo Curso
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -72,9 +85,10 @@ export default async function CoursesPage({
 
         <CoursesTable
           result={result}
+          categories={categories}
           defaultSearch={search}
           defaultStatus={status}
-          defaultCategory={category}
+          defaultCategoryId={categoryId}
         />
       </div>
     </>

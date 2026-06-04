@@ -224,15 +224,13 @@ export const SubjectStatus = {
 export type SubjectStatus =
   (typeof SubjectStatus)[keyof typeof SubjectStatus];
 
-export const CourseCategory = {
-  DRIVING: "DRIVING",
-  MOTORCYCLES: "MOTORCYCLES",
-  HEAVY_VEHICLES: "HEAVY_VEHICLES",
-  PROFESSIONAL: "PROFESSIONAL",
-  OTHER: "OTHER",
+export const CourseCategoryStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  ARCHIVED: "ARCHIVED",
 } as const;
-export type CourseCategory =
-  (typeof CourseCategory)[keyof typeof CourseCategory];
+export type CourseCategoryStatus =
+  (typeof CourseCategoryStatus)[keyof typeof CourseCategoryStatus];
 
 export const AuditAction = {
   CREATED: "CREATED",

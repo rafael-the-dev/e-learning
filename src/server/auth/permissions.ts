@@ -67,6 +67,13 @@ export const PERMISSIONS = {
   SUBJECTS_UPDATE: "subjects.update",
   SUBJECTS_DELETE: "subjects.delete",
 
+  // Course Categories
+  COURSE_CATEGORIES_VIEW: "course_categories.view",
+  COURSE_CATEGORIES_CREATE: "course_categories.create",
+  COURSE_CATEGORIES_UPDATE: "course_categories.update",
+  COURSE_CATEGORIES_ARCHIVE: "course_categories.archive",
+  COURSE_CATEGORIES_DELETE: "course_categories.delete",
+
   // Class Groups
   CLASS_GROUPS_CREATE: "class_groups.create",
   CLASS_GROUPS_READ: "class_groups.read",
@@ -167,6 +174,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.SUBJECTS_CREATE,
     PERMISSIONS.SUBJECTS_UPDATE,
     PERMISSIONS.SUBJECTS_DELETE,
+    PERMISSIONS.COURSE_CATEGORIES_VIEW,
     PERMISSIONS.CLASS_GROUPS_READ,
     PERMISSIONS.ENROLLMENTS_CREATE,
     PERMISSIONS.ENROLLMENTS_READ,

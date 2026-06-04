@@ -41,6 +41,7 @@ model Organization {
   students          Student[]
   teachers          Teacher[]
   courses           Course[]
+  courseCategories  CourseCategory[]
   vehicles          Vehicle[]
   invoices          Invoice[]
   payments          Payment[]
@@ -326,13 +327,33 @@ model Teacher {
 // COURSES
 // =============================================================================
 
-model Course {
+model CourseCategory {
   id             String    @id @default(cuid())
   organizationId String
   name           String
+  description    String?
+  // CourseCategoryStatus: ACTIVE | INACTIVE | ARCHIVED
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+  updatedBy      String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courses      Course[]
+
+  @@unique([organizationId, name])
+  @@map("course_categories")
+}
+
+model Course {
+  id             String    @id @default(cuid())
+  organizationId String
+  categoryId     String?
+  name           String
   code           String?
   description    String?   @db.NVarChar(Max)
-  category       String?
   durationWeeks  Int?
   totalHours     Int?
   price          Decimal?  @db.Decimal(10, 2)
@@ -345,7 +366,8 @@ model Course {
   createdBy      String?
   updatedBy      String?
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  category     CourseCategory? @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   levels       CourseLevel[]
   classGroups  ClassGroup[]
   enrollments  Enrollment[]

@@ -2,13 +2,30 @@
 // COURSES MODULE TYPES
 // =============================================================================
 
+export interface CourseCategory {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string | null;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string | null;
+  updatedBy: string | null;
+}
+
+export interface CourseCategoryWithCount extends CourseCategory {
+  coursesCount: number;
+}
+
 export interface Course {
   id: string;
   organizationId: string;
   name: string;
   code: string | null;
   description: string | null;
-  category: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
   totalHours: number | null;
   price: string | null;
   status: string;
@@ -73,10 +90,8 @@ export const SUBJECT_STATUS_LABELS: Record<string, string> = {
   ARCHIVED: "Arquivado",
 };
 
-export const COURSE_CATEGORY_LABELS: Record<string, string> = {
-  DRIVING: "Condução",
-  MOTORCYCLES: "Motociclos",
-  HEAVY_VEHICLES: "Pesados",
-  PROFESSIONAL: "Profissional",
-  OTHER: "Outro",
+export const COURSE_CATEGORY_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Ativa",
+  INACTIVE: "Inativa",
+  ARCHIVED: "Arquivada",
 };

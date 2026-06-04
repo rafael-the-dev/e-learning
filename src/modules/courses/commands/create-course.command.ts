@@ -11,6 +11,7 @@ import {
   findCourseByCodes,
   findCourseByName,
 } from "@/modules/courses/repositories/course.repository";
+import { findCategoryByIdInOrganization } from "@/modules/courses/repositories/category.repository";
 import {
   createCourseSchema,
   type CreateCourseSchema,
@@ -51,6 +52,18 @@ export class CreateCourseCommand extends BaseCommand<CreateCourseSchema, Course>
         name: ["Já existe um curso com este nome nesta organização"],
       });
     }
+
+    if (this.input.categoryId) {
+      const category = await findCategoryByIdInOrganization(
+        this.input.categoryId,
+        this.context.organizationId
+      );
+      if (!category) {
+        throw new ValidationError("Dados inválidos", {
+          categoryId: ["A categoria indicada não existe nesta organização"],
+        });
+      }
+    }
   }
 
   async authorize(): Promise<void> {
@@ -69,7 +82,7 @@ export class CreateCourseCommand extends BaseCommand<CreateCourseSchema, Course>
       name: this.input.name,
       code: this.input.code || null,
       description: this.input.description || null,
-      category: this.input.category || null,
+      categoryId: this.input.categoryId || null,
       totalHours: this.input.totalHours ? parseInt(this.input.totalHours, 10) : null,
       price: this.input.price || null,
       status: this.input.status ?? "DRAFT",

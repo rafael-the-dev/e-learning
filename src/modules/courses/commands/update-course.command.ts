@@ -13,6 +13,7 @@ import {
   findCourseByCodes,
   findCourseByName,
 } from "@/modules/courses/repositories/course.repository";
+import { findCategoryByIdInOrganization } from "@/modules/courses/repositories/category.repository";
 import {
   updateCourseSchema,
   type UpdateCourseSchema,
@@ -67,6 +68,18 @@ export class UpdateCourseCommand extends BaseCommand<UpdateCourseInput, Course> 
         });
       }
     }
+
+    if (this.input.categoryId) {
+      const category = await findCategoryByIdInOrganization(
+        this.input.categoryId,
+        this.context.organizationId
+      );
+      if (!category) {
+        throw new ValidationError("Dados inválidos", {
+          categoryId: ["A categoria indicada não existe nesta organização"],
+        });
+      }
+    }
   }
 
   async authorize(): Promise<void> {
@@ -92,7 +105,7 @@ export class UpdateCourseCommand extends BaseCommand<UpdateCourseInput, Course> 
         name: this.input.name,
         code: this.input.code !== undefined ? (this.input.code || null) : undefined,
         description: this.input.description !== undefined ? (this.input.description || null) : undefined,
-        category: this.input.category !== undefined ? (this.input.category || null) : undefined,
+        categoryId: this.input.categoryId !== undefined ? (this.input.categoryId || null) : undefined,
         totalHours: this.input.totalHours !== undefined
           ? (this.input.totalHours ? parseInt(this.input.totalHours, 10) : null)
           : undefined,

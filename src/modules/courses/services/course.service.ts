@@ -14,6 +14,12 @@ import {
   findSubjectsByLevel,
   findSubjectByIdInOrganization,
 } from "@/modules/courses/repositories/subject.repository";
+import {
+  findCategoriesByOrganization,
+  findActiveCategoriesByOrganization,
+  findCategoryByIdInOrganization,
+  findCategoriesWithCountsByOrganization,
+} from "@/modules/courses/repositories/category.repository";
 import { NotFoundError } from "@/shared/lib/command";
 
 // =============================================================================
@@ -75,4 +81,24 @@ export async function getSubjectById(id: string, organizationId: string) {
   const subject = await findSubjectByIdInOrganization(id, organizationId);
   if (!subject) throw new NotFoundError("Disciplina", id);
   return subject;
+}
+
+// ─── Category reads ───────────────────────────────────────────────────────────
+
+export async function getCategoriesByOrganization(organizationId: string) {
+  return findCategoriesByOrganization(organizationId);
+}
+
+export async function getActiveCategoriesByOrganization(organizationId: string) {
+  return findActiveCategoriesByOrganization(organizationId);
+}
+
+export async function getCategoryById(id: string, organizationId: string) {
+  const category = await findCategoryByIdInOrganization(id, organizationId);
+  if (!category) throw new NotFoundError("Categoria", id);
+  return category;
+}
+
+export async function getCategoriesWithCounts(organizationId: string) {
+  return findCategoriesWithCountsByOrganization(organizationId);
 }

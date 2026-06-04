@@ -27,17 +27,18 @@ import {
   createCourseAction,
   updateCourseAction,
 } from "@/modules/courses/actions/course.actions";
-import {
-  COURSE_CATEGORY_LABELS,
-  COURSE_STATUS_LABELS,
-} from "@/modules/courses/types";
-import type { Course } from "@/modules/courses/types";
+import { COURSE_STATUS_LABELS } from "@/modules/courses/types";
+import type { Course, CourseCategory } from "@/modules/courses/types";
 
 // =============================================================================
 // CREATE FORM
 // =============================================================================
 
-export function CreateCourseForm() {
+interface CreateCourseFormProps {
+  categories: CourseCategory[];
+}
+
+export function CreateCourseForm({ categories }: CreateCourseFormProps) {
   const router = useRouter();
 
   const {
@@ -51,7 +52,7 @@ export function CreateCourseForm() {
       name: "",
       code: "",
       description: "",
-      category: "",
+      categoryId: "",
       totalHours: "",
       price: "",
       status: "DRAFT",
@@ -76,7 +77,7 @@ export function CreateCourseForm() {
           <Label htmlFor="name">Nome do Curso *</Label>
           <Input
             id="name"
-            placeholder="Ex.: Condução Categoria B"
+            placeholder="Ex.: Programação Web, Inglês Avançado..."
             {...register("name")}
           />
           {errors.name && (
@@ -86,11 +87,7 @@ export function CreateCourseForm() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="code">Código</Label>
-            <Input
-              id="code"
-              placeholder="Ex.: CAT-B"
-              {...register("code")}
-            />
+            <Input id="code" placeholder="Ex.: WEB-01" {...register("code")} />
             {errors.code && (
               <p className="text-xs text-destructive">{errors.code.message}</p>
             )}
@@ -98,18 +95,26 @@ export function CreateCourseForm() {
           <div className="space-y-1.5">
             <Label>Categoria</Label>
             <Select
-              onValueChange={(v) => setValue("category", v === "none" ? "" : v)}
+              onValueChange={(v) =>
+                setValue("categoryId", v === "none" ? "" : v)
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecionar categoria" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Sem categoria</SelectItem>
-                {Object.entries(COURSE_CATEGORY_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
+                {categories.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    Nenhuma categoria criada.
+                  </div>
+                ) : (
+                  categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -159,7 +164,7 @@ export function CreateCourseForm() {
 
       <FormSection title="Preço">
         <div className="space-y-1.5">
-          <Label htmlFor="price">Preço Base (MZN)</Label>
+          <Label htmlFor="price">Preço Base</Label>
           <Input
             id="price"
             type="number"
@@ -188,9 +193,10 @@ export function CreateCourseForm() {
 
 interface EditCourseFormProps {
   course: Course;
+  categories: CourseCategory[];
 }
 
-export function EditCourseForm({ course }: EditCourseFormProps) {
+export function EditCourseForm({ course, categories }: EditCourseFormProps) {
   const router = useRouter();
 
   const {
@@ -204,7 +210,7 @@ export function EditCourseForm({ course }: EditCourseFormProps) {
       name: course.name,
       code: course.code ?? "",
       description: course.description ?? "",
-      category: course.category ?? "",
+      categoryId: course.categoryId ?? "",
       totalHours: course.totalHours ? String(course.totalHours) : "",
       price: course.price ? String(parseFloat(course.price)) : "",
       status: course.status as UpdateCourseSchema["status"],
@@ -243,19 +249,27 @@ export function EditCourseForm({ course }: EditCourseFormProps) {
           <div className="space-y-1.5">
             <Label>Categoria</Label>
             <Select
-              defaultValue={course.category ?? "none"}
-              onValueChange={(v) => setValue("category", v === "none" ? "" : v)}
+              defaultValue={course.categoryId ?? "none"}
+              onValueChange={(v) =>
+                setValue("categoryId", v === "none" ? "" : v)
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecionar categoria" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Sem categoria</SelectItem>
-                {Object.entries(COURSE_CATEGORY_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
+                {categories.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    Nenhuma categoria criada.
+                  </div>
+                ) : (
+                  categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -297,7 +311,7 @@ export function EditCourseForm({ course }: EditCourseFormProps) {
 
       <FormSection title="Preço">
         <div className="space-y-1.5">
-          <Label htmlFor="edit-price">Preço Base (MZN)</Label>
+          <Label htmlFor="edit-price">Preço Base</Label>
           <Input id="edit-price" type="number" step="0.01" {...register("price")} />
         </div>
       </FormSection>
