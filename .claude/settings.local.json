@@ -17,11 +17,13 @@
       "Bash(New-Item -ItemType Directory -Force \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\teachers\\\\actions\")",
       "Bash(New-Item -ItemType Directory -Force \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\teachers\\\\components\")",
       "Bash(Write-Output \"Done\")",
-      "Bash(mkdir -p \"c:/salc/web/mine/e-learning/src/app/\\(org\\)/teachers/new\" \"c:/salc/web/mine/e-learning/src/app/\\(org\\)/teachers/[teacherId]/edit\" \"c:/salc/web/mine/e-learning/docs\" && echo \"Done\")"
+      "Bash(mkdir -p \"c:/salc/web/mine/e-learning/src/app/\\(org\\)/teachers/new\" \"c:/salc/web/mine/e-learning/src/app/\\(org\\)/teachers/[teacherId]/edit\" \"c:/salc/web/mine/e-learning/docs\" && echo \"Done\")",
+      "Bash(mkdir -p \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\new\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\[courseId]\\\\edit\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\[courseId]\\\\levels\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\[courseId]\\\\subjects\" 2>&1; echo \"done\")"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]",
-      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\teachers\\[teacherId]"
+      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\teachers\\[teacherId]",
+      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\courses\\[courseId]"
     ]
   }
 }

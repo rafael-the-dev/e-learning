@@ -332,14 +332,18 @@ model Course {
   name           String
   code           String?
   description    String?   @db.NVarChar(Max)
+  category       String?
   durationWeeks  Int?
   totalHours     Int?
   price          Decimal?  @db.Decimal(10, 2)
   isActive       Boolean   @default(true)
+  // CourseStatus: DRAFT | ACTIVE | INACTIVE | ARCHIVED
+  status         String    @default("DRAFT")
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
   createdBy      String?
+  updatedBy      String?
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   levels       CourseLevel[]
@@ -359,6 +363,8 @@ model CourseLevel {
   durationWeeks Int?
   totalHours    Int?
   isActive      Boolean  @default(true)
+  // CourseLevelStatus: ACTIVE | INACTIVE | ARCHIVED
+  status        String   @default("ACTIVE")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -379,6 +385,8 @@ model Subject {
   hoursRequired Int?
   order         Int      @default(0)
   isActive      Boolean  @default(true)
+  // SubjectStatus: ACTIVE | INACTIVE | ARCHIVED
+  status        String   @default("ACTIVE")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

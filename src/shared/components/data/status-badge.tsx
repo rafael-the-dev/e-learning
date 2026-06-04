@@ -47,6 +47,9 @@ const STATUS_MAP: Record<string, BadgeProps["variant"]> = {
   // Users
   DISABLED: "destructive",
   INVITED: "warning",
+
+  // Courses / Levels / Subjects
+  ARCHIVED: "secondary",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -73,6 +76,7 @@ const STATUS_LABELS: Record<string, string> = {
   TRIAL: "Experimental",
   DISABLED: "Desativado",
   INVITED: "Convidado",
+  ARCHIVED: "Arquivado",
 };
 
 interface StatusBadgeProps {

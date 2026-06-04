@@ -200,6 +200,40 @@ export const NotificationChannel = {
 export type NotificationChannel =
   (typeof NotificationChannel)[keyof typeof NotificationChannel];
 
+export const CourseStatus = {
+  DRAFT: "DRAFT",
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type CourseStatus = (typeof CourseStatus)[keyof typeof CourseStatus];
+
+export const CourseLevelStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type CourseLevelStatus =
+  (typeof CourseLevelStatus)[keyof typeof CourseLevelStatus];
+
+export const SubjectStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type SubjectStatus =
+  (typeof SubjectStatus)[keyof typeof SubjectStatus];
+
+export const CourseCategory = {
+  DRIVING: "DRIVING",
+  MOTORCYCLES: "MOTORCYCLES",
+  HEAVY_VEHICLES: "HEAVY_VEHICLES",
+  PROFESSIONAL: "PROFESSIONAL",
+  OTHER: "OTHER",
+} as const;
+export type CourseCategory =
+  (typeof CourseCategory)[keyof typeof CourseCategory];
+
 export const AuditAction = {
   CREATED: "CREATED",
   UPDATED: "UPDATED",

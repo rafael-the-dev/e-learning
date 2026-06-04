@@ -1,66 +1,82 @@
-export interface CourseDto {
+// =============================================================================
+// COURSES MODULE TYPES
+// =============================================================================
+
+export interface Course {
   id: string;
   organizationId: string;
   name: string;
   code: string | null;
   description: string | null;
-  durationWeeks: number | null;
+  category: string | null;
   totalHours: number | null;
-  price: number | null;
-  isActive: boolean;
+  price: string | null;
+  status: string;
   createdAt: Date;
-  levels?: CourseLevelDto[];
+  updatedAt: Date;
 }
 
-export interface CourseLevelDto {
+export interface CourseWithCounts extends Course {
+  levelsCount: number;
+  subjectsCount: number;
+}
+
+export interface CourseLevel {
   id: string;
   courseId: string;
   name: string;
   code: string | null;
   description: string | null;
   order: number;
-  durationWeeks: number | null;
   totalHours: number | null;
-  isActive: boolean;
-  subjects?: SubjectDto[];
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  subjectsCount?: number;
+  courseName?: string;
 }
 
-export interface SubjectDto {
+export interface Subject {
   id: string;
   courseLevelId: string;
+  courseId: string;
   name: string;
   code: string | null;
   description: string | null;
   hoursRequired: number | null;
   order: number;
-  isActive: boolean;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  levelName?: string;
+  courseName?: string;
 }
 
-export interface CreateCourseInput {
-  organizationId: string;
-  name: string;
-  code?: string;
-  description?: string;
-  durationWeeks?: number;
-  totalHours?: number;
-  price?: number;
-}
+// ─── Labels ──────────────────────────────────────────────────────────────────
 
-export interface CreateCourseLevelInput {
-  courseId: string;
-  name: string;
-  code?: string;
-  description?: string;
-  order?: number;
-  durationWeeks?: number;
-  totalHours?: number;
-}
+export const COURSE_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Rascunho",
+  ACTIVE: "Ativo",
+  INACTIVE: "Inativo",
+  ARCHIVED: "Arquivado",
+};
 
-export interface CreateSubjectInput {
-  courseLevelId: string;
-  name: string;
-  code?: string;
-  description?: string;
-  hoursRequired?: number;
-  order?: number;
-}
+export const COURSE_LEVEL_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Ativo",
+  INACTIVE: "Inativo",
+  ARCHIVED: "Arquivado",
+};
+
+export const SUBJECT_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Ativo",
+  INACTIVE: "Inativo",
+  ARCHIVED: "Arquivado",
+};
+
+export const COURSE_CATEGORY_LABELS: Record<string, string> = {
+  DRIVING: "Condução",
+  MOTORCYCLES: "Motociclos",
+  HEAVY_VEHICLES: "Pesados",
+  PROFESSIONAL: "Profissional",
+  OTHER: "Outro",
+};
