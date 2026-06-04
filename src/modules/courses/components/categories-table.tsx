@@ -149,7 +149,13 @@ export function CategoriesTable({
           }
         />
       ) : (
-        <DataTable columns={columns} data={filtered} />
+        <DataTable
+          columns={columns}
+          data={filtered}
+          totalRows={filtered.length}
+          pagination={{ pageIndex: 0, pageSize: filtered.length }}
+          onPaginationChange={() => {}}
+        />
       )}
 
       {editTarget && (
