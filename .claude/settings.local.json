@@ -22,7 +22,9 @@
       "PowerShell(sqlcmd *)",
       "PowerShell(Get-ChildItem *)",
       "Bash(Get-ChildItem -Path \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\" -Force)",
-      "Bash(Select-Object -Property Name, Mode)"
+      "Bash(Select-Object -Property Name, Mode)",
+      "PowerShell($env:PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes\"; npx prisma migrate reset --force 2>&1)",
+      "PowerShell(npx prisma migrate dev --name init 2>&1)"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]",
