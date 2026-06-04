@@ -97,6 +97,7 @@ export const ClassGroupStatus = {
   ACTIVE: "ACTIVE",
   COMPLETED: "COMPLETED",
   CANCELLED: "CANCELLED",
+  ARCHIVED: "ARCHIVED",
 } as const;
 export type ClassGroupStatus =
   (typeof ClassGroupStatus)[keyof typeof ClassGroupStatus];
