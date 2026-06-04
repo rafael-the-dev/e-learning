@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { requirePermission } from "@/server/auth/context";
+import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getCourseById,
@@ -32,6 +33,10 @@ export default async function CourseLevelsPage({
   }
 
   const { courseId } = await params;
+
+  const perms = await getUserPermissions(context.userId, context.organizationId);
+  const ability = createAbility(perms);
+  const canManage = ability.can(PERMISSIONS.COURSE_LEVELS_CREATE);
 
   let course;
   let levels;
@@ -71,7 +76,7 @@ export default async function CourseLevelsPage({
       />
 
       <div className="p-8 max-w-3xl">
-        <LevelsTable courseId={course.id} levels={levels} />
+        <LevelsTable courseId={course.id} levels={levels} canManage={canManage} />
       </div>
     </>
   );

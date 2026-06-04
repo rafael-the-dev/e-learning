@@ -5,6 +5,7 @@ import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { Separator } from "@/shared/components/ui/separator";
 import { requirePermission } from "@/server/auth/context";
+import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getCourseWithCounts,
@@ -42,6 +43,10 @@ export default async function CourseDetailPage({
   }
 
   const { courseId } = await params;
+
+  const perms = await getUserPermissions(context.userId, context.organizationId);
+  const ability = createAbility(perms);
+  const canManageLevels = ability.can(PERMISSIONS.COURSE_LEVELS_CREATE);
 
   let course;
   let levels;
@@ -142,7 +147,7 @@ export default async function CourseDetailPage({
             <Layers className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">Níveis do Curso</h3>
           </div>
-          <LevelsTable courseId={course.id} levels={levels} />
+          <LevelsTable courseId={course.id} levels={levels} canManage={canManageLevels} />
         </div>
 
         {/* Subjects */}

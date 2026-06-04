@@ -20,7 +20,9 @@
       "Bash(mkdir -p \"c:/salc/web/mine/e-learning/src/app/\\(org\\)/teachers/new\" \"c:/salc/web/mine/e-learning/src/app/\\(org\\)/teachers/[teacherId]/edit\" \"c:/salc/web/mine/e-learning/docs\" && echo \"Done\")",
       "Bash(mkdir -p \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\new\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\[courseId]\\\\edit\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\[courseId]\\\\levels\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\[courseId]\\\\subjects\" 2>&1; echo \"done\")",
       "PowerShell(sqlcmd *)",
-      "PowerShell(Get-ChildItem *)"
+      "PowerShell(Get-ChildItem *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\" -Force)",
+      "Bash(Select-Object -Property Name, Mode)"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]",

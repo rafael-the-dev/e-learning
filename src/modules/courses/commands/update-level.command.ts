@@ -3,6 +3,7 @@ import {
   AuthorizationError,
   NotFoundError,
   ValidationError,
+  BusinessRuleError,
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -10,6 +11,7 @@ import { auditService } from "@/modules/audit-logs/services/audit.service";
 import {
   findLevelByIdInOrganization,
   updateCourseLevel,
+  existsLevelNameInCourse,
 } from "@/modules/courses/repositories/level.repository";
 import {
   updateCourseLevelSchema,
@@ -45,6 +47,19 @@ export class UpdateCourseLevelCommand extends BaseCommand<
       this.context.organizationId
     );
     if (!this._existing) throw new NotFoundError("Nível", this.input.levelId);
+
+    if (this.input.name && this.input.name !== this._existing.name) {
+      const duplicate = await existsLevelNameInCourse(
+        this._existing.courseId,
+        this.input.name,
+        this.input.levelId
+      );
+      if (duplicate) {
+        throw new BusinessRuleError(
+          `Já existe um nível com o nome "${this.input.name}" neste curso.`
+        );
+      }
+    }
   }
 
   async authorize(): Promise<void> {

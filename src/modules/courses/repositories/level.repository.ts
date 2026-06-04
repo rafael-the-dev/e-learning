@@ -165,3 +165,31 @@ export async function countActiveSubjectsInLevel(levelId: string): Promise<numbe
     where: { courseLevelId: levelId, status: { not: "ARCHIVED" } },
   });
 }
+
+export async function existsLevelNameInCourse(
+  courseId: string,
+  name: string,
+  excludeId?: string
+): Promise<boolean> {
+  const db = await getDb();
+  const row = await db.courseLevel.findFirst({
+    where: {
+      courseId,
+      name: { equals: name },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: { id: true },
+  });
+  return row !== null;
+}
+
+export async function reorderCourseLevels(
+  levelIds: string[]
+): Promise<void> {
+  const db = await getDb();
+  await db.$transaction(
+    levelIds.map((id, index) =>
+      db.courseLevel.update({ where: { id }, data: { order: index } })
+    )
+  );
+}

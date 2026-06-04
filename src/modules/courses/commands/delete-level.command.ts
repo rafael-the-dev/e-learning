@@ -2,6 +2,7 @@ import {
   BaseCommand,
   AuthorizationError,
   NotFoundError,
+  ValidationError,
   BusinessRuleError,
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
@@ -12,13 +13,27 @@ import {
   deleteCourseLevel,
   countActiveSubjectsInLevel,
 } from "@/modules/courses/repositories/level.repository";
-import type { DeleteCourseLevelSchema } from "@/modules/courses/schemas/level.schema";
+import {
+  deleteCourseLevelSchema,
+  type DeleteCourseLevelSchema,
+} from "@/modules/courses/schemas/level.schema";
 
 export class DeleteCourseLevelCommand extends BaseCommand<
   DeleteCourseLevelSchema,
   void
 > {
   async validate(): Promise<void> {
+    const result = deleteCourseLevelSchema.safeParse(this.input);
+    if (!result.success) {
+      const fieldErrors: Record<string, string[]> = {};
+      for (const issue of result.error.issues) {
+        const key = issue.path.join(".");
+        if (!fieldErrors[key]) fieldErrors[key] = [];
+        fieldErrors[key].push(issue.message);
+      }
+      throw new ValidationError("Dados inválidos", fieldErrors);
+    }
+
     const level = await findLevelByIdInOrganization(
       this.input.levelId,
       this.context.organizationId

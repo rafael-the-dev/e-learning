@@ -35,9 +35,24 @@ Out of scope (future modules): Enrollments, Payments, Class Groups, Attendance, 
 | `COURSES_UPDATE` | `courses.update` | ORG_ADMIN, SECRETARY |
 | `COURSES_ARCHIVE` | `courses.archive` | ORG_ADMIN, SECRETARY |
 | `COURSES_DELETE` | `courses.delete` | ORG_ADMIN |
-| `COURSE_LEVELS_CREATE` | `course_levels.create` | ORG_ADMIN, SECRETARY |
-| `COURSE_LEVELS_UPDATE` | `course_levels.update` | ORG_ADMIN, SECRETARY |
-| `COURSE_LEVELS_DELETE` | `course_levels.delete` | ORG_ADMIN, SECRETARY |
+
+### Course Level Permissions
+
+| Key | Value | Default roles |
+|---|---|---|
+| `COURSE_LEVELS_VIEW` | `course_levels.view` | ORG_ADMIN, SECRETARY |
+| `COURSE_LEVELS_CREATE` | `course_levels.create` | ORG_ADMIN only |
+| `COURSE_LEVELS_UPDATE` | `course_levels.update` | ORG_ADMIN only |
+| `COURSE_LEVELS_ARCHIVE` | `course_levels.archive` | ORG_ADMIN only |
+| `COURSE_LEVELS_DELETE` | `course_levels.delete` | ORG_ADMIN only |
+| `COURSE_LEVELS_REORDER` | `course_levels.reorder` | ORG_ADMIN only |
+
+SECRETARY can view levels but **cannot** create, update, archive, delete, or reorder them. The UI hides all management controls when `canManage = false`. Permission checks are enforced server-side in every command regardless of UI state.
+
+### Subject Permissions
+
+| Key | Value | Default roles |
+|---|---|---|
 | `SUBJECTS_CREATE` | `subjects.create` | ORG_ADMIN, SECRETARY |
 | `SUBJECTS_UPDATE` | `subjects.update` | ORG_ADMIN, SECRETARY |
 | `SUBJECTS_DELETE` | `subjects.delete` | ORG_ADMIN, SECRETARY |
@@ -80,10 +95,11 @@ SECRETARY can view and select categories when creating/editing courses, but cann
 
 | Command | Permission | Description |
 |---|---|---|
-| `CreateCourseLevelCommand` | `course_levels.create` | Validates course ownership, creates level |
-| `UpdateCourseLevelCommand` | `course_levels.update` | Validates level in org, updates level |
-| `ArchiveCourseLevelCommand` | `course_levels.delete` | Sets status=ARCHIVED |
-| `DeleteCourseLevelCommand` | `course_levels.delete` | Hard delete; blocks if active subjects exist |
+| `CreateCourseLevelCommand` | `course_levels.create` | Validates course ownership + duplicate name, auto-assigns order, creates level |
+| `UpdateCourseLevelCommand` | `course_levels.update` | Validates level ownership + duplicate name, updates level |
+| `ArchiveCourseLevelCommand` | `course_levels.archive` | Sets status=ARCHIVED; blocks if already archived |
+| `DeleteCourseLevelCommand` | `course_levels.delete` | Hard delete; blocks if active (non-ARCHIVED) subjects exist |
+| `ReorderCourseLevelsCommand` | `course_levels.reorder` | Validates all level IDs belong to course + org, sets order via transaction |
 
 ### Subject Commands
 
@@ -102,10 +118,11 @@ SECRETARY can view and select categories when creating/editing courses, but cann
 - **Never** accept `organizationId` from client input.
 - `Course` queries always include `WHERE organizationId = :activeOrgId`.
 - `CourseCategory` queries always include `WHERE organizationId = :activeOrgId AND deletedAt IS NULL`.
-- `CourseLevel` does not have a direct `organizationId` column — always scope via `course.organizationId`.
+- `CourseLevel` does not have a direct `organizationId` column — always scope via `course.organizationId` (Prisma nested `where: { course: { organizationId } }`).
 - `Subject` does not have a direct `organizationId` column — always scope via `courseLevel.course.organizationId`.
 - When assigning `categoryId` to a course, the command verifies the category belongs to `activeOrganizationId` before saving.
 - All commands verify entity ownership before mutating.
+- `courseId` and `levelId` URL params are always validated against `activeOrganizationId` inside commands before any DB mutation.
 
 ---
 
@@ -146,11 +163,16 @@ SECRETARY can view and select categories when creating/editing courses, but cann
 |---|---|---|
 | `id` | `String` | CUID |
 | `courseId` | `String` | FK → Course |
-| `name` | `String` | Required |
-| `code` | `String?` | Optional |
-| `order` | `Int` | Sort order (0-based) |
-| `totalHours` | `Int?` | — |
+| `name` | `String` | Required; unique within course (enforced in command) |
+| `code` | `String?` | Optional shortcode |
+| `description` | `String?` | Optional |
+| `order` | `Int` | Sort order (0-based, auto-assigned on create) |
+| `totalHours` | `Int?` | Workload hours |
+| `isActive` | `Boolean` | Derived from status; kept in sync on every write |
 | `status` | `String` | `ACTIVE \| INACTIVE \| ARCHIVED` |
+| `createdAt` / `updatedAt` | `DateTime` | — |
+
+No direct `organizationId` column. Tenant scope is enforced via `course.organizationId` on every query.
 
 ### Subject
 
@@ -163,6 +185,23 @@ SECRETARY can view and select categories when creating/editing courses, but cann
 | `hoursRequired` | `Int?` | Workload hours |
 | `order` | `Int` | Sort order (0-based) |
 | `status` | `String` | `ACTIVE \| INACTIVE \| ARCHIVED` |
+
+---
+
+## Course Level Ordering Rules
+
+- `order` is auto-assigned as `max(order) + 1` when a level is created without an explicit order.
+- `ReorderCourseLevelsCommand` accepts an ordered array of all level IDs for the course and sets `order = index` for each in a single transaction.
+- The UI exposes "Move Up" / "Move Down" buttons that recompute the full ordered array and call `reorderCourseLevelsAction`.
+- Only ORG_ADMIN can reorder levels (requires `course_levels.reorder` permission).
+
+---
+
+## Course Level Deletion / Archive Rules
+
+- **Archive**: Sets `status = ARCHIVED` and `isActive = false`. Requires `course_levels.archive`. Blocked if already archived.
+- **Delete**: Hard delete. Requires `course_levels.delete`. Blocked if the level has any non-ARCHIVED subjects (i.e., `countActiveSubjectsInLevel() > 0`). Archive all subjects first.
+- **UI**: Archive is offered when `status !== "ARCHIVED"`. Delete is always offered but the command enforces the subject check server-side.
 
 ---
 
@@ -194,8 +233,13 @@ SECRETARY can view and select categories when creating/editing courses, but cann
 - Cannot delete a course with enrollments
 
 ### CourseLevel
-- `name`: required, min 2, max 200 chars
+- `name`: required, min 2, max 200 chars; unique within the same course (enforced in CreateCourseLevelCommand and UpdateCourseLevelCommand)
+- `code`: optional, max 50 chars
+- `description`: optional, max 1000 chars
+- `order`: optional positive integer; auto-assigned if omitted
+- `status`: `ACTIVE | INACTIVE | ARCHIVED`
 - Cannot delete a level with active (non-ARCHIVED) subjects
+- `levelIds` for reorder must be a complete, non-empty set matching all levels of the course
 
 ### Subject
 - `name`: required, min 2, max 200 chars
@@ -220,6 +264,7 @@ SECRETARY can view and select categories when creating/editing courses, but cann
 | `course_level.updated` | `CourseLevel` | UpdateCourseLevelCommand |
 | `course_level.archived` | `CourseLevel` | ArchiveCourseLevelCommand |
 | `course_level.deleted` | `CourseLevel` | DeleteCourseLevelCommand |
+| `course_level.reordered` | `CourseLevel` | ReorderCourseLevelsCommand |
 | `subject.created` | `Subject` | CreateSubjectCommand |
 | `subject.updated` | `Subject` | UpdateSubjectCommand |
 | `subject.archived` | `Subject` | ArchiveSubjectCommand |
@@ -258,18 +303,24 @@ No seed data is provided for categories — each organization creates its own.
 
 ## Future Integration Points
 
+### Subjects (next)
+- Each `CourseLevel` has many `Subject` records.
+- Subject management follows the same RBAC pattern as levels.
+- Subjects require `courseLevelId` (validated against `courseId` and `organizationId`).
+
 ### Enrollments (Module 8)
 - `Enrollment` has FK `courseId` and `courseLevelId`
 - A course with enrollments **cannot** be hard-deleted
+- `SubjectsCount` displayed on level rows will reflect real subject data once subjects module is live
 
 ### Class Groups (Module 10)
 - `ClassGroup` has FK `courseId` and `courseLevelId`
 
 ### Online Learning (Future)
-- Subjects will have online content units
+- Subjects will have online content units attached to levels
 
 ### AI Features (Future)
-- AI-generated course content, quizzes, recommendations
+- AI-generated course content, quizzes, recommendations per level
 
 ---
 
@@ -281,12 +332,12 @@ src/modules/courses/
   schemas/
     category.schema.ts               — Zod schemas for course category CRUD
     course.schema.ts                 — Zod schemas for course CRUD
-    level.schema.ts                  — Zod schemas for level CRUD
+    level.schema.ts                  — Zod schemas for level CRUD (incl. reorderCourseLevelsSchema)
     subject.schema.ts                — Zod schemas for subject CRUD
   repositories/
     category.repository.ts           — All DB queries for course categories
     course.repository.ts             — All DB queries for courses
-    level.repository.ts              — All DB queries for levels
+    level.repository.ts              — All DB queries for levels (incl. existsLevelNameInCourse, reorderCourseLevels)
     subject.repository.ts            — All DB queries for subjects
   services/course.service.ts         — Read-only service wrappers (courses + categories)
   commands/
@@ -298,10 +349,11 @@ src/modules/courses/
     update-course.command.ts
     archive-course.command.ts
     delete-course.command.ts
-    create-level.command.ts
-    update-level.command.ts
-    archive-level.command.ts
-    delete-level.command.ts
+    create-level.command.ts          — Validates course ownership + duplicate name
+    update-level.command.ts          — Validates level ownership + duplicate name
+    archive-level.command.ts         — Uses course_levels.archive permission
+    delete-level.command.ts          — Blocks if active subjects exist
+    reorder-levels.command.ts        — Validates full level set; reorders in transaction
     create-subject.command.ts
     update-subject.command.ts
     archive-subject.command.ts
@@ -309,7 +361,7 @@ src/modules/courses/
   actions/
     category.actions.ts              — Server actions for course categories
     course.actions.ts                — Server actions for courses
-    level.actions.ts                 — Server actions for levels
+    level.actions.ts                 — Server actions for levels (incl. reorderCourseLevelsAction)
     subject.actions.ts               — Server actions for subjects
   components/
     categories-page-client.tsx       — Client wrapper with create drawer state
@@ -321,7 +373,7 @@ src/modules/courses/
     course-form.tsx                  — Create + Edit forms (uses dynamic categories)
     course-detail-actions.tsx        — Archive/Delete dropdown for course detail
     level-form.tsx                   — Create + Edit drawers (Sheet)
-    levels-table.tsx                 — Inline levels list with actions
+    levels-table.tsx                 — Ordered list with Move Up/Down; canManage gates all writes
     subject-form.tsx                 — Create + Edit drawers (Sheet)
     subjects-table.tsx               — Inline subjects list with actions
 
@@ -329,8 +381,8 @@ src/app/(org)/courses/
   page.tsx                           — List page (loads active categories for filter)
   new/page.tsx                       — Create page (loads active categories for form)
   categories/page.tsx                — Category management page
-  [courseId]/page.tsx                — Detail page (shows categoryName via JOIN)
+  [courseId]/page.tsx                — Detail page (computes canManageLevels, passes to LevelsTable)
   [courseId]/edit/page.tsx           — Edit page (loads active categories for form)
-  [courseId]/levels/page.tsx         — Standalone levels page
+  [courseId]/levels/page.tsx         — Standalone levels page (computes canManage, passes to LevelsTable)
   [courseId]/subjects/page.tsx       — Standalone subjects page
 ```
