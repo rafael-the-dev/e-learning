@@ -25,6 +25,7 @@ export async function getClassGroupById(id: string, organizationId: string) {
   return group;
 }
 
+
 export async function getClassGroupStats(organizationId: string) {
   return countClassGroupsByStatus(organizationId);
 }

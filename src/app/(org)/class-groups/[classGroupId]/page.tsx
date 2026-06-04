@@ -7,7 +7,11 @@ import { requirePermission } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getClassGroupById } from "@/modules/class-groups/services/class-group.service";
-import { ClassSchedulePanel } from "@/modules/class-groups/components/class-schedule-panel";
+import {
+  getSchedulesByClassGroup,
+  getActiveSlotsByOrganization,
+} from "@/modules/schedules/services/schedule.service";
+import { ClassGroupSchedulePanel } from "@/modules/schedules/components/class-group-schedule-panel";
 import { NotFoundError } from "@/shared/lib/command";
 import {
   BookOpen,
@@ -17,17 +21,12 @@ import {
   Clock,
   GraduationCap,
   Building2,
-  FileCheck,
   CreditCard,
 } from "lucide-react";
 import { CLASS_GROUP_STATUS_LABELS } from "@/modules/class-groups/types";
 import type { AuthContext } from "@/server/auth/context";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ classGroupId: string }>;
-}) {
+export async function generateMetadata() {
   return { title: "Detalhes da Turma" };
 }
 
@@ -48,10 +47,8 @@ export default async function ClassGroupDetailPage({
   const perms = await getUserPermissions(context.userId, context.organizationId);
   const ability = createAbility(perms);
   const canEdit = ability.can(PERMISSIONS.CLASS_GROUPS_UPDATE);
-  const canManageSchedules =
-    ability.can(PERMISSIONS.CLASS_SCHEDULES_CREATE) ||
-    ability.can(PERMISSIONS.CLASS_SCHEDULES_UPDATE);
-  const canDeleteSchedule = ability.can(PERMISSIONS.CLASS_SCHEDULES_DELETE);
+  const canAssignSchedule = ability.can(PERMISSIONS.CLASS_GROUP_SCHEDULES_ASSIGN);
+  const canRemoveSchedule = ability.can(PERMISSIONS.CLASS_GROUP_SCHEDULES_REMOVE);
 
   let group;
   try {
@@ -60,6 +57,13 @@ export default async function ClassGroupDetailPage({
     if (e instanceof NotFoundError) notFound();
     throw e;
   }
+
+  const [schedules, availableSlots] = await Promise.all([
+    getSchedulesByClassGroup(classGroupId, context.organizationId),
+    canAssignSchedule
+      ? getActiveSlotsByOrganization(context.organizationId)
+      : Promise.resolve([]),
+  ]);
 
   const breadcrumb = (
     <nav className="flex items-center gap-2 text-muted-foreground">
@@ -115,7 +119,7 @@ export default async function ClassGroupDetailPage({
           <MetaCard
             icon={<Clock className="size-4 text-muted-foreground" />}
             label="Horários"
-            value={String(group.schedules?.length ?? 0)}
+            value={String(schedules.length)}
           />
           <MetaCard
             icon={<BookOpen className="size-4 text-muted-foreground" />}
@@ -181,11 +185,12 @@ export default async function ClassGroupDetailPage({
             <Clock className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">Horários</h3>
           </div>
-          <ClassSchedulePanel
+          <ClassGroupSchedulePanel
             classGroupId={group.id}
-            schedules={group.schedules ?? []}
-            canManage={canManageSchedules}
-            canDeleteSchedule={canDeleteSchedule}
+            schedules={schedules}
+            availableSlots={availableSlots}
+            canAssign={canAssignSchedule}
+            canRemove={canRemoveSchedule}
           />
         </div>
 

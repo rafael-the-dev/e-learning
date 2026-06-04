@@ -1,7 +1,7 @@
 import { getDb } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult, PaginationParams } from "@/shared/types/common";
-import type { ClassGroup, ClassGroupWithSchedules } from "@/modules/class-groups/types";
+import type { ClassGroup } from "@/modules/class-groups/types";
 
 // =============================================================================
 // CLASS GROUP REPOSITORY
@@ -36,7 +36,7 @@ const classGroupSelect = {
   courseLevel: { select: { id: true, name: true } },
   teacher: { select: { id: true, firstName: true, lastName: true } },
   branch: { select: { id: true, name: true } },
-  _count: { select: { enrollments: true, schedules: true } },
+  _count: { select: { enrollments: true, classGroupSchedules: true } },
 } as const;
 
 function mapToClassGroup(row: {
@@ -60,7 +60,7 @@ function mapToClassGroup(row: {
   courseLevel: { id: string; name: string } | null;
   teacher: { id: string; firstName: string; lastName: string } | null;
   branch: { id: string; name: string } | null;
-  _count: { enrollments: number; schedules: number };
+  _count: { enrollments: number; classGroupSchedules: number };
 }): ClassGroup {
   return {
     id: row.id,
@@ -86,7 +86,7 @@ function mapToClassGroup(row: {
       : null,
     branchName: row.branch?.name ?? null,
     enrollmentsCount: row._count.enrollments,
-    schedulesCount: row._count.schedules,
+    schedulesCount: row._count.classGroupSchedules,
   };
 }
 
@@ -128,33 +128,13 @@ export async function findClassGroupsByOrganization(
 export async function findClassGroupById(
   id: string,
   organizationId: string
-): Promise<ClassGroupWithSchedules | null> {
+): Promise<ClassGroup | null> {
   const db = await getDb();
   const row = await db.classGroup.findFirst({
     where: { id, organizationId, deletedAt: null },
-    select: {
-      ...classGroupSelect,
-      schedules: {
-        select: {
-          id: true,
-          classGroupId: true,
-          dayOfWeek: true,
-          startTime: true,
-          endTime: true,
-          room: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-      },
-    },
+    select: classGroupSelect,
   });
-  if (!row) return null;
-
-  return {
-    ...mapToClassGroup(row),
-    schedules: row.schedules,
-  };
+  return row ? mapToClassGroup(row) : null;
 }
 
 export async function findClassGroupByCode(

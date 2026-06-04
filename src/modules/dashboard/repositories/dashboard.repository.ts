@@ -54,14 +54,20 @@ export async function getPendingPaymentsCount(organizationId: string) {
 
 export async function getClassesToday(organizationId: string, dayOfWeek: number) {
   const db = await getDb();
-  // TODO: Implement when class schedules module is fully operational.
-  // Counts ACTIVE class groups that have a schedule entry for today's day of week.
+  // Counts ACTIVE class groups that have an assigned slot for today's day of week.
+  const dayNames = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+  const dayName = dayNames[dayOfWeek] ?? "MONDAY";
   return db.classGroup.count({
     where: {
       organizationId,
       status: "ACTIVE",
       deletedAt: null,
-      schedules: { some: { dayOfWeek } },
+      classGroupSchedules: {
+        some: {
+          deletedAt: null,
+          scheduleSlot: { dayOfWeek: dayName, status: "ACTIVE" },
+        },
+      },
     },
   });
 }

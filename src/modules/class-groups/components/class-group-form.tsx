@@ -187,15 +187,15 @@ function ClassGroupFormFields({
               control={control}
               render={({ field }) => (
                 <Select
-                  value={field.value ?? ""}
-                  onValueChange={field.onChange}
+                  value={field.value || "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? undefined : v)}
                   disabled={!selectedCourseId || filteredLevels.length === 0}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecionar nível" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sem nível específico</SelectItem>
+                    <SelectItem value="__none__">Sem nível específico</SelectItem>
                     {filteredLevels.map((l) => (
                       <SelectItem key={l.id} value={l.id}>
                         {l.name}
@@ -221,12 +221,15 @@ function ClassGroupFormFields({
               name="teacherId"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                <Select
+                  value={field.value || "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? undefined : v)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecionar professor" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sem professor</SelectItem>
+                    <SelectItem value="__none__">Sem professor</SelectItem>
                     {teachers.map((t) => (
                       <SelectItem key={t.id} value={t.id}>
                         {t.firstName} {t.lastName}
@@ -243,12 +246,15 @@ function ClassGroupFormFields({
               name="branchId"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                <Select
+                  value={field.value || "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? undefined : v)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecionar filial" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sem filial específica</SelectItem>
+                    <SelectItem value="__none__">Sem filial específica</SelectItem>
                     {branches.map((b) => (
                       <SelectItem key={b.id} value={b.id}>
                         {b.name}

@@ -51,6 +51,9 @@ model Organization {
   auditLogs         AuditLog[]
   notifications     Notification[]
   settings          OrganizationSettings?
+  schedulePeriods   SchedulePeriod[]
+  scheduleSlots     ScheduleSlot[]
+  classGroupSchedules ClassGroupSchedule[]
 
   @@map("organizations")
 }
@@ -488,27 +491,76 @@ model ClassGroup {
   course      Course            @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   courseLevel CourseLevel?      @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   teacher     Teacher?          @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  schedules   ClassSchedule[]
+  classGroupSchedules ClassGroupSchedule[]
   enrollments Enrollment[]
   attendances AttendanceRecord[]
 
   @@map("class_groups")
 }
 
-model ClassSchedule {
-  id           String   @id @default(cuid())
-  classGroupId String
-  // 0=Sunday … 6=Saturday
-  dayOfWeek    Int
-  startTime    String
-  endTime      String
-  room         String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+// =============================================================================
+// SCHEDULE PERIODS & SLOTS
+// Reusable, org-scoped schedule definitions.
+// =============================================================================
 
-  classGroup ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+model SchedulePeriod {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  description    String?
+  // ScheduleStatus: ACTIVE | INACTIVE | ARCHIVED
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
 
-  @@map("class_schedules")
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  slots        ScheduleSlot[]
+
+  @@unique([organizationId, code])
+  @@map("schedule_periods")
+}
+
+model ScheduleSlot {
+  id               String    @id @default(cuid())
+  organizationId   String
+  schedulePeriodId String
+  // DayOfWeek: MONDAY | TUESDAY | WEDNESDAY | THURSDAY | FRIDAY | SATURDAY | SUNDAY
+  dayOfWeek        String
+  startTime        String
+  endTime          String
+  // ScheduleStatus: ACTIVE | INACTIVE | ARCHIVED
+  status           String    @default("ACTIVE")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  schedulePeriod      SchedulePeriod       @relation(fields: [schedulePeriodId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroupSchedules ClassGroupSchedule[]
+
+  @@unique([schedulePeriodId, dayOfWeek, startTime, endTime])
+  @@map("schedule_slots")
+}
+
+model ClassGroupSchedule {
+  id             String    @id @default(cuid())
+  organizationId String
+  classGroupId   String
+  scheduleSlotId String
+  // ScheduleStatus: ACTIVE | INACTIVE | ARCHIVED
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup   ClassGroup   @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  scheduleSlot ScheduleSlot @relation(fields: [scheduleSlotId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([classGroupId, scheduleSlotId])
+  @@map("class_group_schedules")
 }
 
 // =============================================================================
