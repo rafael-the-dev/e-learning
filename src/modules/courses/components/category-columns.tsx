@@ -18,13 +18,21 @@ interface GetColumnsOptions {
   onEdit: (category: CourseCategoryWithCount) => void;
   onArchive: (category: CourseCategoryWithCount) => void;
   onDelete: (category: CourseCategoryWithCount) => void;
+  canUpdate: boolean;
+  canArchive: boolean;
+  canDelete: boolean;
 }
 
 export function getCategoryColumns({
   onEdit,
   onArchive,
   onDelete,
+  canUpdate,
+  canArchive,
+  canDelete,
 }: GetColumnsOptions): ColumnDef<CourseCategoryWithCount>[] {
+  const hasAnyAction = canUpdate || canArchive || canDelete;
+
   return [
     {
       accessorKey: "name",
@@ -65,48 +73,58 @@ export function getCategoryColumns({
         </span>
       ),
     },
-    {
-      id: "actions",
-      header: "",
-      cell: ({ row }) => {
-        const c = row.original;
-        return (
-          <div className="flex justify-end">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-8">
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onEdit(c)}>
-                  <Pencil className="size-4" />
-                  Editar
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {c.status !== "ARCHIVED" && (
-                  <DropdownMenuItem
-                    onClick={() => onArchive(c)}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Archive className="size-4" />
-                    Arquivar
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem
-                  onClick={() => onDelete(c)}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="size-4" />
-                  Eliminar
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        );
-      },
-    },
+    ...(hasAnyAction
+      ? [
+          {
+            id: "actions",
+            header: "",
+            cell: ({ row }: { row: { original: CourseCategoryWithCount } }) => {
+              const c = row.original;
+              return (
+                <div className="flex justify-end">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="size-8">
+                        <MoreHorizontal className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {canUpdate && (
+                        <DropdownMenuItem onClick={() => onEdit(c)}>
+                          <Pencil className="size-4" />
+                          Editar
+                        </DropdownMenuItem>
+                      )}
+                      {(canArchive || canDelete) && canUpdate && (
+                        <DropdownMenuSeparator />
+                      )}
+                      {canArchive && c.status !== "ARCHIVED" && (
+                        <DropdownMenuItem
+                          onClick={() => onArchive(c)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Archive className="size-4" />
+                          Arquivar
+                        </DropdownMenuItem>
+                      )}
+                      {canDelete && (
+                        <DropdownMenuItem
+                          onClick={() => onDelete(c)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="size-4" />
+                          Eliminar
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              );
+            },
+          } as ColumnDef<CourseCategoryWithCount>,
+        ]
+      : []),
   ];
 }

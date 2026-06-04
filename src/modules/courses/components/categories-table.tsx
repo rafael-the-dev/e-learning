@@ -28,12 +28,18 @@ interface CategoriesTableProps {
   categories: CourseCategoryWithCount[];
   defaultSearch?: string;
   defaultStatus?: string;
+  canUpdate: boolean;
+  canArchive: boolean;
+  canDelete: boolean;
 }
 
 export function CategoriesTable({
   categories,
   defaultSearch = "",
   defaultStatus = "",
+  canUpdate,
+  canArchive,
+  canDelete,
 }: CategoriesTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -73,6 +79,9 @@ export function CategoriesTable({
     onEdit: setEditTarget,
     onArchive: setArchiveTarget,
     onDelete: setDeleteTarget,
+    canUpdate,
+    canArchive,
+    canDelete,
   });
 
   async function handleArchive() {

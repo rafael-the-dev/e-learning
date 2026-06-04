@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { requirePermission } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { getCategoriesWithCounts } from "@/modules/courses/services/course.service";
 import { CategoriesPageClient } from "@/modules/courses/components/categories-page-client";
 import type { AuthContext } from "@/server/auth/context";
@@ -21,6 +22,13 @@ export default async function CourseCategoriesPage({
   }
 
   const { search, status } = await searchParams;
+
+  const perms = await getUserPermissions(context.userId, context.organizationId);
+  const ability = createAbility(perms);
+  const canCreate = ability.can(PERMISSIONS.COURSE_CATEGORIES_CREATE);
+  const canUpdate = ability.can(PERMISSIONS.COURSE_CATEGORIES_UPDATE);
+  const canArchive = ability.can(PERMISSIONS.COURSE_CATEGORIES_ARCHIVE);
+  const canDelete = ability.can(PERMISSIONS.COURSE_CATEGORIES_DELETE);
 
   const categories = await getCategoriesWithCounts(context.organizationId);
 
@@ -47,6 +55,10 @@ export default async function CourseCategoriesPage({
       totalInactive={totalInactive}
       totalArchived={totalArchived}
       breadcrumb={breadcrumb}
+      canCreate={canCreate}
+      canUpdate={canUpdate}
+      canArchive={canArchive}
+      canDelete={canDelete}
     />
   );
 }

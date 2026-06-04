@@ -17,6 +17,10 @@ interface CategoriesPageClientProps {
   totalInactive: number;
   totalArchived: number;
   breadcrumb: React.ReactNode;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canArchive: boolean;
+  canDelete: boolean;
 }
 
 export function CategoriesPageClient({
@@ -27,6 +31,10 @@ export function CategoriesPageClient({
   totalInactive,
   totalArchived,
   breadcrumb,
+  canCreate,
+  canUpdate,
+  canArchive,
+  canDelete,
 }: CategoriesPageClientProps) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -38,10 +46,12 @@ export function CategoriesPageClient({
         description="Gerir as categorias de cursos da organização."
         breadcrumb={breadcrumb}
         actions={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="size-4 mr-1.5" />
-            Nova Categoria
-          </Button>
+          canCreate ? (
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4 mr-1.5" />
+              Nova Categoria
+            </Button>
+          ) : null
         }
       />
 
@@ -58,14 +68,19 @@ export function CategoriesPageClient({
           categories={categories}
           defaultSearch={defaultSearch}
           defaultStatus={defaultStatus}
+          canUpdate={canUpdate}
+          canArchive={canArchive}
+          canDelete={canDelete}
         />
       </div>
 
-      <CreateCategoryDrawer
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onSuccess={() => router.refresh()}
-      />
+      {canCreate && (
+        <CreateCategoryDrawer
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onSuccess={() => router.refresh()}
+        />
+      )}
     </>
   );
 }
