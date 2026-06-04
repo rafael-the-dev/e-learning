@@ -1,12 +1,13 @@
 import NextAuth from "next-auth";
 import { authConfig } from "@/server/auth/config";
 import { NextResponse } from "next/server";
+import { getPostLoginRedirect } from "./app/login/actions";
 
 const { auth } = NextAuth(authConfig);
 
 const PUBLIC_PATHS = ["/login", "/register", "/api/auth"];
 
-export default auth((req) => {
+export default auth( async (req) => {
   const { pathname } = req.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
@@ -15,7 +16,8 @@ export default auth((req) => {
   }
 
   if (req.auth && pathname === "/login") {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    const destination = await getPostLoginRedirect();
+    return NextResponse.redirect(new URL(destination, req.url));
   }
 
   return NextResponse.next();
