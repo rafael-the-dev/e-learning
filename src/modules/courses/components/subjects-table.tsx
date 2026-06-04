@@ -6,6 +6,14 @@ import { StatusBadge } from "@/shared/components/data/status-badge";
 import { EmptyState } from "@/shared/components/layout/empty-state";
 import { ConfirmDialog } from "@/shared/components/feedback/confirm-dialog";
 import { Button } from "@/shared/components/ui/button";
+import { Input } from "@/shared/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,9 +27,10 @@ import {
 } from "@/modules/courses/components/subject-form";
 import {
   archiveSubjectAction,
-  deleteSubjectAction,
+  softDeleteSubjectAction,
 } from "@/modules/courses/actions/subject.actions";
 import { toast } from "@/shared/hooks/use-toast";
+import { SUBJECT_STATUS_LABELS } from "@/modules/courses/types";
 import {
   BookOpen,
   MoreHorizontal,
@@ -29,31 +38,38 @@ import {
   Archive,
   Trash2,
   Plus,
+  Search,
 } from "lucide-react";
-import type { CourseLevel, Subject } from "@/modules/courses/types";
+import type { Subject } from "@/modules/courses/types";
 
 interface SubjectsTableProps {
-  courseId: string;
   subjects: Subject[];
-  levels: CourseLevel[];
+  canManage: boolean;
 }
 
-export function SubjectsTable({
-  courseId,
-  subjects,
-  levels,
-}: SubjectsTableProps) {
+export function SubjectsTable({ subjects, canManage }: SubjectsTableProps) {
   const router = useRouter();
+  const [search, setSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [showCreate, setShowCreate] = React.useState(false);
   const [editTarget, setEditTarget] = React.useState<Subject | null>(null);
   const [archiveTarget, setArchiveTarget] = React.useState<Subject | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<Subject | null>(null);
   const [isProcessing, setIsProcessing] = React.useState(false);
 
+  const filtered = subjects.filter((s) => {
+    const matchesSearch =
+      search === "" ||
+      s.name.toLowerCase().includes(search.toLowerCase()) ||
+      (s.code ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "ALL" || s.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
   async function handleArchive() {
     if (!archiveTarget) return;
     setIsProcessing(true);
-    const res = await archiveSubjectAction(courseId, archiveTarget.id);
+    const res = await archiveSubjectAction(archiveTarget.id);
     setIsProcessing(false);
     if (res.success) {
       toast.success("Disciplina arquivada");
@@ -67,7 +83,7 @@ export function SubjectsTable({
   async function handleDelete() {
     if (!deleteTarget) return;
     setIsProcessing(true);
-    const res = await deleteSubjectAction(courseId, deleteTarget.id);
+    const res = await softDeleteSubjectAction(deleteTarget.id);
     setIsProcessing(false);
     if (res.success) {
       toast.success("Disciplina eliminada");
@@ -79,99 +95,115 @@ export function SubjectsTable({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {subjects.length} disciplina(s)
-        </p>
-        <Button size="sm" onClick={() => setShowCreate(true)}>
-          <Plus className="size-4 mr-1.5" />
-          Nova Disciplina
-        </Button>
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            placeholder="Pesquisar por nome ou código..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full sm:w-44">
+            <SelectValue placeholder="Estado" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Todos os estados</SelectItem>
+            {Object.entries(SUBJECT_STATUS_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {canManage && (
+          <Button onClick={() => setShowCreate(true)} className="shrink-0">
+            <Plus className="size-4 mr-1.5" />
+            Nova Disciplina
+          </Button>
+        )}
       </div>
 
-      {subjects.length === 0 ? (
+      {/* Table */}
+      {filtered.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="size-8" />}
-          title="Nenhuma disciplina criada"
-          description="Adicione a primeira disciplina ao curso."
+          title="Nenhuma disciplina encontrada"
+          description={
+            search || statusFilter !== "ALL"
+              ? "Tente ajustar os filtros."
+              : "Crie a primeira disciplina da organização."
+          }
         />
       ) : (
         <div className="rounded-xl border divide-y">
-          {subjects.map((subject) => (
+          {filtered.map((subject) => (
             <div
               key={subject.id}
               className="flex items-center justify-between px-4 py-3"
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="text-xs text-muted-foreground w-6 text-right shrink-0">
-                  {subject.order}
-                </span>
-                <div className="min-w-0">
-                  <p className="font-medium text-sm truncate">{subject.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {subject.levelName ?? "—"}
-                    {subject.code && (
-                      <span className="font-mono ml-2">{subject.code}</span>
-                    )}
+              <div className="min-w-0">
+                <p className="font-medium text-sm truncate">{subject.name}</p>
+                {subject.code && (
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {subject.code}
                   </p>
-                </div>
+                )}
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                {subject.hoursRequired && (
-                  <span className="text-xs text-muted-foreground hidden sm:inline">
-                    {subject.hoursRequired}h
-                  </span>
-                )}
                 <StatusBadge status={subject.status} />
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="size-7">
-                      <MoreHorizontal className="size-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setEditTarget(subject)}>
-                      <Pencil className="size-4" />
-                      Editar
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {subject.status !== "ARCHIVED" && (
+                {canManage && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="size-7">
+                        <MoreHorizontal className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setEditTarget(subject)}>
+                        <Pencil className="size-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      {subject.status !== "ARCHIVED" && (
+                        <DropdownMenuItem
+                          onClick={() => setArchiveTarget(subject)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Archive className="size-4" />
+                          Arquivar
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
-                        onClick={() => setArchiveTarget(subject)}
+                        onClick={() => setDeleteTarget(subject)}
                         className="text-destructive focus:text-destructive"
                       >
-                        <Archive className="size-4" />
-                        Arquivar
+                        <Trash2 className="size-4" />
+                        Eliminar
                       </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem
-                      onClick={() => setDeleteTarget(subject)}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="size-4" />
-                      Eliminar
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <CreateSubjectDrawer
-        courseId={courseId}
-        levels={levels}
-        open={showCreate}
-        onOpenChange={setShowCreate}
-        onSuccess={() => router.refresh()}
-      />
+      {canManage && (
+        <CreateSubjectDrawer
+          open={showCreate}
+          onOpenChange={setShowCreate}
+          onSuccess={() => router.refresh()}
+        />
+      )}
 
-      {editTarget && (
+      {editTarget && canManage && (
         <EditSubjectDrawer
-          courseId={courseId}
-          levels={levels}
           subject={editTarget}
           open={!!editTarget}
           onOpenChange={(open) => !open && setEditTarget(null)}
@@ -194,7 +226,7 @@ export function SubjectsTable({
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Eliminar Disciplina"
-        description={`Tem a certeza que pretende eliminar "${deleteTarget?.name}"?`}
+        description={`Tem a certeza que pretende eliminar "${deleteTarget?.name}"? Esta ação não pode ser revertida.`}
         confirmLabel="Eliminar"
         variant="destructive"
         loading={isProcessing}

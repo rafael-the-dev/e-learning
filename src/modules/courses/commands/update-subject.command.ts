@@ -10,8 +10,8 @@ import { auditService } from "@/modules/audit-logs/services/audit.service";
 import {
   findSubjectByIdInOrganization,
   updateSubject,
+  existsSubjectCodeInOrganization,
 } from "@/modules/courses/repositories/subject.repository";
-import { findLevelByIdInOrganization } from "@/modules/courses/repositories/level.repository";
 import {
   updateSubjectSchema,
   type UpdateSubjectSchema,
@@ -20,13 +20,9 @@ import type { Subject } from "@/modules/courses/types";
 
 interface UpdateSubjectInput extends UpdateSubjectSchema {
   subjectId: string;
-  courseId: string;
 }
 
-export class UpdateSubjectCommand extends BaseCommand<
-  UpdateSubjectInput,
-  Subject
-> {
+export class UpdateSubjectCommand extends BaseCommand<UpdateSubjectInput, Subject> {
   private _existing: Subject | null = null;
 
   async validate(): Promise<void> {
@@ -47,15 +43,15 @@ export class UpdateSubjectCommand extends BaseCommand<
     );
     if (!this._existing) throw new NotFoundError("Disciplina", this.input.subjectId);
 
-    if (this.input.courseLevelId) {
-      const level = await findLevelByIdInOrganization(
-        this.input.courseLevelId,
-        this.context.organizationId
+    if (this.input.code) {
+      const codeTaken = await existsSubjectCodeInOrganization(
+        this.context.organizationId,
+        this.input.code,
+        this.input.subjectId
       );
-      if (!level) throw new NotFoundError("Nível", this.input.courseLevelId);
-      if (level.courseId !== this.input.courseId) {
+      if (codeTaken) {
         throw new ValidationError("Dados inválidos", {
-          courseLevelId: ["O nível não pertence ao curso indicado"],
+          code: ["Este código já está em uso nesta organização"],
         });
       }
     }
@@ -72,15 +68,10 @@ export class UpdateSubjectCommand extends BaseCommand<
   }
 
   async execute(): Promise<Subject> {
-    const subject = await updateSubject(this.input.subjectId, {
+    const subject = await updateSubject(this.input.subjectId, this.context.organizationId, {
       name: this.input.name,
       code: this.input.code !== undefined ? (this.input.code || null) : undefined,
       description: this.input.description !== undefined ? (this.input.description || null) : undefined,
-      courseLevelId: this.input.courseLevelId,
-      hoursRequired: this.input.hoursRequired !== undefined
-        ? (this.input.hoursRequired ? parseInt(this.input.hoursRequired, 10) : null)
-        : undefined,
-      order: this.input.order ? parseInt(this.input.order, 10) : undefined,
       status: this.input.status,
     });
 

@@ -33,8 +33,6 @@ export interface TeacherSubjectItem {
   subjectId: string;
   subjectName: string;
   subjectCode: string | null;
-  courseLevelName: string;
-  courseName: string;
   assignedAt: Date;
 }
 

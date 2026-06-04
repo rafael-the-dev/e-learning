@@ -119,7 +119,7 @@ export async function findCourseWithCounts(
       levels: {
         where: { status: { not: "ARCHIVED" } },
         select: {
-          _count: { select: { subjects: true } },
+          _count: { select: { levelSubjects: true } },
         },
       },
     },
@@ -128,7 +128,7 @@ export async function findCourseWithCounts(
   if (!row) return null;
 
   const subjectsCount = row.levels.reduce(
-    (sum, l) => sum + l._count.subjects,
+    (sum: number, l: { _count: { levelSubjects: number } }) => sum + l._count.levelSubjects,
     0
   );
 

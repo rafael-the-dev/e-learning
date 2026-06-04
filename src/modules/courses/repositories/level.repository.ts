@@ -50,13 +50,13 @@ export async function findLevelsByCourse(
     },
     select: {
       ...levelSelect,
-      _count: { select: { subjects: true } },
+      _count: { select: { levelSubjects: true } },
     },
     orderBy: { order: "asc" },
   });
 
   return rows.map((r) =>
-    mapToLevel(r, { subjectsCount: r._count.subjects })
+    mapToLevel(r, { subjectsCount: r._count.levelSubjects })
   );
 }
 
@@ -161,8 +161,8 @@ export async function deleteCourseLevel(id: string): Promise<void> {
 
 export async function countActiveSubjectsInLevel(levelId: string): Promise<number> {
   const db = await getDb();
-  return db.subject.count({
-    where: { courseLevelId: levelId, status: { not: "ARCHIVED" } },
+  return db.levelSubject.count({
+    where: { courseLevelId: levelId, deletedAt: null, status: { not: "ARCHIVED" } },
   });
 }
 

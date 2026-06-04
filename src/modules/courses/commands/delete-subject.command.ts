@@ -9,12 +9,13 @@ import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import {
   findSubjectByIdInOrganization,
-  deleteSubject,
+  softDeleteSubject,
   countTeacherAssignmentsForSubject,
+  countLevelAssignmentsForSubject,
 } from "@/modules/courses/repositories/subject.repository";
-import type { DeleteSubjectSchema } from "@/modules/courses/schemas/subject.schema";
+import type { SoftDeleteSubjectSchema } from "@/modules/courses/schemas/subject.schema";
 
-export class DeleteSubjectCommand extends BaseCommand<DeleteSubjectSchema, void> {
+export class SoftDeleteSubjectCommand extends BaseCommand<SoftDeleteSubjectSchema, void> {
   async validate(): Promise<void> {
     const subject = await findSubjectByIdInOrganization(
       this.input.subjectId,
@@ -22,12 +23,17 @@ export class DeleteSubjectCommand extends BaseCommand<DeleteSubjectSchema, void>
     );
     if (!subject) throw new NotFoundError("Disciplina", this.input.subjectId);
 
-    const teacherCount = await countTeacherAssignmentsForSubject(
-      this.input.subjectId
-    );
+    const teacherCount = await countTeacherAssignmentsForSubject(this.input.subjectId);
     if (teacherCount > 0) {
       throw new BusinessRuleError(
         "Não é possível eliminar uma disciplina atribuída a professores. Remova as atribuições primeiro."
+      );
+    }
+
+    const levelCount = await countLevelAssignmentsForSubject(this.input.subjectId);
+    if (levelCount > 0) {
+      throw new BusinessRuleError(
+        "Não é possível eliminar uma disciplina associada a níveis. Remova as associações primeiro."
       );
     }
   }
@@ -43,7 +49,7 @@ export class DeleteSubjectCommand extends BaseCommand<DeleteSubjectSchema, void>
   }
 
   async execute(): Promise<void> {
-    await deleteSubject(this.input.subjectId);
+    await softDeleteSubject(this.input.subjectId, this.context.organizationId);
 
     await auditService.log(this.context, {
       entity: "Subject",

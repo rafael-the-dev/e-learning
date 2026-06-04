@@ -55,18 +55,33 @@ export interface CourseLevel {
 
 export interface Subject {
   id: string;
-  courseLevelId: string;
-  courseId: string;
+  organizationId: string;
   name: string;
   code: string | null;
   description: string | null;
-  hoursRequired: number | null;
-  order: number;
   status: string;
   createdAt: Date;
   updatedAt: Date;
-  levelName?: string;
-  courseName?: string;
+  deletedAt: Date | null;
+}
+
+export interface LevelSubject {
+  id: string;
+  organizationId: string;
+  courseId: string;
+  courseLevelId: string;
+  subjectId: string;
+  order: number;
+  workloadHours: number | null;
+  minimumPassingGrade: string | null;
+  isRequired: boolean;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  subjectName?: string;
+  subjectCode?: string | null;
+  courseLevelName?: string;
 }
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
@@ -85,6 +100,12 @@ export const COURSE_LEVEL_STATUS_LABELS: Record<string, string> = {
 };
 
 export const SUBJECT_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Ativo",
+  INACTIVE: "Inativo",
+  ARCHIVED: "Arquivado",
+};
+
+export const LEVEL_SUBJECT_STATUS_LABELS: Record<string, string> = {
   ACTIVE: "Ativo",
   INACTIVE: "Inativo",
   ARCHIVED: "Arquivado",

@@ -10,11 +10,9 @@ import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getCourseWithCounts,
   getLevelsByCourse,
-  getSubjectsByCourse,
 } from "@/modules/courses/services/course.service";
 import { CourseDetailActions } from "@/modules/courses/components/course-detail-actions";
 import { LevelsTable } from "@/modules/courses/components/levels-table";
-import { SubjectsTable } from "@/modules/courses/components/subjects-table";
 import { NotFoundError } from "@/shared/lib/command";
 import {
   Pencil,
@@ -50,12 +48,10 @@ export default async function CourseDetailPage({
 
   let course;
   let levels;
-  let subjects;
   try {
-    [course, levels, subjects] = await Promise.all([
+    [course, levels] = await Promise.all([
       getCourseWithCounts(courseId, context.organizationId),
       getLevelsByCourse(courseId, context.organizationId),
-      getSubjectsByCourse(courseId, context.organizationId),
     ]);
   } catch (e) {
     if (e instanceof NotFoundError) notFound();
@@ -148,19 +144,6 @@ export default async function CourseDetailPage({
             <h3 className="text-sm font-semibold">Níveis do Curso</h3>
           </div>
           <LevelsTable courseId={course.id} levels={levels} canManage={canManageLevels} />
-        </div>
-
-        {/* Subjects */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <BookOpen className="size-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold">Disciplinas</h3>
-          </div>
-          <SubjectsTable
-            courseId={course.id}
-            subjects={subjects}
-            levels={levels}
-          />
         </div>
 
         {/* Timestamps */}

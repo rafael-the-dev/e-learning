@@ -66,9 +66,18 @@ export const PERMISSIONS = {
   COURSE_LEVELS_REORDER: "course_levels.reorder",
 
   // Subjects
+  SUBJECTS_VIEW: "subjects.view",
   SUBJECTS_CREATE: "subjects.create",
   SUBJECTS_UPDATE: "subjects.update",
+  SUBJECTS_ARCHIVE: "subjects.archive",
   SUBJECTS_DELETE: "subjects.delete",
+
+  // Level Subjects
+  LEVEL_SUBJECTS_VIEW: "level_subjects.view",
+  LEVEL_SUBJECTS_ASSIGN: "level_subjects.assign",
+  LEVEL_SUBJECTS_UPDATE: "level_subjects.update",
+  LEVEL_SUBJECTS_REMOVE: "level_subjects.remove",
+  LEVEL_SUBJECTS_REORDER: "level_subjects.reorder",
 
   // Course Categories
   COURSE_CATEGORIES_VIEW: "course_categories.view",
@@ -172,9 +181,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.COURSES_UPDATE,
     PERMISSIONS.COURSES_ARCHIVE,
     PERMISSIONS.COURSE_LEVELS_VIEW,
-    PERMISSIONS.SUBJECTS_CREATE,
-    PERMISSIONS.SUBJECTS_UPDATE,
-    PERMISSIONS.SUBJECTS_DELETE,
+    PERMISSIONS.SUBJECTS_VIEW,
+    PERMISSIONS.LEVEL_SUBJECTS_VIEW,
     PERMISSIONS.COURSE_CATEGORIES_VIEW,
     PERMISSIONS.CLASS_GROUPS_READ,
     PERMISSIONS.ENROLLMENTS_CREATE,

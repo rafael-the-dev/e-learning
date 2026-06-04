@@ -24,12 +24,18 @@
       "Bash(Get-ChildItem -Path \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\" -Force)",
       "Bash(Select-Object -Property Name, Mode)",
       "PowerShell($env:PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes\"; npx prisma migrate reset --force 2>&1)",
-      "PowerShell(npx prisma migrate dev --name init 2>&1)"
+      "PowerShell(npx prisma migrate dev --name init 2>&1)",
+      "Bash(Get-ChildItem -Path \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(npx prisma *)",
+      "PowerShell(cd \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\"; $env:FORCE_COLOR=\"0\"; npx prisma migrate dev --name refactor_subjects_architecture --create-only 2>&1)",
+      "Bash(mkdir \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\[courseId]\\\\levels\\\\[levelId]\" 2>&1)"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]",
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\teachers\\[teacherId]",
-      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\courses\\[courseId]"
+      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\courses\\[courseId]",
+      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\courses\\[courseId]\\levels"
     ]
   }
 }

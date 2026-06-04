@@ -131,12 +131,6 @@ export async function findByIdWithSubjects(
               id: true,
               name: true,
               code: true,
-              courseLevel: {
-                select: {
-                  name: true,
-                  course: { select: { name: true } },
-                },
-              },
             },
           },
         },
@@ -152,8 +146,6 @@ export async function findByIdWithSubjects(
     subjectId: ts.subjectId,
     subjectName: ts.subject.name,
     subjectCode: ts.subject.code,
-    courseLevelName: ts.subject.courseLevel.name,
-    courseName: ts.subject.courseLevel.course.name,
     assignedAt: ts.assignedAt,
   }));
 
@@ -354,12 +346,7 @@ export async function findSubjectInOrganization(
 ): Promise<{ id: string; name: string } | null> {
   const db = await getDb();
   const subject = await db.subject.findFirst({
-    where: {
-      id: subjectId,
-      courseLevel: {
-        course: { organizationId },
-      },
-    },
+    where: { id: subjectId, organizationId, deletedAt: null },
     select: { id: true, name: true },
   });
   return subject;

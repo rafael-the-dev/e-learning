@@ -42,6 +42,8 @@ model Organization {
   teachers          Teacher[]
   courses           Course[]
   courseCategories  CourseCategory[]
+  subjects          Subject[]
+  levelSubjects     LevelSubject[]
   vehicles          Vehicle[]
   invoices          Invoice[]
   payments          Payment[]
@@ -366,11 +368,12 @@ model Course {
   createdBy      String?
   updatedBy      String?
 
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  category     CourseCategory? @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levels       CourseLevel[]
-  classGroups  ClassGroup[]
-  enrollments  Enrollment[]
+  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  category      CourseCategory? @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levels        CourseLevel[]
+  levelSubjects LevelSubject[]
+  classGroups   ClassGroup[]
+  enrollments   Enrollment[]
 
   @@map("courses")
 }
@@ -390,33 +393,58 @@ model CourseLevel {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  course      Course       @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  subjects    Subject[]
-  classGroups ClassGroup[]
-  enrollments Enrollment[]
+  course        Course         @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubjects LevelSubject[]
+  classGroups   ClassGroup[]
+  enrollments   Enrollment[]
 
   @@map("course_levels")
 }
 
 model Subject {
-  id            String   @id @default(cuid())
-  courseLevelId String
-  name          String
-  code          String?
-  description   String?
-  hoursRequired Int?
-  order         Int      @default(0)
-  isActive      Boolean  @default(true)
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  code           String?
+  description    String?   @db.NVarChar(Max)
   // SubjectStatus: ACTIVE | INACTIVE | ARCHIVED
-  status        String   @default("ACTIVE")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
 
-  courseLevel     CourseLevel        @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubjects   LevelSubject[]
   teacherSubjects TeacherSubject[]
   attendances     AttendanceRecord[]
 
+  @@unique([organizationId, code])
   @@map("subjects")
+}
+
+model LevelSubject {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  courseId            String
+  courseLevelId       String
+  subjectId           String
+  order               Int       @default(0)
+  workloadHours       Int?
+  minimumPassingGrade Decimal?  @db.Decimal(5, 2)
+  isRequired          Boolean   @default(false)
+  // LevelSubjectStatus: ACTIVE | INACTIVE | ARCHIVED
+  status              String    @default("ACTIVE")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course       Course       @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel  CourseLevel  @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([courseLevelId, subjectId])
+  @@map("level_subjects")
 }
 
 model TeacherSubject {

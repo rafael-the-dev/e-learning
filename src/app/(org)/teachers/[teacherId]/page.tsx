@@ -174,7 +174,6 @@ export default async function TeacherDetailPage({
                     {ts.subjectCode && (
                       <span className="text-muted-foreground ml-1">({ts.subjectCode})</span>
                     )}
-                    <span className="text-muted-foreground"> — {ts.courseName} · {ts.courseLevelName}</span>
                   </span>
                 </li>
               ))}

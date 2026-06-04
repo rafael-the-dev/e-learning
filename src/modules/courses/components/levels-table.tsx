@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { EmptyState } from "@/shared/components/layout/empty-state";
@@ -29,6 +30,7 @@ import {
   Plus,
   ChevronUp,
   ChevronDown,
+  ExternalLink,
 } from "lucide-react";
 import type { CourseLevel } from "@/modules/courses/types";
 
@@ -140,7 +142,12 @@ export function LevelsTable({ courseId, levels, canManage = false }: LevelsTable
                   {idx + 1}
                 </span>
                 <div className="min-w-0">
-                  <p className="font-medium text-sm truncate">{level.name}</p>
+                  <Link
+                    href={`/courses/${courseId}/levels/${level.id}`}
+                    className="font-medium text-sm truncate hover:underline"
+                  >
+                    {level.name}
+                  </Link>
                   {level.code && (
                     <p className="text-xs text-muted-foreground font-mono">
                       {level.code}
@@ -198,6 +205,13 @@ export function LevelsTable({ courseId, levels, canManage = false }: LevelsTable
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link href={`/courses/${courseId}/levels/${level.id}`}>
+                            <ExternalLink className="size-4" />
+                            Ver detalhes
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => setEditTarget(level)}>
                           <Pencil className="size-4" />
                           Editar

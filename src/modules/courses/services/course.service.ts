@@ -10,10 +10,12 @@ import {
   findLevelByIdInOrganization,
 } from "@/modules/courses/repositories/level.repository";
 import {
-  findSubjectsByCourse,
-  findSubjectsByLevel,
+  findSubjectsByOrganization,
+  findActiveSubjectsByOrganization,
   findSubjectByIdInOrganization,
+  type ListSubjectsParams,
 } from "@/modules/courses/repositories/subject.repository";
+import { findLevelSubjectsByLevel } from "@/modules/courses/repositories/level-subject.repository";
 import {
   findCategoriesByOrganization,
   findActiveCategoriesByOrganization,
@@ -63,24 +65,32 @@ export async function getLevelById(id: string, organizationId: string) {
   return level;
 }
 
-export async function getSubjectsByCourse(
-  courseId: string,
-  organizationId: string
+// ─── Subject reads (org-scoped) ──────────────────────────────────────────────
+
+export async function getSubjectsByOrganization(
+  organizationId: string,
+  params: ListSubjectsParams = {}
 ) {
-  return findSubjectsByCourse(courseId, organizationId);
+  return findSubjectsByOrganization(organizationId, params);
 }
 
-export async function getSubjectsByLevel(
-  levelId: string,
-  organizationId: string
-) {
-  return findSubjectsByLevel(levelId, organizationId);
+export async function getActiveSubjectsByOrganization(organizationId: string) {
+  return findActiveSubjectsByOrganization(organizationId);
 }
 
 export async function getSubjectById(id: string, organizationId: string) {
   const subject = await findSubjectByIdInOrganization(id, organizationId);
   if (!subject) throw new NotFoundError("Disciplina", id);
   return subject;
+}
+
+// ─── Level Subject reads ─────────────────────────────────────────────────────
+
+export async function getLevelSubjectsByLevel(
+  courseLevelId: string,
+  organizationId: string
+) {
+  return findLevelSubjectsByLevel(courseLevelId, organizationId);
 }
 
 // ─── Category reads ───────────────────────────────────────────────────────────
