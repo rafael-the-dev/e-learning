@@ -29,7 +29,8 @@
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(npx prisma *)",
       "PowerShell(cd \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\"; $env:FORCE_COLOR=\"0\"; npx prisma migrate dev --name refactor_subjects_architecture --create-only 2>&1)",
-      "Bash(mkdir \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\[courseId]\\\\levels\\\\[levelId]\" 2>&1)"
+      "Bash(mkdir \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\courses\\\\[courseId]\\\\levels\\\\[levelId]\" 2>&1)",
+      "Bash(dir \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\" /b)"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]",

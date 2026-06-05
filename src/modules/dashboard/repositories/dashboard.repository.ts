@@ -31,14 +31,14 @@ export async function getMonthlyRevenue(
 ) {
   const db = await getDb();
   const result = await db.payment.aggregate({
-    _sum: { amount: true },
+    _sum: { totalAmount: true },
     where: {
       organizationId,
       status: "CONFIRMED",
       paymentDate: { gte: startOfMonth, lt: startOfNextMonth },
     },
   });
-  return Number(result._sum.amount ?? 0);
+  return Number(result._sum.totalAmount ?? 0);
 }
 
 export async function getPendingPaymentsCount(organizationId: string) {
@@ -97,7 +97,7 @@ export async function getFinancialSummary(
   const db = await getDb();
   const [pendingAgg, overdueAgg, todayPayments] = await Promise.all([
     db.invoice.aggregate({
-      _sum: { total: true, paidAmount: true },
+      _sum: { totalAmount: true, paidAmount: true },
       where: {
         organizationId,
         status: { in: ["PENDING", "PARTIALLY_PAID"] },
@@ -105,11 +105,11 @@ export async function getFinancialSummary(
       },
     }),
     db.invoice.aggregate({
-      _sum: { total: true, paidAmount: true },
+      _sum: { totalAmount: true, paidAmount: true },
       where: { organizationId, status: "OVERDUE", deletedAt: null },
     }),
     db.payment.aggregate({
-      _sum: { amount: true },
+      _sum: { totalAmount: true },
       where: {
         organizationId,
         status: "CONFIRMED",
@@ -118,11 +118,11 @@ export async function getFinancialSummary(
     }),
   ]);
   return {
-    pendingTotal: Number(pendingAgg._sum.total ?? 0),
+    pendingTotal: Number(pendingAgg._sum.totalAmount ?? 0),
     pendingPaidAmount: Number(pendingAgg._sum.paidAmount ?? 0),
-    overdueTotal: Number(overdueAgg._sum.total ?? 0),
+    overdueTotal: Number(overdueAgg._sum.totalAmount ?? 0),
     overduePaidAmount: Number(overdueAgg._sum.paidAmount ?? 0),
-    paymentsToday: Number(todayPayments._sum.amount ?? 0),
+    paymentsToday: Number(todayPayments._sum.totalAmount ?? 0),
   };
 }
 

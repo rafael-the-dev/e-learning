@@ -165,6 +165,8 @@ export const PaymentMethod = {
   MPESA: "MPESA",
   EMOLA: "EMOLA",
   POS: "POS",
+  CARD: "CARD",
+  CHEQUE: "CHEQUE",
   OTHER: "OTHER",
 } as const;
 export type PaymentMethod =
@@ -178,6 +180,21 @@ export const PaymentStatus = {
 } as const;
 export type PaymentStatus =
   (typeof PaymentStatus)[keyof typeof PaymentStatus];
+
+export const PaymentPlanStatus = {
+  ACTIVE: "ACTIVE",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type PaymentPlanStatus =
+  (typeof PaymentPlanStatus)[keyof typeof PaymentPlanStatus];
+
+export const ReceiptStatus = {
+  ISSUED: "ISSUED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type ReceiptStatus =
+  (typeof ReceiptStatus)[keyof typeof ReceiptStatus];
 
 export const NotificationType = {
   ENROLLMENT_APPROVED: "ENROLLMENT_APPROVED",
@@ -232,6 +249,23 @@ export const CourseCategoryStatus = {
 } as const;
 export type CourseCategoryStatus =
   (typeof CourseCategoryStatus)[keyof typeof CourseCategoryStatus];
+
+export const WalletStatus = {
+  ACTIVE: "ACTIVE",
+  SUSPENDED: "SUSPENDED",
+} as const;
+export type WalletStatus = (typeof WalletStatus)[keyof typeof WalletStatus];
+
+export const WalletTransactionType = {
+  DEPOSIT: "DEPOSIT",
+  OVERPAYMENT: "OVERPAYMENT",
+  CREDIT_APPLIED: "CREDIT_APPLIED",
+  REFUND: "REFUND",
+  ADJUSTMENT: "ADJUSTMENT",
+  PROMOTIONAL_CREDIT: "PROMOTIONAL_CREDIT",
+} as const;
+export type WalletTransactionType =
+  (typeof WalletTransactionType)[keyof typeof WalletTransactionType];
 
 export const AuditAction = {
   CREATED: "CREATED",

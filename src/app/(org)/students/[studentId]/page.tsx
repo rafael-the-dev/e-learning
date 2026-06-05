@@ -10,6 +10,8 @@ import { getStudentById } from "@/modules/students/services/student.service";
 import { StudentDetailActions } from "@/modules/students/components/student-detail-actions";
 import { NotFoundError } from "@/shared/lib/command";
 import { GENDER_LABELS, ID_TYPE_LABELS } from "@/modules/students/types";
+import { getWalletByStudentId, getRecentTransactions } from "@/modules/wallets/services/wallet.service";
+import { StudentWalletCard } from "@/modules/wallets/components/student-wallet-card";
 import {
   Mail,
   Phone,
@@ -19,7 +21,6 @@ import {
   Building2,
   Pencil,
   GraduationCap,
-  Receipt,
   ClipboardList,
 } from "lucide-react";
 import type { AuthContext } from "@/server/auth/context";
@@ -45,6 +46,12 @@ export default async function StudentDetailPage({
     if (e instanceof NotFoundError) notFound();
     throw e;
   }
+
+  const wallet = await getWalletByStudentId(studentId, context.organizationId);
+  const recentWalletTxs = wallet
+    ? await getRecentTransactions(wallet.id, context.organizationId, 3)
+    : [];
+  const canManageWallet = context.ability.can(PERMISSIONS.WALLET_TRANSACTIONS_DEPOSIT);
 
   const breadcrumb = (
     <nav className="flex items-center gap-2 text-muted-foreground">
@@ -162,17 +169,13 @@ export default async function StudentDetailPage({
           </p>
         </div>
 
-        {/* Payments placeholder */}
-        <div className="rounded-xl border border-dashed p-5 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Receipt className="size-4" />
-            <h3 className="text-sm font-semibold">Pagamentos</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {/* TODO: implement payments module */}
-            Nenhum pagamento registado.
-          </p>
-        </div>
+        {/* Wallet */}
+        <StudentWalletCard
+          wallet={wallet}
+          recentTransactions={recentWalletTxs}
+          canDeposit={canManageWallet}
+          studentId={studentId}
+        />
 
         {/* Attendance placeholder */}
         <div className="rounded-xl border border-dashed p-5 space-y-2">
