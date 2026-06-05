@@ -78,6 +78,7 @@ model Branch {
   students     Student[]
   teachers     Teacher[]
   vehicles     Vehicle[]
+  enrollments  Enrollment[]
 
   @@map("branches")
 }
@@ -568,24 +569,27 @@ model ClassGroupSchedule {
 // =============================================================================
 
 model Enrollment {
-  id             String    @id @default(cuid())
-  organizationId String
-  studentId      String
-  courseId       String
-  courseLevelId  String?
-  classGroupId   String?
-  enrollmentDate DateTime  @default(now())
-  startDate      DateTime?
-  endDate        DateTime?
+  id               String    @id @default(cuid())
+  organizationId   String
+  branchId         String?
+  studentId        String
+  courseId         String
+  courseLevelId    String?
+  classGroupId     String?
+  enrollmentNumber String?
+  enrollmentDate   DateTime  @default(now())
+  startDate        DateTime?
+  expectedEndDate  DateTime?
   // EnrollmentStatus: DRAFT | PENDING_PAYMENT | ACTIVE | COMPLETED | SUSPENDED | CANCELLED
-  status         String    @default("DRAFT")
-  notes          String?   @db.NVarChar(Max)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
-  createdBy      String?
-  updatedBy      String?
+  status           String    @default("DRAFT")
+  notes            String?   @db.NVarChar(Max)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+  createdBy        String?
+  updatedBy        String?
 
+  branch        Branch?                   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   student       Student                   @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   course        Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   courseLevel   CourseLevel?              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -593,6 +597,7 @@ model Enrollment {
   invoices      Invoice[]
   statusHistory EnrollmentStatusHistory[]
 
+  @@unique([organizationId, enrollmentNumber])
   @@map("enrollments")
 }
 

@@ -1,45 +1,72 @@
-import type { EnrollmentStatus } from "@/shared/types/common";
+// =============================================================================
+// ENROLLMENTS MODULE — TYPES
+// =============================================================================
 
-export interface EnrollmentDto {
+export interface Enrollment {
   id: string;
   organizationId: string;
+  branchId: string | null;
   studentId: string;
   courseId: string;
   courseLevelId: string | null;
   classGroupId: string | null;
+  enrollmentNumber: string | null;
   enrollmentDate: Date;
   startDate: Date | null;
-  endDate: Date | null;
-  status: EnrollmentStatus;
+  expectedEndDate: Date | null;
+  status: string;
   notes: string | null;
   createdAt: Date;
-  student?: { id: string; firstName: string; lastName: string; code: string | null };
-  course?: { id: string; name: string };
-  courseLevel?: { id: string; name: string } | null;
-  classGroup?: { id: string; name: string } | null;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+  // joined fields
+  studentName?: string;
+  studentCode?: string | null;
+  courseName?: string;
+  courseLevelName?: string | null;
+  classGroupName?: string | null;
+  branchName?: string | null;
 }
 
-export interface CreateEnrollmentInput {
-  organizationId: string;
-  studentId: string;
-  courseId: string;
-  courseLevelId?: string;
-  classGroupId?: string;
-  startDate?: Date;
-  notes?: string;
-}
-
-export interface UpdateEnrollmentStatusInput {
+export interface EnrollmentStatusHistory {
+  id: string;
   enrollmentId: string;
-  status: EnrollmentStatus;
-  reason?: string;
+  fromStatus: string | null;
+  toStatus: string;
+  reason: string | null;
+  changedBy: string | null;
+  changedAt: Date;
+  changedByName?: string | null;
 }
 
-export interface EnrollmentFilters {
-  search?: string;
-  status?: EnrollmentStatus;
-  courseId?: string;
-  courseLevelId?: string;
-  classGroupId?: string;
-  studentId?: string;
-}
+export const ENROLLMENT_STATUS = {
+  DRAFT: "DRAFT",
+  PENDING_PAYMENT: "PENDING_PAYMENT",
+  ACTIVE: "ACTIVE",
+  SUSPENDED: "SUSPENDED",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type EnrollmentStatus = (typeof ENROLLMENT_STATUS)[keyof typeof ENROLLMENT_STATUS];
+
+export const ENROLLMENT_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Rascunho",
+  PENDING_PAYMENT: "Aguarda Pagamento",
+  ACTIVE: "Ativo",
+  SUSPENDED: "Suspenso",
+  COMPLETED: "Concluído",
+  CANCELLED: "Cancelado",
+};
+
+// Valid transitions: fromStatus -> allowed toStatuses
+export const ENROLLMENT_TRANSITIONS: Record<string, string[]> = {
+  DRAFT: ["PENDING_PAYMENT", "ACTIVE"],
+  PENDING_PAYMENT: ["ACTIVE"],
+  ACTIVE: ["SUSPENDED", "COMPLETED", "CANCELLED"],
+  SUSPENDED: ["ACTIVE"],
+  COMPLETED: [],
+  CANCELLED: [],
+};
