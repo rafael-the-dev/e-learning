@@ -1,5 +1,6 @@
 import { getDb } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
+import { ITEM_TYPE_PRIORITY } from "@/modules/finance/types";
 import type { PaginatedResult, PaginationParams } from "@/shared/types/common";
 import type { Invoice, InvoiceItem } from "@/modules/finance/types";
 
@@ -47,13 +48,40 @@ const invoiceSelect = {
       id: true,
       organizationId: true,
       invoiceId: true,
+      feeDefinitionId: true,
+      itemType: true,
       description: true,
       quantity: true,
       unitPrice: true,
       totalPrice: true,
+      paidAmount: true,
+      balanceAmount: true,
+      priority: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
     },
+    orderBy: [{ priority: "asc" as const }, { id: "asc" as const }] as object[],
   },
-} as const;
+};
+
+type ItemRow = {
+  id: string;
+  organizationId: string;
+  invoiceId: string;
+  feeDefinitionId: string | null;
+  itemType: string;
+  description: string;
+  quantity: DecimalLike;
+  unitPrice: DecimalLike;
+  totalPrice: DecimalLike;
+  paidAmount: DecimalLike;
+  balanceAmount: DecimalLike;
+  priority: number;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 type InvoiceRow = {
   id: string;
@@ -80,26 +108,26 @@ type InvoiceRow = {
   student: { id: string; firstName: string; lastName: string } | null;
   branch: { id: string; name: string } | null;
   enrollment: { id: string; enrollmentNumber: string | null } | null;
-  items: {
-    id: string;
-    organizationId: string;
-    invoiceId: string;
-    description: string;
-    quantity: DecimalLike;
-    unitPrice: DecimalLike;
-    totalPrice: DecimalLike;
-  }[];
+  items: ItemRow[];
 };
 
-function mapItem(item: InvoiceRow["items"][number]): InvoiceItem {
+function mapItem(item: ItemRow): InvoiceItem {
   return {
     id: item.id,
     organizationId: item.organizationId,
     invoiceId: item.invoiceId,
+    feeDefinitionId: item.feeDefinitionId,
+    itemType: item.itemType as InvoiceItem["itemType"],
     description: item.description,
     quantity: item.quantity.toNumber(),
     unitPrice: item.unitPrice.toNumber(),
     totalPrice: item.totalPrice.toNumber(),
+    paidAmount: item.paidAmount.toNumber(),
+    balanceAmount: item.balanceAmount.toNumber(),
+    priority: item.priority,
+    status: item.status as InvoiceItem["status"],
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
   };
 }
 
@@ -204,7 +232,14 @@ export async function createInvoice(data: {
   totalAmount: number;
   notes?: string | null;
   createdBy?: string | null;
-  items: { description: string; quantity: number; unitPrice: number; totalPrice: number }[];
+  items: {
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    itemType?: string;
+    feeDefinitionId?: string | null;
+  }[];
 }): Promise<Invoice> {
   const db = await getDb();
   const row = await db.invoice.create({
@@ -223,13 +258,21 @@ export async function createInvoice(data: {
       notes: data.notes ?? null,
       createdBy: data.createdBy ?? null,
       items: {
-        create: data.items.map((item) => ({
-          organizationId: data.organizationId,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-        })),
+        create: data.items.map((item) => {
+          const itemType = item.itemType ?? "OTHER";
+          return {
+            organizationId: data.organizationId,
+            feeDefinitionId: item.feeDefinitionId ?? null,
+            itemType,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+            // balanceAmount initialized to totalPrice (item is fully unpaid)
+            balanceAmount: item.totalPrice,
+            priority: ITEM_TYPE_PRIORITY[itemType] ?? 7,
+          };
+        }),
       },
     },
     select: invoiceSelect,

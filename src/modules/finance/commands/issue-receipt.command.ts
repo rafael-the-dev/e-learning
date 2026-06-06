@@ -1,7 +1,8 @@
 import { BaseCommand, ValidationError, AuthorizationError, NotFoundError, BusinessRuleError } from "@/shared/lib/command";
 import { issueReceiptSchema, type IssueReceiptInput } from "@/modules/finance/schemas/receipt.schema";
 import { findPaymentById } from "@/modules/finance/repositories/payment.repository";
-import { createReceipt, findReceiptByPayment, getLastReceiptNumber } from "@/modules/finance/repositories/receipt.repository";
+import { createReceipt, hasIssuedReceiptForPayment, getLastReceiptNumber } from "@/modules/finance/repositories/receipt.repository";
+import { sumAllocationsByPayment } from "@/modules/finance/repositories/payment-allocation.repository";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -20,8 +21,8 @@ export class IssueReceiptCommand extends BaseCommand<IssueReceiptInput, Receipt>
       throw new BusinessRuleError("O recibo só pode ser emitido após a confirmação do pagamento");
     }
 
-    const existingReceipt = await findReceiptByPayment(this.input.paymentId, this.context.organizationId);
-    if (existingReceipt && existingReceipt.status === "ISSUED") {
+    const alreadyIssued = await hasIssuedReceiptForPayment(this.input.paymentId, this.context.organizationId);
+    if (alreadyIssued) {
       throw new BusinessRuleError("Já existe um recibo emitido para este pagamento");
     }
   }
@@ -33,9 +34,11 @@ export class IssueReceiptCommand extends BaseCommand<IssueReceiptInput, Receipt>
 
   async execute(): Promise<Receipt> {
     const payment = this.payment!;
-    const walletCreditAmount = payment.walletCreditAmount ?? 0;
-    // Total settled = cash splits + wallet credit applied
-    const totalSettled = payment.totalAmount + walletCreditAmount;
+
+    // Receipt amount = total applied to invoice (sum of all allocations for this payment)
+    // Falls back to payment.totalAmount for legacy payments without allocation records
+    const allocationSum = await sumAllocationsByPayment(payment.id, this.context.organizationId);
+    const totalSettled = allocationSum > 0 ? allocationSum : payment.totalAmount;
 
     const lastNum = await getLastReceiptNumber(this.context.organizationId);
     const receiptNumber = `REC-${String(lastNum + 1).padStart(6, "0")}`;
@@ -59,7 +62,6 @@ export class IssueReceiptCommand extends BaseCommand<IssueReceiptInput, Receipt>
         receiptNumber,
         paymentId: payment.id,
         amount: totalSettled,
-        walletCreditAmount: walletCreditAmount > 0 ? walletCreditAmount : undefined,
       },
     });
 

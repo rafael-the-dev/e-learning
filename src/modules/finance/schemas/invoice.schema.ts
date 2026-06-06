@@ -4,6 +4,9 @@ export const invoiceItemSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   quantity: z.number().positive("Quantidade deve ser maior que zero"),
   unitPrice: z.number().nonnegative("Preço não pode ser negativo"),
+  itemType: z
+    .enum(["REGISTRATION_FEE", "COURSE_FEE", "MATERIAL_FEE", "EXAM_FEE", "CERTIFICATE_FEE", "PENALTY", "OTHER"])
+    .default("OTHER"),
 });
 
 export const createInvoiceSchema = z.object({

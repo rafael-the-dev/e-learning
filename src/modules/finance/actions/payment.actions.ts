@@ -17,7 +17,6 @@ export async function registerPaymentAction(input: RegisterPaymentInput): Promis
     const payment = await command.run();
     revalidatePath("/payments");
     revalidatePath("/invoices");
-    revalidatePath("/student-wallets");
     if (input.invoiceId) revalidatePath(`/invoices/${input.invoiceId}`);
     return payment;
   });
@@ -29,6 +28,9 @@ export async function confirmPaymentAction(input: ConfirmPaymentInput): Promise<
     const command = new ConfirmPaymentCommand(input, context);
     const payment = await command.run();
     revalidatePath("/payments");
+    revalidatePath("/invoices");
+    revalidatePath("/student-wallets");
+    if (payment.invoiceId) revalidatePath(`/invoices/${payment.invoiceId}`);
     return payment;
   });
 }

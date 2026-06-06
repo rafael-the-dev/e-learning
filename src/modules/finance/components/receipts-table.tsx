@@ -109,8 +109,18 @@ export function ReceiptsTable({ result, defaultSearch, defaultStatus }: Props) {
               result.data.map((receipt) => (
                 <TableRow key={receipt.id}>
                   <TableCell className="font-mono text-sm">{receipt.receiptNumber}</TableCell>
-                  <TableCell>{receipt.studentName ?? "—"}</TableCell>
-                  <TableCell className="font-mono text-sm">{receipt.invoiceNumber}</TableCell>
+                  <TableCell>
+                    {receipt.studentId ? (
+                      <Link href={`/students/${receipt.studentId}`} className="hover:underline">
+                        {receipt.studentName ?? "—"}
+                      </Link>
+                    ) : (receipt.studentName ?? "—")}
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">
+                    <Link href={`/invoices/${receipt.invoiceId}`} className="hover:underline">
+                      {receipt.invoiceNumber}
+                    </Link>
+                  </TableCell>
                   <TableCell className="font-mono text-sm">{receipt.paymentNumber}</TableCell>
                   <TableCell>{receipt.issueDate.toLocaleDateString("pt-PT")}</TableCell>
                   <TableCell className="text-right font-medium">

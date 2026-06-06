@@ -63,6 +63,7 @@ export class CreateInvoiceCommand extends BaseCommand<CreateInvoiceInput, Invoic
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       totalPrice: item.quantity * item.unitPrice,
+      itemType: item.itemType ?? "OTHER",
     }));
 
     const invoice = await createInvoice({

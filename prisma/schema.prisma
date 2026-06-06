@@ -49,6 +49,7 @@ model Organization {
   payments          Payment[]
   receipts          Receipt[]
   paymentSplits     PaymentSplit[]
+  paymentAllocations PaymentAllocation[]
   studentWallets    StudentWallet[]
   walletTransactions StudentWalletTransaction[]
   creditApplications CreditApplication[]
@@ -739,30 +740,42 @@ model Invoice {
   createdBy      String?
   updatedBy      String?
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student      Student?      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  enrollment   Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch       Branch?           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student?          @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment?       @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   items        InvoiceItem[]
   payments     Payment[]
   paymentPlan  PaymentPlan?
   receipts     Receipt[]
+  allocations  PaymentAllocation[]
 
   @@unique([organizationId, invoiceNumber])
   @@map("invoices")
 }
 
 model InvoiceItem {
-  id             String  @id @default(cuid())
-  organizationId String
-  invoiceId      String
-  description    String
-  quantity       Decimal @db.Decimal(10, 2) @default(1)
-  unitPrice      Decimal @db.Decimal(10, 2)
-  totalPrice     Decimal @db.Decimal(10, 2)
+  id              String   @id @default(cuid())
+  organizationId  String
+  invoiceId       String
+  feeDefinitionId String?
+  // InvoiceItemType: REGISTRATION_FEE | COURSE_FEE | MATERIAL_FEE | EXAM_FEE | CERTIFICATE_FEE | PENALTY | OTHER
+  itemType        String   @default("OTHER")
+  description     String
+  quantity        Decimal  @db.Decimal(10, 2) @default(1)
+  unitPrice       Decimal  @db.Decimal(10, 2)
+  totalPrice      Decimal  @db.Decimal(10, 2)
+  paidAmount      Decimal  @db.Decimal(10, 2) @default(0)
+  balanceAmount   Decimal  @db.Decimal(10, 2) @default(0)
+  priority        Int      @default(7)
+  // InvoiceItemStatus: PENDING | PARTIALLY_PAID | PAID
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Cascade is safe here — Invoice is the single owner of its items
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice     Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  allocations PaymentAllocation[]
 
   @@map("invoice_items")
 }
@@ -806,26 +819,22 @@ model Installment {
 }
 
 model Payment {
-  id             String   @id @default(cuid())
+  id            String   @id @default(cuid())
   organizationId String
-  branchId       String?
-  invoiceId      String?
-  installmentId  String?
-  studentId      String?
-  enrollmentId   String?
-  paymentNumber  String
-  paymentDate    DateTime @default(now())
-  totalAmount          Decimal  @db.Decimal(10, 2)
-  invoiceAppliedAmount Decimal? @db.Decimal(10, 2)
-  // PaymentMethod: CASH | BANK_TRANSFER | MPESA | EMOLA | POS | CARD | CHEQUE | OTHER — summary of primary split
-  method         String   @default("CASH")
-  reference      String?
+  branchId      String?
+  invoiceId     String?
+  installmentId String?
+  studentId     String?
+  enrollmentId  String?
+  paymentNumber String
+  paymentDate   DateTime @default(now())
+  totalAmount   Decimal  @db.Decimal(10, 2)
   // PaymentStatus: PENDING | CONFIRMED | CANCELLED | REFUNDED
-  status         String   @default("PENDING")
-  notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  createdBy      String?
+  status        String   @default("PENDING")
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdBy     String?
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -833,9 +842,10 @@ model Payment {
   invoice      Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   installment  Installment?  @relation(fields: [installmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   enrollment   Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  receipt             Receipt?
-  splits              PaymentSplit[]
-  creditApplications  CreditApplication[]
+  receipt            Receipt?
+  splits             PaymentSplit[]
+  creditApplications CreditApplication[]
+  allocations        PaymentAllocation[]
 
   @@unique([organizationId, paymentNumber])
   @@map("payments")
@@ -880,6 +890,28 @@ model PaymentSplit {
   payment      Payment      @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("payment_splits")
+}
+
+model PaymentAllocation {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  paymentId           String?
+  creditApplicationId String?
+  invoiceId           String
+  invoiceItemId       String
+  amount              Decimal  @db.Decimal(10, 2)
+  // AllocationType: PAYMENT | WALLET_CREDIT | ADJUSTMENT | REFUND_REVERSAL
+  allocationType      String   @default("PAYMENT")
+  createdAt           DateTime @default(now())
+  createdBy           String?
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment           Payment?           @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  creditApplication CreditApplication? @relation(fields: [creditApplicationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoice           Invoice            @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoiceItem       InvoiceItem        @relation(fields: [invoiceItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("payment_allocations")
 }
 
 // =============================================================================
@@ -938,9 +970,10 @@ model CreditApplication {
   createdAt       DateTime @default(now())
   createdBy       String?
 
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  wallet       StudentWallet  @relation(fields: [studentWalletId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  payment      Payment?       @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  wallet       StudentWallet      @relation(fields: [studentWalletId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment      Payment?           @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  allocations  PaymentAllocation[]
 
   @@map("credit_applications")
 }

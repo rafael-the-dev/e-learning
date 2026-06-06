@@ -146,11 +146,17 @@ export default async function EnrollmentDetailPage({
         <div className="rounded-xl border p-5 space-y-3">
           <h3 className="text-sm font-semibold">Informação</h3>
           <dl className="space-y-2 text-sm">
-            <DetailRow
-              icon={<GraduationCap className="size-3.5" />}
-              label="Aluno"
-              value={enrollment.studentName ?? "—"}
-            />
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground shrink-0">
+                <GraduationCap className="size-3.5" />
+              </span>
+              <dt className="w-28 shrink-0 text-muted-foreground">Aluno</dt>
+              <dd className="font-medium truncate">
+                <Link href={`/students/${enrollment.studentId}`} className="hover:underline">
+                  {enrollment.studentName ?? "—"}
+                </Link>
+              </dd>
+            </div>
             <DetailRow
               icon={<BookOpen className="size-3.5" />}
               label="Curso"
@@ -224,15 +230,26 @@ export default async function EnrollmentDetailPage({
           )}
         </div>
 
-        {/* Placeholder: Payments */}
-        <div className="rounded-xl border border-dashed p-5 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <CreditCard className="size-4" />
-            <h3 className="text-sm font-semibold">Pagamentos</h3>
+        {/* Faturas e Pagamentos */}
+        <div className="rounded-xl border p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CreditCard className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Faturas e Pagamentos</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/invoices?enrollmentId=${enrollment.id}`}>
+                  Ver faturas
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/payments?search=${enrollment.enrollmentNumber ?? enrollment.id}`}>
+                  Ver pagamentos
+                </Link>
+              </Button>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Módulo de pagamentos em desenvolvimento.
-          </p>
         </div>
 
         {/* Placeholder: Attendance */}

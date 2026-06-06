@@ -2,6 +2,6 @@
 ALTER TABLE credit_applications ADD paymentId NVARCHAR(1000) NULL;
 
 ALTER TABLE credit_applications
-  ADD CONSTRAINT fk_credit_applications_payment
+  ADD CONSTRAINT credit_applications_paymentId_fkey
   FOREIGN KEY (paymentId) REFERENCES payments(id)
   ON DELETE NO ACTION ON UPDATE NO ACTION;

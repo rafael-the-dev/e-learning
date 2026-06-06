@@ -267,6 +267,35 @@ export const WalletTransactionType = {
 export type WalletTransactionType =
   (typeof WalletTransactionType)[keyof typeof WalletTransactionType];
 
+export const InvoiceItemType = {
+  REGISTRATION_FEE: "REGISTRATION_FEE",
+  COURSE_FEE: "COURSE_FEE",
+  MATERIAL_FEE: "MATERIAL_FEE",
+  EXAM_FEE: "EXAM_FEE",
+  CERTIFICATE_FEE: "CERTIFICATE_FEE",
+  PENALTY: "PENALTY",
+  OTHER: "OTHER",
+} as const;
+export type InvoiceItemType =
+  (typeof InvoiceItemType)[keyof typeof InvoiceItemType];
+
+export const InvoiceItemStatus = {
+  PENDING: "PENDING",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
+  PAID: "PAID",
+} as const;
+export type InvoiceItemStatus =
+  (typeof InvoiceItemStatus)[keyof typeof InvoiceItemStatus];
+
+export const AllocationType = {
+  PAYMENT: "PAYMENT",
+  WALLET_CREDIT: "WALLET_CREDIT",
+  ADJUSTMENT: "ADJUSTMENT",
+  REFUND_REVERSAL: "REFUND_REVERSAL",
+} as const;
+export type AllocationType =
+  (typeof AllocationType)[keyof typeof AllocationType];
+
 export const AuditAction = {
   CREATED: "CREATED",
   UPDATED: "UPDATED",

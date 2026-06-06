@@ -7,6 +7,7 @@ import { requirePermission } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getPaymentsByOrganization, getPaymentStats } from "@/modules/finance/services/payment.service";
+import { getWalletBalancesByStudentIds } from "@/modules/wallets/services/wallet.service";
 import { PaymentsTable } from "@/modules/finance/components/payments-table";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { Plus } from "lucide-react";
@@ -41,6 +42,16 @@ export default async function PaymentsPage({
     getPaymentStats(context.organizationId),
   ]);
 
+  // Wallet balances for students with PENDING payments (used in confirmation dialog)
+  const pendingStudentIds = [
+    ...new Set(
+      result.data
+        .filter((p) => p.status === "PENDING" && p.studentId != null)
+        .map((p) => p.studentId as string)
+    ),
+  ];
+  const walletBalances = await getWalletBalancesByStudentIds(context.organizationId, pendingStudentIds);
+
   return (
     <>
       <PageHeader
@@ -73,6 +84,7 @@ export default async function PaymentsPage({
           canConfirm={canConfirm}
           canCancel={canCancel}
           canIssueReceipt={canIssueReceipt}
+          walletBalances={walletBalances}
         />
       </div>
     </>

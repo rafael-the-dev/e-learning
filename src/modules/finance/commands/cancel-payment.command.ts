@@ -31,96 +31,131 @@ export class CancelPaymentCommand extends BaseCommand<CancelPaymentInput, Paymen
     const existing = this.existing!;
     const db = await getDb();
 
-    await db.$transaction(async (tx) => {
-      // 1. Reverse wallet credit applications linked to this payment
-      if (existing.walletCreditAmount > 0) {
-        const creditApps = await tx.creditApplication.findMany({
+    if (existing.status === "PENDING") {
+      await db.payment.update({
+        where: { id: existing.id, organizationId: this.context.organizationId },
+        data: { status: "CANCELLED" },
+      });
+    } else {
+      // CONFIRMED — reverse all financial effects atomically
+      await db.$transaction(async (tx) => {
+        // Load all allocations for this payment
+        const allocations = await tx.paymentAllocation.findMany({
           where: { paymentId: existing.id, organizationId: this.context.organizationId },
+          select: { id: true, invoiceItemId: true, amount: true, allocationType: true, creditApplicationId: true },
+        });
+
+        const walletCreditAllocs = allocations.filter((a) => a.allocationType === "WALLET_CREDIT");
+        const totalApplied = allocations.reduce((sum, a) => sum + (a.amount as DecimalLike).toNumber(), 0);
+
+        // 1. Reverse wallet credit applications linked to this payment
+        if (walletCreditAllocs.length > 0) {
+          const creditApps = await tx.creditApplication.findMany({
+            where: { paymentId: existing.id, organizationId: this.context.organizationId },
+            select: { id: true, studentWalletId: true, amount: true },
+          });
+          for (const ca of creditApps) {
+            await tx.studentWalletTransaction.create({
+              data: {
+                organizationId: this.context.organizationId,
+                studentWalletId: ca.studentWalletId,
+                type: "ADJUSTMENT",
+                amount: (ca.amount as DecimalLike).toNumber(),
+                referenceType: "Payment",
+                referenceId: existing.id,
+                description: `Crédito revertido — cancelamento do pagamento ${existing.paymentNumber}`,
+                createdBy: this.context.userId,
+              },
+            });
+          }
+        }
+
+        // 2. Reverse overpayment credit if present (block if wallet has been spent)
+        const overpaymentTx = await tx.studentWalletTransaction.findFirst({
+          where: {
+            organizationId: this.context.organizationId,
+            referenceType: "Payment",
+            referenceId: existing.id,
+            type: "OVERPAYMENT",
+          },
           select: { id: true, studentWalletId: true, amount: true },
         });
-        for (const ca of creditApps) {
+        if (overpaymentTx) {
+          const overpaymentAmount = (overpaymentTx.amount as DecimalLike).toNumber();
+          const balanceResult = await tx.studentWalletTransaction.aggregate({
+            where: { studentWalletId: overpaymentTx.studentWalletId },
+            _sum: { amount: true },
+          });
+          const currentBalance = (balanceResult._sum.amount as DecimalLike | null)?.toNumber() ?? 0;
+          if (currentBalance < overpaymentAmount) {
+            throw new BusinessRuleError(
+              `Não é possível cancelar este pagamento. O excesso de ${overpaymentAmount.toFixed(2)} foi parcialmente utilizado (saldo atual: ${currentBalance.toFixed(2)})`
+            );
+          }
           await tx.studentWalletTransaction.create({
             data: {
               organizationId: this.context.organizationId,
-              studentWalletId: ca.studentWalletId,
+              studentWalletId: overpaymentTx.studentWalletId,
               type: "ADJUSTMENT",
-              amount: (ca.amount as DecimalLike).toNumber(),
+              amount: -overpaymentAmount,
               referenceType: "Payment",
               referenceId: existing.id,
-              description: `Crédito revertido — cancelamento do pagamento ${existing.paymentNumber}`,
+              description: `Excesso revertido — cancelamento do pagamento ${existing.paymentNumber}`,
               createdBy: this.context.userId,
             },
           });
         }
-      }
 
-      // 2. Reverse overpayment credit if it exists
-      const overpaymentTx = await tx.studentWalletTransaction.findFirst({
-        where: {
-          organizationId: this.context.organizationId,
-          referenceType: "Payment",
-          referenceId: existing.id,
-          type: "OVERPAYMENT",
-        },
-        select: { id: true, studentWalletId: true, amount: true },
-      });
-      if (overpaymentTx) {
-        const overpaymentAmount = (overpaymentTx.amount as DecimalLike).toNumber();
-        // Check the wallet still has enough balance to absorb the reversal
-        const balanceResult = await tx.studentWalletTransaction.aggregate({
-          where: { studentWalletId: overpaymentTx.studentWalletId },
-          _sum: { amount: true },
-        });
-        const currentBalance = (balanceResult._sum.amount as DecimalLike | null)?.toNumber() ?? 0;
-        if (currentBalance < overpaymentAmount) {
-          throw new BusinessRuleError(
-            `Não é possível cancelar este pagamento. O excesso de ${overpaymentAmount.toFixed(2)} foi parcialmente utilizado (saldo atual: ${currentBalance.toFixed(2)})`
-          );
+        // 3. Reverse InvoiceItem paidAmounts grouped by item
+        if (allocations.length > 0) {
+          const reversalByItem = new Map<string, number>();
+          for (const alloc of allocations) {
+            const prev = reversalByItem.get(alloc.invoiceItemId) ?? 0;
+            reversalByItem.set(alloc.invoiceItemId, prev + (alloc.amount as DecimalLike).toNumber());
+          }
+          for (const [itemId, reversalAmount] of reversalByItem) {
+            const item = await tx.invoiceItem.findUniqueOrThrow({
+              where: { id: itemId },
+              select: { totalPrice: true, paidAmount: true },
+            });
+            const newPaid = Math.max(0, (item.paidAmount as DecimalLike).toNumber() - reversalAmount);
+            const newBalance = (item.totalPrice as DecimalLike).toNumber() - newPaid;
+            await tx.invoiceItem.update({
+              where: { id: itemId },
+              data: {
+                paidAmount: newPaid,
+                balanceAmount: newBalance,
+                status: newPaid <= 0 ? "PENDING" : "PARTIALLY_PAID",
+              },
+            });
+          }
         }
-        await tx.studentWalletTransaction.create({
-          data: {
-            organizationId: this.context.organizationId,
-            studentWalletId: overpaymentTx.studentWalletId,
-            type: "ADJUSTMENT",
-            amount: -overpaymentAmount,
-            referenceType: "Payment",
-            referenceId: existing.id,
-            description: `Excesso revertido — cancelamento do pagamento ${existing.paymentNumber}`,
-            createdBy: this.context.userId,
-          },
-        });
-      }
 
-      // 3. Reverse invoice balance using the exact amount that was applied
-      if (existing.invoiceId) {
-        // Use invoiceAppliedAmount (walletCredit + cashApplied) when available;
-        // fall back to totalAmount for legacy records without the field.
-        const reversalAmount = existing.invoiceAppliedAmount ?? (existing.walletCreditAmount + existing.totalAmount);
+        // 4. Reverse invoice balance
+        if (existing.invoiceId && totalApplied > 0) {
+          const inv = await tx.invoice.findUniqueOrThrow({
+            where: { id: existing.invoiceId, organizationId: this.context.organizationId },
+            select: { paidAmount: true, totalAmount: true },
+          });
+          const newPaid = Math.max(0, (inv.paidAmount as DecimalLike).toNumber() - totalApplied);
+          const newBalance = (inv.totalAmount as DecimalLike).toNumber() - newPaid;
+          await tx.invoice.update({
+            where: { id: existing.invoiceId, organizationId: this.context.organizationId },
+            data: {
+              paidAmount: newPaid,
+              balanceAmount: newBalance,
+              status: newPaid <= 0 ? "PENDING" : "PARTIALLY_PAID",
+            },
+          });
+        }
 
-        const inv = await tx.invoice.findUniqueOrThrow({
-          where: { id: existing.invoiceId, organizationId: this.context.organizationId },
-          select: { paidAmount: true, totalAmount: true },
+        // 5. Mark payment cancelled
+        await tx.payment.update({
+          where: { id: existing.id, organizationId: this.context.organizationId },
+          data: { status: "CANCELLED" },
         });
-        const currentPaid = (inv.paidAmount as DecimalLike).toNumber();
-        const invoiceTotal = (inv.totalAmount as DecimalLike).toNumber();
-        const newPaid = Math.max(0, currentPaid - reversalAmount);
-        const newBalance = invoiceTotal - newPaid;
-        await tx.invoice.update({
-          where: { id: existing.invoiceId, organizationId: this.context.organizationId },
-          data: {
-            paidAmount: newPaid,
-            balanceAmount: newBalance,
-            status: newPaid <= 0 ? "PENDING" : "PARTIALLY_PAID",
-          },
-        });
-      }
-
-      // 4. Mark payment as cancelled
-      await tx.payment.update({
-        where: { id: existing.id, organizationId: this.context.organizationId },
-        data: { status: "CANCELLED" },
       });
-    });
+    }
 
     const updated = await findPaymentById(existing.id, this.context.organizationId);
     if (!updated) throw new BusinessRuleError("Erro ao recuperar pagamento após cancelamento");
@@ -128,12 +163,11 @@ export class CancelPaymentCommand extends BaseCommand<CancelPaymentInput, Paymen
     await auditService.log(this.context, {
       entity: "Payment",
       entityId: updated.id,
-      action: "CANCELLED",
+      action: "payment.cancelled",
       oldValues: { status: existing.status },
       newValues: {
         status: "CANCELLED",
         reason: this.input.reason,
-        walletCreditReversed: existing.walletCreditAmount > 0 ? existing.walletCreditAmount : undefined,
       },
     });
 

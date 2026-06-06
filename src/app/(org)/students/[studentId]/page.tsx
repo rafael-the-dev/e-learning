@@ -157,16 +157,19 @@ export default async function StudentDetailPage({
           </dl>
         </div>
 
-        {/* Enrollments placeholder */}
-        <div className="rounded-xl border border-dashed p-5 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <GraduationCap className="size-4" />
-            <h3 className="text-sm font-semibold">Inscrições</h3>
+        {/* Enrollments */}
+        <div className="rounded-xl border p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <GraduationCap className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Matrículas</h3>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/enrollments?studentId=${studentId}`}>
+                Ver matrículas
+              </Link>
+            </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {/* TODO: implement enrollments module */}
-            Nenhuma inscrição registada.
-          </p>
         </div>
 
         {/* Wallet */}

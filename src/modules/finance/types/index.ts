@@ -1,10 +1,13 @@
 import type {
   InvoiceStatus,
+  InvoiceItemType,
+  InvoiceItemStatus,
   InstallmentStatus,
   PaymentMethod,
   PaymentStatus,
   PaymentPlanStatus,
   ReceiptStatus,
+  AllocationType,
 } from "@/shared/types/common";
 
 // =============================================================================
@@ -15,10 +18,18 @@ export interface InvoiceItem {
   id: string;
   organizationId: string;
   invoiceId: string;
+  feeDefinitionId: string | null;
+  itemType: InvoiceItemType;
   description: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  paidAmount: number;
+  balanceAmount: number;
+  priority: number;
+  status: InvoiceItemStatus;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Invoice {
@@ -88,6 +99,22 @@ export interface PaymentSplit {
   createdAt: Date;
 }
 
+export interface PaymentAllocation {
+  id: string;
+  organizationId: string;
+  paymentId: string | null;
+  creditApplicationId: string | null;
+  invoiceId: string;
+  invoiceItemId: string;
+  amount: number;
+  allocationType: AllocationType;
+  createdAt: Date;
+  createdBy: string | null;
+  // denormalized
+  itemDescription: string | null;
+  itemType: string | null;
+}
+
 export interface Payment {
   id: string;
   organizationId: string;
@@ -99,9 +126,6 @@ export interface Payment {
   paymentNumber: string;
   paymentDate: Date;
   totalAmount: number;
-  invoiceAppliedAmount?: number;
-  method: PaymentMethod;
-  reference: string | null;
   status: PaymentStatus;
   notes: string | null;
   createdAt: Date;
@@ -112,7 +136,6 @@ export interface Payment {
   invoiceNumber: string | null;
   branchName: string | null;
   splits: PaymentSplit[];
-  walletCreditAmount: number;
 }
 
 export interface Receipt {
@@ -133,8 +156,24 @@ export interface Receipt {
   paymentNumber: string | null;
   branchName: string | null;
   splits: PaymentSplit[];
+  allocations: PaymentAllocation[];
   walletCreditAmount: number;
+  overpaymentAmount: number;
 }
+
+// =============================================================================
+// PRIORITY MAP — determines allocation order for invoice items
+// =============================================================================
+
+export const ITEM_TYPE_PRIORITY: Record<string, number> = {
+  REGISTRATION_FEE: 1,
+  COURSE_FEE: 2,
+  MATERIAL_FEE: 3,
+  EXAM_FEE: 4,
+  CERTIFICATE_FEE: 5,
+  PENALTY: 6,
+  OTHER: 7,
+};
 
 // =============================================================================
 // LABEL MAPS (pt-PT)
@@ -146,6 +185,16 @@ export const INVOICE_STATUS_LABELS: Record<string, string> = {
   PAID: "Pago",
   OVERDUE: "Em Atraso",
   CANCELLED: "Cancelado",
+};
+
+export const INVOICE_ITEM_TYPE_LABELS: Record<string, string> = {
+  REGISTRATION_FEE: "Taxa de Inscrição",
+  COURSE_FEE: "Taxa do Curso",
+  MATERIAL_FEE: "Material Didático",
+  EXAM_FEE: "Taxa de Exame",
+  CERTIFICATE_FEE: "Certificado",
+  PENALTY: "Multa",
+  OTHER: "Outro",
 };
 
 export const PAYMENT_STATUS_LABELS: Record<string, string> = {
@@ -182,4 +231,11 @@ export const INSTALLMENT_STATUS_LABELS: Record<string, string> = {
 export const RECEIPT_STATUS_LABELS: Record<string, string> = {
   ISSUED: "Emitido",
   CANCELLED: "Cancelado",
+};
+
+export const ALLOCATION_TYPE_LABELS: Record<string, string> = {
+  PAYMENT: "Pagamento",
+  WALLET_CREDIT: "Crédito da Carteira",
+  ADJUSTMENT: "Ajuste",
+  REFUND_REVERSAL: "Reversão de Reembolso",
 };

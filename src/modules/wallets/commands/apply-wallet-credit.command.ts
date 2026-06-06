@@ -8,6 +8,8 @@ import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import type { StudentWallet } from "@/modules/wallets/types";
 
+type DecimalLike = { toNumber(): number };
+
 export class ApplyWalletCreditCommand extends BaseCommand<ApplyWalletCreditInput, StudentWallet> {
   private wallet: StudentWallet | null = null;
 
@@ -60,17 +62,17 @@ export class ApplyWalletCreditCommand extends BaseCommand<ApplyWalletCreditInput
     const db = await getDb();
 
     await db.$transaction(async (tx) => {
-      // Re-check balance inside the transaction to guard against concurrent debits
+      // Re-check balance inside the transaction
       const balanceResult = await tx.studentWalletTransaction.aggregate({
         where: { studentWalletId: wallet.id },
         _sum: { amount: true },
       });
-      const liveBalance = (balanceResult._sum.amount as { toNumber(): number } | null)?.toNumber() ?? 0;
+      const liveBalance = (balanceResult._sum.amount as DecimalLike | null)?.toNumber() ?? 0;
       if (this.input.amount > liveBalance) {
         throw new BusinessRuleError(`Saldo insuficiente na carteira. Disponível: ${liveBalance.toFixed(2)}`);
       }
 
-      // Debit wallet (negative amount = money leaves wallet)
+      // Debit wallet
       await tx.studentWalletTransaction.create({
         data: {
           organizationId: this.context.organizationId,
@@ -84,8 +86,8 @@ export class ApplyWalletCreditCommand extends BaseCommand<ApplyWalletCreditInput
         },
       });
 
-      // Record credit application
-      await tx.creditApplication.create({
+      // Record CreditApplication (no paymentId — standalone credit)
+      const ca = await tx.creditApplication.create({
         data: {
           organizationId: this.context.organizationId,
           studentId: wallet.studentId,
@@ -95,15 +97,74 @@ export class ApplyWalletCreditCommand extends BaseCommand<ApplyWalletCreditInput
           notes: this.input.notes ?? null,
           createdBy: this.context.userId,
         },
+        select: { id: true },
       });
 
-      // Update invoice
+      // Re-validate invoice balance inside the transaction (guard against concurrent payments)
+      const invCheck = await tx.invoice.findUniqueOrThrow({
+        where: { id: this.input.invoiceId, organizationId: this.context.organizationId },
+        select: { balanceAmount: true, status: true },
+      });
+      const liveInvoiceBalance = (invCheck.balanceAmount as DecimalLike).toNumber();
+      if (invCheck.status === "CANCELLED") {
+        throw new BusinessRuleError("Fatura cancelada");
+      }
+      if (this.input.amount > liveInvoiceBalance) {
+        throw new BusinessRuleError(
+          `O saldo da fatura foi alterado. Disponível: ${liveInvoiceBalance.toFixed(2)}`
+        );
+      }
+
+      // Allocate credit to invoice items by priority
+      const items = await tx.invoiceItem.findMany({
+        where: { invoiceId: this.input.invoiceId },
+        select: { id: true, totalPrice: true, paidAmount: true, priority: true },
+        orderBy: [{ priority: "asc" }, { id: "asc" }],
+      });
+
+      let remaining = this.input.amount;
+      let totalAllocated = 0;
+      for (const item of items) {
+        if (remaining <= 0) break;
+        const balance = (item.totalPrice as DecimalLike).toNumber() - (item.paidAmount as DecimalLike).toNumber();
+        if (balance <= 0) continue;
+        const alloc = Math.min(remaining, balance);
+
+        await tx.paymentAllocation.create({
+          data: {
+            organizationId: this.context.organizationId,
+            creditApplicationId: ca.id,
+            invoiceId: this.input.invoiceId,
+            invoiceItemId: item.id,
+            amount: alloc,
+            allocationType: "WALLET_CREDIT",
+            createdBy: this.context.userId,
+          },
+        });
+
+        const newPaid = (item.paidAmount as DecimalLike).toNumber() + alloc;
+        const newBalance = (item.totalPrice as DecimalLike).toNumber() - newPaid;
+        await tx.invoiceItem.update({
+          where: { id: item.id },
+          data: {
+            paidAmount: newPaid,
+            balanceAmount: newBalance,
+            status: newBalance <= 0 ? "PAID" : "PARTIALLY_PAID",
+          },
+        });
+
+        totalAllocated += alloc;
+        remaining -= alloc;
+      }
+
+      // Update invoice totals using the amount actually allocated to items.
+      // This keeps invoice.paidAmount consistent with sum(item.paidAmount).
       const inv = await tx.invoice.findUniqueOrThrow({
         where: { id: this.input.invoiceId },
         select: { paidAmount: true, totalAmount: true },
       });
-      const newPaid = Number(inv.paidAmount) + this.input.amount;
-      const newBalance = Number(inv.totalAmount) - newPaid;
+      const newPaid = (inv.paidAmount as DecimalLike).toNumber() + totalAllocated;
+      const newBalance = (inv.totalAmount as DecimalLike).toNumber() - newPaid;
       await tx.invoice.update({
         where: { id: this.input.invoiceId },
         data: {

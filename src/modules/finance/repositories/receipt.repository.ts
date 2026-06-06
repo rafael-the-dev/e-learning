@@ -1,7 +1,7 @@
 import { getDb } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult, PaginationParams } from "@/shared/types/common";
-import type { Receipt, PaymentSplit } from "@/modules/finance/types";
+import type { Receipt, PaymentSplit, PaymentAllocation } from "@/modules/finance/types";
 
 type DecimalLike = { toNumber(): number };
 
@@ -34,6 +34,7 @@ const receiptSelect = {
     select: {
       id: true,
       paymentNumber: true,
+      totalAmount: true,
       splits: {
         select: {
           id: true,
@@ -46,8 +47,23 @@ const receiptSelect = {
         },
         orderBy: { amount: "desc" as const },
       },
-      creditApplications: {
-        select: { id: true, amount: true },
+      allocations: {
+        select: {
+          id: true,
+          organizationId: true,
+          paymentId: true,
+          creditApplicationId: true,
+          invoiceId: true,
+          invoiceItemId: true,
+          amount: true,
+          allocationType: true,
+          createdAt: true,
+          createdBy: true,
+          invoiceItem: {
+            select: { description: true, itemType: true },
+          },
+        },
+        orderBy: { createdAt: "asc" as const },
       },
     },
   },
@@ -62,6 +78,20 @@ type SplitRow = {
   reference: string | null;
   notes: string | null;
   createdAt: Date;
+};
+
+type AllocationRow = {
+  id: string;
+  organizationId: string;
+  paymentId: string | null;
+  creditApplicationId: string | null;
+  invoiceId: string;
+  invoiceItemId: string;
+  amount: DecimalLike;
+  allocationType: string;
+  createdAt: Date;
+  createdBy: string | null;
+  invoiceItem: { description: string; itemType: string } | null;
 };
 
 type ReceiptRow = {
@@ -81,13 +111,43 @@ type ReceiptRow = {
   payment: {
     id: string;
     paymentNumber: string;
+    totalAmount: DecimalLike;
     splits: SplitRow[];
-    creditApplications: { id: string; amount: DecimalLike }[];
+    allocations: AllocationRow[];
   };
   branch: { id: string; name: string } | null;
 };
 
 function mapToReceipt(row: ReceiptRow): Receipt {
+  const allocations: PaymentAllocation[] = row.payment.allocations.map((a) => ({
+    id: a.id,
+    organizationId: a.organizationId,
+    paymentId: a.paymentId,
+    creditApplicationId: a.creditApplicationId,
+    invoiceId: a.invoiceId,
+    invoiceItemId: a.invoiceItemId,
+    amount: a.amount.toNumber(),
+    allocationType: a.allocationType as PaymentAllocation["allocationType"],
+    createdAt: a.createdAt,
+    createdBy: a.createdBy,
+    itemDescription: a.invoiceItem?.description ?? null,
+    itemType: a.invoiceItem?.itemType ?? null,
+  }));
+
+  const walletCreditAmount = allocations
+    .filter((a) => a.allocationType === "WALLET_CREDIT")
+    .reduce((sum, a) => sum + a.amount, 0);
+
+  const paymentAllocatedSum = allocations
+    .filter((a) => a.allocationType === "PAYMENT")
+    .reduce((sum, a) => sum + a.amount, 0);
+
+  const newMoneyReceived = row.payment.totalAmount.toNumber();
+  // Only compute overpayment for receipts with allocation records (new-system payments).
+  // Legacy receipts have no allocations; showing newMoneyReceived as overpayment would be wrong.
+  const overpaymentAmount =
+    allocations.length > 0 ? Math.max(0, newMoneyReceived - paymentAllocatedSum) : 0;
+
   return {
     id: row.id,
     organizationId: row.organizationId,
@@ -116,10 +176,9 @@ function mapToReceipt(row: ReceiptRow): Receipt {
         createdAt: s.createdAt,
       })
     ),
-    walletCreditAmount: row.payment.creditApplications.reduce(
-      (sum, ca) => sum + ca.amount.toNumber(),
-      0
-    ),
+    allocations,
+    walletCreditAmount,
+    overpaymentAmount,
   };
 }
 
@@ -163,6 +222,12 @@ export async function findReceiptByPayment(paymentId: string, organizationId: st
   const db = await getDb();
   const row = await db.receipt.findFirst({ where: { paymentId, organizationId }, select: receiptSelect });
   return row ? mapToReceipt(row) : null;
+}
+
+export async function hasIssuedReceiptForPayment(paymentId: string, organizationId: string): Promise<boolean> {
+  const db = await getDb();
+  const count = await db.receipt.count({ where: { paymentId, organizationId, status: "ISSUED" } });
+  return count > 0;
 }
 
 export async function receiptNumberExists(receiptNumber: string, organizationId: string): Promise<boolean> {

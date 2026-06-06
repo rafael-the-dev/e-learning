@@ -28,9 +28,6 @@ const paymentSelect = {
   paymentNumber: true,
   paymentDate: true,
   totalAmount: true,
-  invoiceAppliedAmount: true,
-  method: true,
-  reference: true,
   status: true,
   notes: true,
   createdAt: true,
@@ -50,9 +47,6 @@ const paymentSelect = {
       createdAt: true,
     },
     orderBy: { amount: "desc" as const },
-  },
-  creditApplications: {
-    select: { id: true, amount: true },
   },
 } as const;
 
@@ -77,9 +71,6 @@ type PaymentRow = {
   paymentNumber: string;
   paymentDate: Date;
   totalAmount: DecimalLike;
-  invoiceAppliedAmount: DecimalLike | null;
-  method: string;
-  reference: string | null;
   status: string;
   notes: string | null;
   createdAt: Date;
@@ -89,7 +80,6 @@ type PaymentRow = {
   invoice: { id: string; invoiceNumber: string } | null;
   branch: { id: string; name: string } | null;
   splits: SplitRow[];
-  creditApplications: { id: string; amount: DecimalLike }[];
 };
 
 function mapSplit(row: SplitRow, paymentId: string): PaymentSplit {
@@ -117,9 +107,6 @@ function mapToPayment(row: PaymentRow): Payment {
     paymentNumber: row.paymentNumber,
     paymentDate: row.paymentDate,
     totalAmount: row.totalAmount.toNumber(),
-    invoiceAppliedAmount: row.invoiceAppliedAmount?.toNumber() ?? undefined,
-    method: row.method as Payment["method"],
-    reference: row.reference,
     status: row.status as Payment["status"],
     notes: row.notes,
     createdAt: row.createdAt,
@@ -129,7 +116,6 @@ function mapToPayment(row: PaymentRow): Payment {
     invoiceNumber: row.invoice?.invoiceNumber ?? null,
     branchName: row.branch?.name ?? null,
     splits: row.splits.map((s) => mapSplit(s, row.id)),
-    walletCreditAmount: row.creditApplications.reduce((sum, ca) => sum + ca.amount.toNumber(), 0),
   };
 }
 

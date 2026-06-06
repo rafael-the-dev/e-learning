@@ -4,7 +4,7 @@ import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { Plus, Trash2, Wallet } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "@/shared/hooks/use-toast";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -27,7 +27,6 @@ interface Invoice {
   studentName: string | null;
   balanceAmount: number;
   studentId: string | null;
-  walletBalance: number | null;
 }
 
 interface Props {
@@ -50,7 +49,6 @@ export function RegisterPaymentForm({ invoices, defaultInvoiceId }: Props) {
     resolver: zodResolver(registerPaymentSchema),
     defaultValues: {
       invoiceId: defaultInvoiceId ?? "",
-      walletCreditAmount: 0,
       splits: [{ method: "CASH", amount: 0, reference: "", notes: "" }],
     },
   });
@@ -58,17 +56,13 @@ export function RegisterPaymentForm({ invoices, defaultInvoiceId }: Props) {
   const { fields, append, remove } = useFieldArray({ control, name: "splits" });
 
   const selectedInvoiceId = watch("invoiceId");
-  const walletCreditAmount = watch("walletCreditAmount") ?? 0;
   const splits = watch("splits");
 
   const selectedInvoice = invoices.find((i) => i.id === selectedInvoiceId);
   const paymentTotal = splits.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
 
-  const walletBalance = selectedInvoice?.walletBalance ?? null;
-  const effectiveCredit = Math.max(0, Math.min(Number(walletCreditAmount) || 0, walletBalance ?? 0, selectedInvoice?.balanceAmount ?? 0));
-  const remainingAfterCredit = selectedInvoice ? selectedInvoice.balanceAmount - effectiveCredit : null;
-  const overpayment = remainingAfterCredit !== null ? Math.max(0, paymentTotal - remainingAfterCredit) : 0;
-  const finalRemaining = remainingAfterCredit !== null ? Math.max(0, remainingAfterCredit - paymentTotal) : null;
+  const overpayment = selectedInvoice ? Math.max(0, paymentTotal - selectedInvoice.balanceAmount) : 0;
+  const finalRemaining = selectedInvoice ? Math.max(0, selectedInvoice.balanceAmount - paymentTotal) : null;
 
   function onSubmit(data: RegisterPaymentInput) {
     startTransition(async () => {
@@ -89,10 +83,7 @@ export function RegisterPaymentForm({ invoices, defaultInvoiceId }: Props) {
         <Label>Fatura *</Label>
         <Select
           defaultValue={defaultInvoiceId}
-          onValueChange={(v) => {
-            setValue("invoiceId", v);
-            setValue("walletCreditAmount", 0);
-          }}
+          onValueChange={(v) => setValue("invoiceId", v)}
         >
           <SelectTrigger>
             <SelectValue placeholder="Selecionar fatura..." />
@@ -112,97 +103,6 @@ export function RegisterPaymentForm({ invoices, defaultInvoiceId }: Props) {
           <p className="text-sm text-destructive">{errors.invoiceId.message}</p>
         )}
       </div>
-
-      {/* Wallet credit section */}
-      {selectedInvoice && walletBalance !== null && walletBalance > 0 && (
-        <div className="rounded-lg border border-dashed p-4 space-y-3 bg-muted/20">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Wallet className="size-4 text-muted-foreground" />
-            Crédito da Carteira
-            <span className="ml-auto text-xs text-muted-foreground">
-              Disponível:{" "}
-              <span className="font-semibold text-foreground">
-                {walletBalance.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
-              </span>
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 space-y-1">
-              <Label className="text-xs text-muted-foreground">Aplicar crédito</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                max={Math.min(walletBalance, selectedInvoice.balanceAmount)}
-                placeholder="0.00"
-                className="h-8 text-sm"
-                {...register("walletCreditAmount", { valueAsNumber: true })}
-              />
-            </div>
-            <div className="pt-5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setValue(
-                    "walletCreditAmount",
-                    Math.min(walletBalance, selectedInvoice.balanceAmount)
-                  )
-                }
-              >
-                Máximo
-              </Button>
-            </div>
-          </div>
-          {errors.walletCreditAmount && (
-            <p className="text-sm text-destructive">{errors.walletCreditAmount.message}</p>
-          )}
-        </div>
-      )}
-
-      {/* Summary panel */}
-      {selectedInvoice && (
-        <div className="flex flex-wrap gap-6 rounded-lg border bg-muted/40 px-5 py-4 text-sm">
-          <div>
-            <p className="text-muted-foreground text-xs mb-0.5">Saldo da fatura</p>
-            <p className="font-semibold tabular-nums">
-              {selectedInvoice.balanceAmount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          {effectiveCredit > 0 && (
-            <div>
-              <p className="text-muted-foreground text-xs mb-0.5">Crédito carteira</p>
-              <p className="font-semibold tabular-nums text-green-600">
-                −{effectiveCredit.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-          )}
-          <div>
-            <p className="text-muted-foreground text-xs mb-0.5">Total a pagar</p>
-            <p className="font-semibold tabular-nums">
-              {paymentTotal.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          {overpayment > 0 ? (
-            <div>
-              <p className="text-muted-foreground text-xs mb-0.5">Excesso → carteira</p>
-              <p className="font-semibold tabular-nums text-blue-600">
-                +{overpayment.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-          ) : (
-            <div>
-              <p className="text-muted-foreground text-xs mb-0.5">Saldo restante</p>
-              <p className="font-semibold tabular-nums">
-                {finalRemaining !== null
-                  ? finalRemaining.toLocaleString("pt-PT", { minimumFractionDigits: 2 })
-                  : "—"}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Splits */}
       <div className="space-y-3">
@@ -310,6 +210,41 @@ export function RegisterPaymentForm({ invoices, defaultInvoiceId }: Props) {
           </p>
         )}
       </div>
+
+      {/* Summary panel */}
+      {selectedInvoice && (
+        <div className="flex flex-wrap gap-6 rounded-lg border bg-muted/40 px-5 py-4 text-sm">
+          <div>
+            <p className="text-muted-foreground text-xs mb-0.5">Saldo da fatura</p>
+            <p className="font-semibold tabular-nums">
+              {selectedInvoice.balanceAmount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs mb-0.5">Novo dinheiro</p>
+            <p className="font-semibold tabular-nums">
+              {paymentTotal.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+          {overpayment > 0 ? (
+            <div>
+              <p className="text-muted-foreground text-xs mb-0.5">Excesso → carteira</p>
+              <p className="font-semibold tabular-nums text-blue-600">
+                +{overpayment.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-muted-foreground text-xs mb-0.5">Saldo remanescente</p>
+              <p className="font-semibold tabular-nums">
+                {finalRemaining !== null
+                  ? finalRemaining.toLocaleString("pt-PT", { minimumFractionDigits: 2 })
+                  : "—"}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Payment date */}
       <div className="space-y-2">

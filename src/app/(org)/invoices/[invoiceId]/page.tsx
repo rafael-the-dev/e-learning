@@ -1,4 +1,5 @@
 import { redirect, notFound } from "next/navigation";
+import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -46,21 +47,40 @@ export default async function InvoiceDetailPage({
     CANCELLED: "destructive",
   };
 
+  const breadcrumb = (
+    <nav className="flex items-center gap-2 text-muted-foreground">
+      <Link href="/invoices" className="hover:text-foreground transition-colors">
+        Faturas
+      </Link>
+      <span>/</span>
+      <span className="text-foreground">{invoice.invoiceNumber}</span>
+      {invoice.studentId && invoice.studentName && (
+        <>
+          <span>·</span>
+          <Link href={`/students/${invoice.studentId}`} className="hover:text-foreground transition-colors">
+            {invoice.studentName}
+          </Link>
+        </>
+      )}
+    </nav>
+  );
+
   return (
     <>
       <PageHeader
         title={`Fatura ${invoice.invoiceNumber}`}
         description={invoice.studentName ?? ""}
+        breadcrumb={breadcrumb}
         actions={
           <div className="flex gap-2">
             {canCreatePlan && !plan && invoice.status !== "CANCELLED" && invoice.status !== "PAID" && (
               <Button variant="outline" size="sm" asChild>
-                <a href={`/invoices/${invoice.id}/payment-plan`}>Criar Plano</a>
+                <Link href={`/invoices/${invoice.id}/payment-plan`}>Criar Plano</Link>
               </Button>
             )}
             {canCancel && invoice.status !== "CANCELLED" && invoice.paidAmount === 0 && (
               <Button variant="destructive" size="sm" asChild>
-                <a href={`/invoices/${invoice.id}?action=cancel`}>Cancelar</a>
+                <Link href={`/invoices/${invoice.id}?action=cancel`}>Cancelar</Link>
               </Button>
             )}
           </div>
@@ -86,7 +106,13 @@ export default async function InvoiceDetailPage({
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Matrícula</p>
-            <p className="font-medium">{invoice.enrollmentNumber ?? "—"}</p>
+            {invoice.enrollmentId ? (
+              <Link href={`/enrollments/${invoice.enrollmentId}`} className="font-medium hover:underline">
+                {invoice.enrollmentNumber ?? invoice.enrollmentId}
+              </Link>
+            ) : (
+              <p className="font-medium">—</p>
+            )}
           </div>
         </div>
 

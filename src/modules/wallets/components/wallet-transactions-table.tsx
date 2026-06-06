@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
@@ -107,7 +108,11 @@ export function WalletTransactionsTable({ result, defaultType }: Props) {
                     {tx.description ?? "—"}
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">
-                    {tx.referenceId ?? "—"}
+                    {tx.referenceId && tx.referenceType === "Invoice" ? (
+                      <Link href={`/invoices/${tx.referenceId}`} className="hover:underline">
+                        {tx.referenceId}
+                      </Link>
+                    ) : (tx.referenceId ?? "—")}
                   </TableCell>
                   <TableCell
                     className={cn(

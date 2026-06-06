@@ -161,6 +161,7 @@ ALTER TABLE [dbo].[payments] ADD CONSTRAINT [payments_branchId_fkey] FOREIGN KEY
 ALTER TABLE [dbo].[payments] ADD CONSTRAINT [payments_studentId_fkey] FOREIGN KEY ([studentId]) REFERENCES [dbo].[students]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE [dbo].[payments] ADD CONSTRAINT [payments_invoiceId_fkey] FOREIGN KEY ([invoiceId]) REFERENCES [dbo].[invoices]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE [dbo].[payments] ADD CONSTRAINT [payments_installmentId_fkey] FOREIGN KEY ([installmentId]) REFERENCES [dbo].[installments]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE [dbo].[payments] ADD CONSTRAINT [payments_enrollmentId_fkey] FOREIGN KEY ([enrollmentId]) REFERENCES [dbo].[enrollments]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey: receipts
 ALTER TABLE [dbo].[receipts] ADD CONSTRAINT [receipts_organizationId_fkey] FOREIGN KEY ([organizationId]) REFERENCES [dbo].[organizations]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;
