@@ -44,6 +44,10 @@ model Organization {
   courseCategories  CourseCategory[]
   subjects          Subject[]
   levelSubjects     LevelSubject[]
+  lessons           Lesson[]
+  lessonAttachments LessonAttachment[]
+  subjectLessons    SubjectLesson[]
+  lessonProgress    StudentLessonProgress[]
   vehicles          Vehicle[]
   invoices          Invoice[]
   payments          Payment[]
@@ -303,6 +307,7 @@ model Student {
   payments         Payment[]
   receipts         Receipt[]
   wallets          StudentWallet[]
+  lessonProgress   StudentLessonProgress[]
 
   @@map("students")
 }
@@ -439,6 +444,7 @@ model Subject {
   levelSubjects   LevelSubject[]
   teacherSubjects TeacherSubject[]
   attendances     AttendanceRecord[]
+  subjectLessons  SubjectLesson[]
 
   @@unique([organizationId, code])
   @@map("subjects")
@@ -789,9 +795,10 @@ model Enrollment {
   courseLevel    CourseLevel?              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   classGroup     ClassGroup?               @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   billingPolicy  EnrollmentBillingPolicy?  @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  invoices       Invoice[]
-  payments       Payment[]
-  statusHistory  EnrollmentStatusHistory[]
+  invoices        Invoice[]
+  payments        Payment[]
+  statusHistory   EnrollmentStatusHistory[]
+  lessonProgress  StudentLessonProgress[]
 
   @@unique([organizationId, enrollmentNumber])
   @@map("enrollments")
@@ -1193,6 +1200,117 @@ model Notification {
   user         User?        @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("notifications")
+}
+
+// =============================================================================
+// LESSONS & CONTENT LIBRARY
+// =============================================================================
+
+model Lesson {
+  id               String    @id @default(cuid())
+  organizationId   String
+  title            String
+  slug             String
+  description      String?   @db.NVarChar(Max)
+  summary          String?   @db.NVarChar(Max)
+  objectives       String?   @db.NVarChar(Max)
+  durationMinutes  Int?
+  // LessonType: VIDEO | TEXT | LIVE | PRACTICAL | READING | ASSIGNMENT_PREP
+  lessonType       String    @default("TEXT")
+  // VideoProvider: YOUTUBE | VIMEO | CLOUDFLARE_STREAM | BUNNY | S3 | EXTERNAL | NONE
+  videoProvider    String    @default("NONE")
+  videoUrl         String?   @db.NVarChar(Max)
+  externalVideoId  String?
+  thumbnailUrl     String?   @db.NVarChar(Max)
+  // LessonStatus: DRAFT | PUBLISHED | ARCHIVED
+  status           String    @default("DRAFT")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attachments     LessonAttachment[]
+  subjectLessons  SubjectLesson[]
+  lessonProgress  StudentLessonProgress[]
+
+  @@unique([organizationId, slug])
+  @@map("lessons")
+}
+
+model LessonAttachment {
+  id               String    @id @default(cuid())
+  organizationId   String
+  lessonId         String
+  fileName         String
+  fileUrl          String    @db.NVarChar(Max)
+  // FileType: PDF | IMAGE | DOCUMENT | SPREADSHEET | PRESENTATION | AUDIO | VIDEO | OTHER
+  fileType         String    @default("OTHER")
+  fileSize         Int?
+  isDownloadable   Boolean   @default(true)
+  // LessonAttachmentStatus: ACTIVE | ARCHIVED
+  status           String    @default("ACTIVE")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lesson       Lesson       @relation(fields: [lessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("lesson_attachments")
+}
+
+model SubjectLesson {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  subjectId           String
+  lessonId            String
+  order               Int       @default(0)
+  isRequired          Boolean   @default(false)
+  minWatchPercentage  Int       @default(0)
+  unlockAfterLessonId String?
+  // SubjectLessonStatus: ACTIVE | INACTIVE | ARCHIVED
+  status              String    @default("ACTIVE")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject      Subject                @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lesson       Lesson                 @relation(fields: [lessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  unlockAfter  SubjectLesson?         @relation("UnlockChain", fields: [unlockAfterLessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  unlockedBy   SubjectLesson[]        @relation("UnlockChain")
+  lessonProgress StudentLessonProgress[]
+
+  @@unique([subjectId, lessonId])
+  @@unique([subjectId, order])
+  @@map("subject_lessons")
+}
+
+model StudentLessonProgress {
+  id                String    @id @default(cuid())
+  organizationId    String
+  studentId         String
+  enrollmentId      String
+  subjectId         String
+  lessonId          String
+  subjectLessonId   String?
+  watchedSeconds    Int       @default(0)
+  progressPercentage Decimal  @db.Decimal(5, 2) @default(0)
+  // ProgressStatus: NOT_STARTED | IN_PROGRESS | COMPLETED
+  status            String    @default("NOT_STARTED")
+  completedAt       DateTime?
+  lastAccessedAt    DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student        Student        @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment     Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lesson         Lesson         @relation(fields: [lessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subjectLesson  SubjectLesson? @relation(fields: [subjectLessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([studentId, enrollmentId, lessonId])
+  @@map("student_lesson_progress")
 }
 
 // =============================================================================

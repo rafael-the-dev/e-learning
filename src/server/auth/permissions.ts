@@ -202,6 +202,30 @@ export const PERMISSIONS = {
   TAX_RULES_ARCHIVE: "taxRules.archive",
   TAX_RULES_DELETE: "taxRules.delete",
 
+  // Lessons
+  LESSONS_VIEW: "lessons.view",
+  LESSONS_CREATE: "lessons.create",
+  LESSONS_UPDATE: "lessons.update",
+  LESSONS_PUBLISH: "lessons.publish",
+  LESSONS_ARCHIVE: "lessons.archive",
+  LESSONS_DELETE: "lessons.delete",
+
+  // Lesson Attachments
+  LESSON_ATTACHMENTS_VIEW: "lessonAttachments.view",
+  LESSON_ATTACHMENTS_CREATE: "lessonAttachments.create",
+  LESSON_ATTACHMENTS_DELETE: "lessonAttachments.delete",
+
+  // Subject Lessons
+  SUBJECT_LESSONS_VIEW: "subjectLessons.view",
+  SUBJECT_LESSONS_ASSIGN: "subjectLessons.assign",
+  SUBJECT_LESSONS_UPDATE: "subjectLessons.update",
+  SUBJECT_LESSONS_REMOVE: "subjectLessons.remove",
+  SUBJECT_LESSONS_REORDER: "subjectLessons.reorder",
+
+  // Lesson Progress
+  LESSON_PROGRESS_VIEW: "lessonProgress.view",
+  LESSON_PROGRESS_UPDATE: "lessonProgress.update",
+
   // Reports
   REPORTS_VIEW: "reports.view",
   REPORTS_EXPORT: "reports.export",
@@ -237,6 +261,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ) as Permission[],
 
   SECRETARY: [
+    PERMISSIONS.LESSONS_VIEW,
+    PERMISSIONS.SUBJECT_LESSONS_VIEW,
+    PERMISSIONS.LESSON_ATTACHMENTS_VIEW,
     PERMISSIONS.STUDENTS_CREATE,
     PERMISSIONS.STUDENTS_READ,
     PERMISSIONS.STUDENTS_UPDATE,
@@ -295,6 +322,15 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   TEACHER: [
+    PERMISSIONS.LESSONS_VIEW,
+    PERMISSIONS.LESSONS_CREATE,
+    PERMISSIONS.LESSONS_UPDATE,
+    PERMISSIONS.LESSON_ATTACHMENTS_VIEW,
+    PERMISSIONS.LESSON_ATTACHMENTS_CREATE,
+    PERMISSIONS.LESSON_ATTACHMENTS_DELETE,
+    PERMISSIONS.SUBJECT_LESSONS_VIEW,
+    PERMISSIONS.SUBJECT_LESSONS_ASSIGN,
+    PERMISSIONS.SUBJECT_LESSONS_UPDATE,
     PERMISSIONS.STUDENTS_READ,
     PERMISSIONS.COURSES_READ,
     PERMISSIONS.CLASS_GROUPS_READ,
@@ -312,6 +348,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   STUDENT: [
+    PERMISSIONS.LESSON_PROGRESS_VIEW,
+    PERMISSIONS.LESSON_PROGRESS_UPDATE,
     PERMISSIONS.ENROLLMENTS_VIEW,
     PERMISSIONS.ATTENDANCE_READ,
     PERMISSIONS.INVOICES_VIEW,
