@@ -13,13 +13,13 @@ import {
   getLessonSubjects,
 } from "@/modules/lessons/services/lesson.service";
 import { LessonDetailActions } from "@/modules/lessons/components/lesson-detail-actions";
-import { LessonAttachmentsPanel } from "@/modules/lessons/components/lesson-attachments-panel";
+import { LessonDetailTabs } from "@/modules/lessons/components/lesson-detail-tabs";
 import { VideoLoader } from "@/modules/lessons/components/video/video-loader";
 import {
   LESSON_STATUS_LABELS,
   LESSON_TYPE_LABELS,
 } from "@/modules/lessons/types";
-import { Pencil, BookOpen, Clock } from "lucide-react";
+import { Pencil, Clock } from "lucide-react";
 import type { AuthContext } from "@/server/auth/context";
 import type { ProgressContext } from "@/modules/lessons/components/video/video-types";
 
@@ -169,48 +169,16 @@ export default async function LessonDetailPage({
           </section>
         )}
 
-        {/* Description */}
-        {lesson.description && (
-          <section className="space-y-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Descrição</h2>
-            <p className="text-sm whitespace-pre-wrap">{lesson.description}</p>
-          </section>
-        )}
-
-        {/* Objectives */}
-        {lesson.objectives && (
-          <section className="space-y-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Objetivos de Aprendizagem</h2>
-            <p className="text-sm whitespace-pre-wrap">{lesson.objectives}</p>
-          </section>
-        )}
-
-        {/* Attachments */}
-        <LessonAttachmentsPanel
+        {/* Tabbed content */}
+        <LessonDetailTabs
+          description={lesson.description}
+          objectives={lesson.objectives}
           lessonId={lesson.id}
           attachments={attachments}
-          canCreate={ability.can(PERMISSIONS.LESSON_ATTACHMENTS_CREATE)}
-          canDelete={ability.can(PERMISSIONS.LESSON_ATTACHMENTS_DELETE)}
+          canCreateAttachment={ability.can(PERMISSIONS.LESSON_ATTACHMENTS_CREATE)}
+          canDeleteAttachment={ability.can(PERMISSIONS.LESSON_ATTACHMENTS_DELETE)}
+          subjects={subjects}
         />
-
-        {/* Subjects using this lesson */}
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-            <BookOpen className="size-4" />
-            Disciplinas que usam esta lição ({subjects.length})
-          </h2>
-          {subjects.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Esta lição ainda não foi atribuída a nenhuma disciplina.</p>
-          ) : (
-            <ul className="flex flex-wrap gap-2">
-              {subjects.map((s) => (
-                <li key={s.subjectId}>
-                  <Badge variant="outline">{s.subjectName}</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       </div>
     </>
   );
