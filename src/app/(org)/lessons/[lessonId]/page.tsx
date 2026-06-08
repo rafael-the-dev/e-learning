@@ -6,6 +6,7 @@ import { Button } from "@/shared/components/ui/button";
 import { requirePermission } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { getDb } from "@/server/db";
 import {
   getLessonById,
   getLessonAttachments,
@@ -13,13 +14,14 @@ import {
 } from "@/modules/lessons/services/lesson.service";
 import { LessonDetailActions } from "@/modules/lessons/components/lesson-detail-actions";
 import { LessonAttachmentsPanel } from "@/modules/lessons/components/lesson-attachments-panel";
+import { VideoLoader } from "@/modules/lessons/components/video/video-loader";
 import {
   LESSON_STATUS_LABELS,
   LESSON_TYPE_LABELS,
-  VIDEO_PROVIDER_LABELS,
 } from "@/modules/lessons/types";
-import { Pencil, BookOpen, Clock, Video } from "lucide-react";
+import { Pencil, BookOpen, Clock } from "lucide-react";
 import type { AuthContext } from "@/server/auth/context";
+import type { ProgressContext } from "@/modules/lessons/components/video/video-types";
 
 export async function generateMetadata({
   params,
@@ -32,8 +34,10 @@ export async function generateMetadata({
 
 export default async function LessonDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ lessonId: string }>;
+  searchParams: Promise<{ enrollmentId?: string; subjectId?: string }>;
 }) {
   let context: AuthContext;
   try {
@@ -43,6 +47,7 @@ export default async function LessonDetailPage({
   }
 
   const { lessonId } = await params;
+  const sp = await searchParams;
 
   const [lesson, attachments, subjects] = await Promise.all([
     getLessonById(lessonId, context.organizationId).catch(() => null),
@@ -54,6 +59,52 @@ export default async function LessonDetailPage({
 
   const perms = await getUserPermissions(context.userId, context.organizationId);
   const ability = createAbility(perms);
+
+  // Resolve progress context when the caller supplies enrollment + subject params.
+  // This is how student-facing flows (e.g. enrollment portal) link to lesson playback.
+  let progressContext: ProgressContext | undefined;
+
+  const hasProgressPermission = ability.can(PERMISSIONS.LESSON_PROGRESS_UPDATE);
+  const { enrollmentId, subjectId } = sp;
+
+  if (hasProgressPermission && enrollmentId && subjectId && lesson.status === "PUBLISHED") {
+    const db = await getDb();
+
+    const [enrollment, subjectLesson, existingProgress] = await Promise.all([
+      db.enrollment.findFirst({
+        where: { id: enrollmentId, organizationId: context.organizationId, status: "ACTIVE", deletedAt: null },
+        select: { id: true },
+      }),
+      db.subjectLesson.findFirst({
+        where: { subjectId, lessonId, organizationId: context.organizationId, deletedAt: null },
+        select: { id: true, minWatchPercentage: true },
+      }),
+      db.studentLessonProgress.findFirst({
+        where: { lessonId, enrollmentId, organizationId: context.organizationId },
+        select: { watchedSeconds: true, progressPercentage: true, status: true },
+      }),
+    ]);
+
+    if (enrollment && subjectLesson) {
+      progressContext = {
+        lessonId,
+        subjectId,
+        enrollmentId,
+        minWatchPercentage: subjectLesson.minWatchPercentage,
+        initialProgress: existingProgress
+          ? {
+              watchedSeconds: existingProgress.watchedSeconds,
+              progressPercentage: Number(existingProgress.progressPercentage),
+              status: existingProgress.status,
+            }
+          : undefined,
+      };
+    }
+  }
+
+  const hasVideo =
+    lesson.videoProvider !== "NONE" &&
+    (lesson.externalVideoId !== null || lesson.videoUrl !== null);
 
   const statusVariant =
     lesson.status === "PUBLISHED" ? "default" : lesson.status === "DRAFT" ? "secondary" : "outline";
@@ -84,7 +135,7 @@ export default async function LessonDetailPage({
       />
 
       <div className="p-8 space-y-8 max-w-4xl">
-        {/* Meta */}
+        {/* Status / type / duration */}
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant={statusVariant}>
             {LESSON_STATUS_LABELS[lesson.status] ?? lesson.status}
@@ -98,30 +149,23 @@ export default async function LessonDetailPage({
               {lesson.durationMinutes} min
             </span>
           )}
-          {lesson.videoProvider !== "NONE" && (
-            <span className="text-sm text-muted-foreground flex items-center gap-1">
-              <Video className="size-3.5" />
-              {VIDEO_PROVIDER_LABELS[lesson.videoProvider] ?? lesson.videoProvider}
-            </span>
-          )}
         </div>
 
-        {/* Video — only loaded on detail page, never in list */}
-        {lesson.videoProvider !== "NONE" && lesson.externalVideoId && (
+        {/* Video player */}
+        {hasVideo && (
           <section className="space-y-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Vídeo</h2>
-            <div className="rounded-lg border p-4 bg-muted/30 text-sm space-y-1">
-              <p><span className="font-medium">Fornecedor:</span> {VIDEO_PROVIDER_LABELS[lesson.videoProvider]}</p>
-              <p><span className="font-medium">ID:</span> <code className="font-mono text-xs">{lesson.externalVideoId}</code></p>
-              {lesson.videoUrl && (
-                <p>
-                  <span className="font-medium">URL:</span>{" "}
-                  <a href={lesson.videoUrl} target="_blank" rel="noopener noreferrer" className="underline text-primary">
-                    Ver vídeo
-                  </a>
-                </p>
-              )}
-            </div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Vídeo
+            </h2>
+            <VideoLoader
+              video={{
+                videoProvider: lesson.videoProvider,
+                videoUrl: lesson.videoUrl,
+                externalVideoId: lesson.externalVideoId,
+                title: lesson.title,
+              }}
+              progressContext={progressContext}
+            />
           </section>
         )}
 

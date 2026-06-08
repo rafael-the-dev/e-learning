@@ -69,13 +69,6 @@ export class UpdateLessonProgressCommand extends BaseCommand<
   }
 
   async execute(): Promise<StudentLessonProgress> {
-    const isCompleted = this.input.progressPercentage >= 100;
-    const status = isCompleted
-      ? "COMPLETED"
-      : this.input.watchedSeconds > 0 || this.input.progressPercentage > 0
-      ? "IN_PROGRESS"
-      : "NOT_STARTED";
-
     const db = await getDb();
     const enrollment = await db.enrollment.findFirst({
       where: { id: this.input.enrollmentId, organizationId: this.context.organizationId },
@@ -93,8 +86,17 @@ export class UpdateLessonProgressCommand extends BaseCommand<
         organizationId: this.context.organizationId,
         deletedAt: null,
       },
-      select: { id: true },
+      select: { id: true, minWatchPercentage: true },
     });
+
+    // Complete when progress reaches the subject-specific threshold, not hardcoded 100.
+    const threshold = subjectLesson?.minWatchPercentage ?? 100;
+    const isCompleted = this.input.progressPercentage >= threshold;
+    const status = isCompleted
+      ? "COMPLETED"
+      : this.input.watchedSeconds > 0 || this.input.progressPercentage > 0
+      ? "IN_PROGRESS"
+      : "NOT_STARTED";
 
     const progress = await upsertLessonProgress({
       organizationId: this.context.organizationId,

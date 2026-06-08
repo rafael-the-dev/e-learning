@@ -72,9 +72,45 @@ If `Lesson` had a `subjectId`, the same content (e.g., "Introduction to Road Sig
 
 ## Video Loading Strategy
 
-- **Lesson list**: Video is **never loaded**. Only metadata is shown (provider, external ID).
-- **Lesson detail page** (`/lessons/[lessonId]`): Video metadata is displayed with a link. Full player embedding is deferred to a future implementation once signed URL support is added.
-- **Architecture**: `videoProvider + externalVideoId + videoUrl` are stored separately. The system is ready for signed URL generation per provider.
+Videos are embedded inside the platform. Students never leave to an external provider.
+
+### Rules
+
+- **Lesson list** — video is **never loaded**. Only metadata is shown (provider, icon).
+- **Lesson detail page** — `VideoLoader` selects the correct player based on `videoProvider`.
+- **Preview mode** — admin/teacher (no `enrollmentId`/`subjectId` params) sees a "Modo de pré-visualização" notice; progress is not recorded.
+- **Student mode** — URL includes `?enrollmentId=…&subjectId=…`; server validates both against `organizationId` before building `ProgressContext`.
+
+### Provider Support Matrix
+
+| `videoProvider` | Player | Progress tracking |
+|---|---|---|
+| `YOUTUBE` | YouTube IFrame API | Event-based (polling every 5 s) |
+| `VIMEO` | Vimeo postMessage API | Event-based (`playProgress`) |
+| `S3` | Native `<video>` element | `timeupdate` + `ended` events |
+| `CLOUDFLARE_STREAM` | Cloudflare iframe | Manual complete button |
+| `BUNNY` | Bunny iframe | Manual complete button |
+| `EXTERNAL` | Sandboxed iframe | Manual complete button |
+
+### Architecture
+
+```
+VideoLoader          — orchestrates provider selection, progress bar, completed banner
+  ├── YouTubePlayer  — dynamic YT IFrame API, no npm package
+  ├── VimeoPlayer    — postMessage, no npm package
+  ├── CloudflareStreamPlayer
+  ├── BunnyStreamPlayer
+  └── ExternalVideoPlayer  — mode="s3" (native video) | mode="external" (iframe)
+
+useVideoProgress     — 5-second debounce before updateLessonProgressAction
+                       onEnded flushes immediately
+```
+
+### Adding a new provider
+
+1. Create `src/modules/lessons/components/video/<provider>-player.tsx` implementing `VideoPlayerProps`.
+2. Add a `case` in `VideoLoader.renderPlayer()`.
+3. If the provider exposes progress events, add it to the `TRACKABLE` set in `video-loader.tsx`.
 
 ---
 
@@ -86,7 +122,7 @@ Progress is only valid when the student has an **ACTIVE enrollment**. The `Updat
 2. `lesson.status === "PUBLISHED"` — students cannot track progress on drafts
 3. Progress is upserted by `(studentId, enrollmentId, lessonId)` unique key
 
-Progress percentage ≥ 100 automatically sets status to `COMPLETED`.
+Completion threshold comes from `SubjectLesson.minWatchPercentage` (not hardcoded 100%). When `progressPercentage >= minWatchPercentage`, status is set to `COMPLETED` and `completedAt` is recorded.
 
 ---
 
@@ -118,7 +154,7 @@ Progress percentage ≥ 100 automatically sets status to `COMPLETED`.
 | ORG_ADMIN | All | All | All | All |
 | TEACHER | view, create, update | view, create, delete | view, assign, update | — |
 | SECRETARY | view | view | view | — |
-| STUDENT | — | — | — | view + update (own) |
+| STUDENT | view | — | — | view + update (own) |
 
 ---
 
@@ -158,6 +194,7 @@ src/modules/lessons/
 │   ├── archive-lesson.command.ts
 │   ├── soft-delete-lesson.command.ts
 │   ├── create-lesson-attachment.command.ts
+│   ├── update-lesson-attachment.command.ts
 │   ├── delete-lesson-attachment.command.ts
 │   ├── assign-lesson-to-subject.command.ts
 │   ├── update-subject-lesson.command.ts
@@ -165,13 +202,23 @@ src/modules/lessons/
 │   ├── reorder-subject-lessons.command.ts
 │   └── update-lesson-progress.command.ts
 ├── components/
+│   ├── lesson-attachments-panel.tsx
 │   ├── lesson-columns.tsx
 │   ├── lesson-detail-actions.tsx
 │   ├── lesson-form.tsx
 │   ├── lessons-table.tsx
 │   ├── subject-lesson-columns.tsx
 │   ├── subject-lesson-form.tsx
-│   └── subject-lessons-panel.tsx
+│   ├── subject-lessons-panel.tsx
+│   └── video/
+│       ├── video-types.ts
+│       ├── use-video-progress.ts
+│       ├── video-loader.tsx
+│       ├── youtube-player.tsx
+│       ├── vimeo-player.tsx
+│       ├── cloudflare-stream-player.tsx
+│       ├── bunny-stream-player.tsx
+│       └── external-video-player.tsx
 ├── repositories/
 │   ├── lesson.repository.ts
 │   ├── lesson-attachment.repository.ts
