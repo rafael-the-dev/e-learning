@@ -38,6 +38,7 @@ export interface Invoice {
   branchId: string | null;
   enrollmentId: string | null;
   studentId: string | null;
+  billingPolicyId: string | null;
   invoiceNumber: string;
   issueDate: Date;
   dueDate: Date | null;

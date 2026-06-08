@@ -44,7 +44,7 @@ export function CreateInvoiceForm({ students, defaultStudentId }: Props) {
     control,
     watch,
     formState: { errors },
-  } = useForm<CreateInvoiceInput>({
+  } = useForm<z.input<typeof createInvoiceSchema>, unknown, CreateInvoiceInput>({
     resolver: zodResolver(createInvoiceSchema),
     defaultValues: {
       studentId: defaultStudentId ?? "",
@@ -305,4 +305,7 @@ export function CreateInvoiceForm({ students, defaultStudentId }: Props) {
         <Button type="button" variant="outline" onClick={() => router.back()}>
           Cancelar
         </Button>
-      <
+      </div>
+    </form>
+  );
+}

@@ -60,6 +60,13 @@ model Organization {
   schedulePeriods   SchedulePeriod[]
   scheduleSlots     ScheduleSlot[]
   classGroupSchedules ClassGroupSchedule[]
+  feeDefinitions           FeeDefinition[]
+  enrollmentBillingPolicies EnrollmentBillingPolicy[]
+  policyFees               PolicyFee[]
+  discountRules            DiscountRule[]
+  taxRules                 TaxRule[]
+  appliedDiscounts         AppliedDiscount[]
+  appliedTaxes             AppliedTax[]
 
   @@map("organizations")
 }
@@ -576,6 +583,181 @@ model ClassGroupSchedule {
 }
 
 // =============================================================================
+// BILLING POLICIES
+// =============================================================================
+
+model FeeDefinition {
+  id             String    @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  description    String?   @db.NVarChar(Max)
+  // FeeType: REGISTRATION_FEE | COURSE_FEE | MATERIAL_FEE | EXAM_FEE | CERTIFICATE_FEE | PENALTY | OTHER
+  feeType        String
+  defaultAmount  Decimal   @db.Decimal(10, 2)
+  // FeeAppliesTo: ENROLLMENT | COURSE | LEVEL | CERTIFICATE | EXAM | MANUAL
+  appliesTo      String    @default("ENROLLMENT")
+  isMandatory    Boolean   @default(false)
+  priority       Int       @default(7)
+  // FeeDefinitionStatus: ACTIVE | INACTIVE | ARCHIVED
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+  updatedBy      String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  policyFees   PolicyFee[]
+
+  @@unique([organizationId, code])
+  @@map("fee_definitions")
+}
+
+model EnrollmentBillingPolicy {
+  id                              String    @id @default(cuid())
+  organizationId                  String
+  name                            String
+  description                     String?   @db.NVarChar(Max)
+  autoGenerateInvoiceOnEnrollment Boolean   @default(true)
+  // InvoiceMode: MANUAL | SINGLE_INVOICE | INSTALLMENT_INVOICES
+  invoiceMode                     String    @default("SINGLE_INVOICE")
+  // ActivationRule: MANUAL | AFTER_INVOICE_CREATED | AFTER_REGISTRATION_FEE | AFTER_FIRST_PAYMENT | AFTER_FULL_PAYMENT
+  activationRule                  String    @default("MANUAL")
+  installmentsRequired            Boolean   @default(false)
+  defaultNumberOfInstallments     Int?
+  minimumFirstPaymentAmount       Decimal?  @db.Decimal(10, 2)
+  allowWalletCreditOnEnrollment   Boolean   @default(true)
+  // BillingPolicyStatus: ACTIVE | INACTIVE | ARCHIVED
+  status                          String    @default("ACTIVE")
+  isDefault                       Boolean   @default(false)
+  createdAt                       DateTime  @default(now())
+  updatedAt                       DateTime  @updatedAt
+  deletedAt                       DateTime?
+  createdBy                       String?
+  updatedBy                       String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  policyFees   PolicyFee[]
+  enrollments  Enrollment[]
+  invoices     Invoice[]
+
+  @@unique([organizationId, name])
+  @@map("enrollment_billing_policies")
+}
+
+model PolicyFee {
+  id              String   @id @default(cuid())
+  organizationId  String
+  policyId        String
+  feeDefinitionId String
+  // PolicyFeeAmountType: FIXED | PERCENTAGE_OF_COURSE_PRICE | COURSE_BASE_PRICE
+  amountType      String   @default("FIXED")
+  fixedAmount     Decimal? @db.Decimal(10, 2)
+  percentage      Decimal? @db.Decimal(5, 2)
+  isRequired      Boolean  @default(true)
+  priority        Int      @default(7)
+  // PolicyFeeStatus: ACTIVE | INACTIVE
+  status          String   @default("ACTIVE")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization  Organization            @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  policy        EnrollmentBillingPolicy @relation(fields: [policyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  feeDefinition FeeDefinition           @relation(fields: [feeDefinitionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([policyId, feeDefinitionId])
+  @@map("policy_fees")
+}
+
+model DiscountRule {
+  id             String    @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  description    String?   @db.NVarChar(Max)
+  // DiscountType: PERCENTAGE | FIXED_AMOUNT
+  discountType   String
+  value          Decimal   @db.Decimal(10, 2)
+  // DiscountAppliesTo: ENROLLMENT | COURSE | ALL
+  appliesTo      String    @default("ENROLLMENT")
+  startDate      DateTime?
+  endDate        DateTime?
+  stackable      Boolean   @default(false)
+  // DiscountRuleStatus: ACTIVE | INACTIVE | ARCHIVED
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+  updatedBy      String?
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  appliedDiscounts AppliedDiscount[]
+
+  @@unique([organizationId, code])
+  @@map("discount_rules")
+}
+
+model TaxRule {
+  id                String    @id @default(cuid())
+  organizationId    String
+  code              String
+  name              String
+  description       String?   @db.NVarChar(Max)
+  rate              Decimal   @db.Decimal(5, 2)
+  // TaxAppliesTo: ENROLLMENT | COURSE | ALL
+  appliesTo         String    @default("ENROLLMENT")
+  isIncludedInPrice Boolean   @default(false)
+  // TaxRuleStatus: ACTIVE | INACTIVE | ARCHIVED
+  status            String    @default("ACTIVE")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+  createdBy         String?
+  updatedBy         String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  appliedTaxes AppliedTax[]
+
+  @@unique([organizationId, code])
+  @@map("tax_rules")
+}
+
+model AppliedDiscount {
+  id             String   @id @default(cuid())
+  organizationId String
+  invoiceId      String
+  discountRuleId String
+  amount         Decimal  @db.Decimal(10, 2)
+  description    String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  discountRule DiscountRule @relation(fields: [discountRuleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("applied_discounts")
+}
+
+model AppliedTax {
+  id             String   @id @default(cuid())
+  organizationId String
+  invoiceId      String
+  taxRuleId      String
+  amount         Decimal  @db.Decimal(10, 2)
+  rate           Decimal  @db.Decimal(5, 2)
+  description    String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  taxRule      TaxRule      @relation(fields: [taxRuleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("applied_taxes")
+}
+
+// =============================================================================
 // ENROLLMENTS
 // =============================================================================
 
@@ -587,6 +769,7 @@ model Enrollment {
   courseId         String
   courseLevelId    String?
   classGroupId     String?
+  billingPolicyId  String?
   enrollmentNumber String?
   enrollmentDate   DateTime  @default(now())
   startDate        DateTime?
@@ -600,14 +783,15 @@ model Enrollment {
   createdBy        String?
   updatedBy        String?
 
-  branch        Branch?                   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student       Student                   @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  course        Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courseLevel   CourseLevel?              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  classGroup    ClassGroup?               @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  invoices      Invoice[]
-  payments      Payment[]
-  statusHistory EnrollmentStatusHistory[]
+  branch         Branch?                   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student        Student                   @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course         Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel    CourseLevel?              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup     ClassGroup?               @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  billingPolicy  EnrollmentBillingPolicy?  @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoices       Invoice[]
+  payments       Payment[]
+  statusHistory  EnrollmentStatusHistory[]
 
   @@unique([organizationId, enrollmentNumber])
   @@map("enrollments")
@@ -717,38 +901,42 @@ model PracticalLesson {
 // =============================================================================
 
 model Invoice {
-  id             String    @id @default(cuid())
-  organizationId String
-  branchId       String?
-  enrollmentId   String?
-  studentId      String?
-  invoiceNumber  String
-  issueDate      DateTime  @default(now())
-  dueDate        DateTime?
-  subtotal       Decimal   @db.Decimal(10, 2)
-  discountAmount Decimal   @db.Decimal(10, 2) @default(0)
-  taxAmount      Decimal   @db.Decimal(10, 2) @default(0)
-  totalAmount    Decimal   @db.Decimal(10, 2)
-  paidAmount     Decimal   @db.Decimal(10, 2) @default(0)
-  balanceAmount  Decimal   @db.Decimal(10, 2) @default(0)
+  id              String    @id @default(cuid())
+  organizationId  String
+  branchId        String?
+  enrollmentId    String?
+  studentId       String?
+  billingPolicyId String?
+  invoiceNumber   String
+  issueDate       DateTime  @default(now())
+  dueDate         DateTime?
+  subtotal        Decimal   @db.Decimal(10, 2)
+  discountAmount  Decimal   @db.Decimal(10, 2) @default(0)
+  taxAmount       Decimal   @db.Decimal(10, 2) @default(0)
+  totalAmount     Decimal   @db.Decimal(10, 2)
+  paidAmount      Decimal   @db.Decimal(10, 2) @default(0)
+  balanceAmount   Decimal   @db.Decimal(10, 2) @default(0)
   // InvoiceStatus: PENDING | PARTIALLY_PAID | PAID | OVERDUE | CANCELLED
-  status         String    @default("PENDING")
-  notes          String?   @db.NVarChar(Max)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
-  createdBy      String?
-  updatedBy      String?
+  status          String    @default("PENDING")
+  notes           String?   @db.NVarChar(Max)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+  createdBy       String?
+  updatedBy       String?
 
-  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  branch       Branch?           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student      Student?          @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  enrollment   Enrollment?       @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  items        InvoiceItem[]
-  payments     Payment[]
-  paymentPlan  PaymentPlan?
-  receipts     Receipt[]
-  allocations  PaymentAllocation[]
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch         Branch?                  @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student        Student?                 @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment     Enrollment?              @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  billingPolicy  EnrollmentBillingPolicy? @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  items          InvoiceItem[]
+  payments       Payment[]
+  paymentPlan    PaymentPlan?
+  receipts       Receipt[]
+  allocations    PaymentAllocation[]
+  appliedDiscounts AppliedDiscount[]
+  appliedTaxes     AppliedTax[]
 
   @@unique([organizationId, invoiceNumber])
   @@map("invoices")

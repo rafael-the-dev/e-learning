@@ -307,3 +307,113 @@ export const AuditAction = {
   SUSPENDED: "SUSPENDED",
 } as const;
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
+
+// =============================================================================
+// BILLING POLICIES
+// =============================================================================
+
+export const FeeType = {
+  REGISTRATION_FEE: "REGISTRATION_FEE",
+  COURSE_FEE: "COURSE_FEE",
+  MATERIAL_FEE: "MATERIAL_FEE",
+  EXAM_FEE: "EXAM_FEE",
+  CERTIFICATE_FEE: "CERTIFICATE_FEE",
+  PENALTY: "PENALTY",
+  OTHER: "OTHER",
+} as const;
+export type FeeType = (typeof FeeType)[keyof typeof FeeType];
+
+export const FeeAppliesTo = {
+  ENROLLMENT: "ENROLLMENT",
+  COURSE: "COURSE",
+  LEVEL: "LEVEL",
+  CERTIFICATE: "CERTIFICATE",
+  EXAM: "EXAM",
+  MANUAL: "MANUAL",
+} as const;
+export type FeeAppliesTo = (typeof FeeAppliesTo)[keyof typeof FeeAppliesTo];
+
+export const FeeDefinitionStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type FeeDefinitionStatus =
+  (typeof FeeDefinitionStatus)[keyof typeof FeeDefinitionStatus];
+
+export const InvoiceMode = {
+  MANUAL: "MANUAL",
+  SINGLE_INVOICE: "SINGLE_INVOICE",
+  INSTALLMENT_INVOICES: "INSTALLMENT_INVOICES",
+} as const;
+export type InvoiceMode = (typeof InvoiceMode)[keyof typeof InvoiceMode];
+
+export const ActivationRule = {
+  MANUAL: "MANUAL",
+  AFTER_INVOICE_CREATED: "AFTER_INVOICE_CREATED",
+  AFTER_REGISTRATION_FEE: "AFTER_REGISTRATION_FEE",
+  AFTER_FIRST_PAYMENT: "AFTER_FIRST_PAYMENT",
+  AFTER_FULL_PAYMENT: "AFTER_FULL_PAYMENT",
+} as const;
+export type ActivationRule =
+  (typeof ActivationRule)[keyof typeof ActivationRule];
+
+export const BillingPolicyStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type BillingPolicyStatus =
+  (typeof BillingPolicyStatus)[keyof typeof BillingPolicyStatus];
+
+export const PolicyFeeAmountType = {
+  FIXED: "FIXED",
+  PERCENTAGE_OF_COURSE_PRICE: "PERCENTAGE_OF_COURSE_PRICE",
+  COURSE_BASE_PRICE: "COURSE_BASE_PRICE",
+} as const;
+export type PolicyFeeAmountType =
+  (typeof PolicyFeeAmountType)[keyof typeof PolicyFeeAmountType];
+
+export const PolicyFeeStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+} as const;
+export type PolicyFeeStatus =
+  (typeof PolicyFeeStatus)[keyof typeof PolicyFeeStatus];
+
+export const DiscountType = {
+  PERCENTAGE: "PERCENTAGE",
+  FIXED_AMOUNT: "FIXED_AMOUNT",
+} as const;
+export type DiscountType = (typeof DiscountType)[keyof typeof DiscountType];
+
+export const DiscountAppliesTo = {
+  ENROLLMENT: "ENROLLMENT",
+  COURSE: "COURSE",
+  ALL: "ALL",
+} as const;
+export type DiscountAppliesTo =
+  (typeof DiscountAppliesTo)[keyof typeof DiscountAppliesTo];
+
+export const DiscountRuleStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type DiscountRuleStatus =
+  (typeof DiscountRuleStatus)[keyof typeof DiscountRuleStatus];
+
+export const TaxAppliesTo = {
+  ENROLLMENT: "ENROLLMENT",
+  COURSE: "COURSE",
+  ALL: "ALL",
+} as const;
+export type TaxAppliesTo = (typeof TaxAppliesTo)[keyof typeof TaxAppliesTo];
+
+export const TaxRuleStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type TaxRuleStatus =
+  (typeof TaxRuleStatus)[keyof typeof TaxRuleStatus];

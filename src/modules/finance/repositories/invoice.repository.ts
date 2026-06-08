@@ -24,6 +24,7 @@ const invoiceSelect = {
   branchId: true,
   enrollmentId: true,
   studentId: true,
+  billingPolicyId: true,
   invoiceNumber: true,
   issueDate: true,
   dueDate: true,
@@ -89,6 +90,7 @@ type InvoiceRow = {
   branchId: string | null;
   enrollmentId: string | null;
   studentId: string | null;
+  billingPolicyId: string | null;
   invoiceNumber: string;
   issueDate: Date;
   dueDate: Date | null;
@@ -138,6 +140,7 @@ function mapToInvoice(row: InvoiceRow): Invoice {
     branchId: row.branchId,
     enrollmentId: row.enrollmentId,
     studentId: row.studentId,
+    billingPolicyId: row.billingPolicyId,
     invoiceNumber: row.invoiceNumber,
     issueDate: row.issueDate,
     dueDate: row.dueDate,
@@ -224,6 +227,7 @@ export async function createInvoice(data: {
   branchId?: string | null;
   enrollmentId?: string | null;
   studentId?: string | null;
+  billingPolicyId?: string | null;
   invoiceNumber: string;
   dueDate?: Date | null;
   subtotal: number;
@@ -248,6 +252,7 @@ export async function createInvoice(data: {
       branchId: data.branchId ?? null,
       enrollmentId: data.enrollmentId ?? null,
       studentId: data.studentId ?? null,
+      billingPolicyId: data.billingPolicyId ?? null,
       invoiceNumber: data.invoiceNumber,
       dueDate: data.dueDate ?? null,
       subtotal: data.subtotal,

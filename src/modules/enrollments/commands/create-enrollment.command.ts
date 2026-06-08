@@ -19,6 +19,8 @@ import {
   createEnrollmentSchema,
   type CreateEnrollmentSchema,
 } from "@/modules/enrollments/schemas/enrollment.schema";
+import { GenerateInvoiceFromEnrollmentCommand } from "@/modules/billing/commands/generate-invoice-from-enrollment.command";
+import { findDefaultBillingPolicy } from "@/modules/billing/repositories/billing-policy.repository";
 import type { Enrollment } from "@/modules/enrollments/types";
 
 export class CreateEnrollmentCommand extends BaseCommand<CreateEnrollmentSchema, Enrollment> {
@@ -181,6 +183,21 @@ export class CreateEnrollmentCommand extends BaseCommand<CreateEnrollmentSchema,
         organizationId: this.context.organizationId,
       },
     });
+
+    // Auto-generate invoice from active billing policy (best-effort — does not fail enrollment creation)
+    const policy = await findDefaultBillingPolicy(this.context.organizationId);
+    if (policy && policy.autoGenerateInvoiceOnEnrollment) {
+      try {
+        const genCmd = new GenerateInvoiceFromEnrollmentCommand(
+          { enrollmentId: enrollment.id, billingPolicyId: policy.id },
+          this.context
+        );
+        await genCmd.run();
+      } catch {
+        // Invoice generation failure must not roll back the enrollment.
+        // The admin can generate manually from the enrollment detail page.
+      }
+    }
 
     return enrollment;
   }

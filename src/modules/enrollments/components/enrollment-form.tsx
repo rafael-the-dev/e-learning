@@ -26,7 +26,9 @@ import {
   createEnrollmentAction,
   updateEnrollmentAction,
 } from "@/modules/enrollments/actions/enrollment.actions";
+import { getBillingPreviewAction } from "@/modules/billing/actions/billing-policy.actions";
 import type { Enrollment } from "@/modules/enrollments/types";
+import type { BillingCalculationResult } from "@/modules/billing/types";
 
 // =============================================================================
 // OPTION TYPES
@@ -107,6 +109,21 @@ export function CreateEnrollmentForm({
     if (selectedLevelId && g.courseLevelId && g.courseLevelId !== selectedLevelId) return false;
     return true;
   });
+
+  const [billingPreview, setBillingPreview] = React.useState<BillingCalculationResult | null>(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!selectedCourseId) {
+      setBillingPreview(null);
+      return;
+    }
+    setPreviewLoading(true);
+    getBillingPreviewAction(selectedCourseId).then((result) => {
+      setBillingPreview(result.success ? result.data : null);
+      setPreviewLoading(false);
+    });
+  }, [selectedCourseId]);
 
   function handleCourseChange() {
     setValue("courseLevelId", null);
@@ -333,7 +350,68 @@ export function CreateEnrollmentForm({
         </div>
       </section>
 
-      {/* Section 5: Notes */}
+      {/* Section 5: Billing Preview */}
+      {selectedCourseId && (
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Previsão de Faturação
+          </h3>
+          {previewLoading ? (
+            <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground animate-pulse">
+              A calcular previsão...
+            </div>
+          ) : !billingPreview ? (
+            <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              Nenhuma política de faturação ativa. A fatura será gerada manualmente após a matrícula.
+            </div>
+          ) : (
+            <div className="rounded-md border border-border bg-muted/20 divide-y divide-border text-sm">
+              {billingPreview.items.map((item) => (
+                <div key={item.feeDefinitionId} className="flex justify-between px-4 py-2">
+                  <span className="text-foreground">{item.description}</span>
+                  <span className="font-medium tabular-nums">
+                    {item.totalPrice.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ))}
+              {billingPreview.discounts.map((d) => (
+                <div key={d.discountRuleId} className="flex justify-between px-4 py-2 text-green-700 dark:text-green-400">
+                  <span>Desconto — {d.name}</span>
+                  <span className="font-medium tabular-nums">
+                    −{d.amount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ))}
+              {billingPreview.taxes.map((t) => (
+                <div key={t.taxRuleId} className="flex justify-between px-4 py-2 text-muted-foreground">
+                  <span>{t.name} ({t.rate}%)</span>
+                  <span className="tabular-nums">
+                    +{t.amount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ))}
+              <div className="flex justify-between px-4 py-2.5 font-semibold text-base">
+                <span>Total</span>
+                <span className="tabular-nums">
+                  {billingPreview.totalAmount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              {billingPreview.installmentsPreview.length > 0 && (
+                <div className="px-4 py-2 text-muted-foreground">
+                  <span className="font-medium text-foreground">Prestações: </span>
+                  {billingPreview.installmentsPreview.map((inst) => (
+                    <span key={inst.number} className="mr-2">
+                      {inst.number}ª {inst.amount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Section 6: Notes */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Notas

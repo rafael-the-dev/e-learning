@@ -173,6 +173,35 @@ export const PERMISSIONS = {
   WALLET_TRANSACTIONS_APPLY_CREDIT: "walletTransactions.applyCredit",
   WALLET_TRANSACTIONS_REFUND: "walletTransactions.refund",
 
+  // Fee Definitions
+  FEE_DEFINITIONS_VIEW: "feeDefinitions.view",
+  FEE_DEFINITIONS_CREATE: "feeDefinitions.create",
+  FEE_DEFINITIONS_UPDATE: "feeDefinitions.update",
+  FEE_DEFINITIONS_ARCHIVE: "feeDefinitions.archive",
+  FEE_DEFINITIONS_DELETE: "feeDefinitions.delete",
+
+  // Billing Policies
+  BILLING_POLICIES_VIEW: "billingPolicies.view",
+  BILLING_POLICIES_CREATE: "billingPolicies.create",
+  BILLING_POLICIES_UPDATE: "billingPolicies.update",
+  BILLING_POLICIES_ARCHIVE: "billingPolicies.archive",
+  BILLING_POLICIES_DELETE: "billingPolicies.delete",
+  BILLING_POLICIES_SET_DEFAULT: "billingPolicies.setDefault",
+
+  // Discount Rules
+  DISCOUNT_RULES_VIEW: "discountRules.view",
+  DISCOUNT_RULES_CREATE: "discountRules.create",
+  DISCOUNT_RULES_UPDATE: "discountRules.update",
+  DISCOUNT_RULES_ARCHIVE: "discountRules.archive",
+  DISCOUNT_RULES_DELETE: "discountRules.delete",
+
+  // Tax Rules
+  TAX_RULES_VIEW: "taxRules.view",
+  TAX_RULES_CREATE: "taxRules.create",
+  TAX_RULES_UPDATE: "taxRules.update",
+  TAX_RULES_ARCHIVE: "taxRules.archive",
+  TAX_RULES_DELETE: "taxRules.delete",
+
   // Reports
   REPORTS_VIEW: "reports.view",
   REPORTS_EXPORT: "reports.export",
@@ -259,6 +288,10 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.PRACTICAL_LESSONS_READ,
     PERMISSIONS.PRACTICAL_LESSONS_UPDATE,
     PERMISSIONS.PRACTICAL_LESSONS_CANCEL,
+    PERMISSIONS.FEE_DEFINITIONS_VIEW,
+    PERMISSIONS.BILLING_POLICIES_VIEW,
+    PERMISSIONS.DISCOUNT_RULES_VIEW,
+    PERMISSIONS.TAX_RULES_VIEW,
   ],
 
   TEACHER: [
