@@ -82,6 +82,10 @@ export class UpdateLessonProgressCommand extends BaseCommand<
       select: { studentId: true },
     });
 
+    if (!enrollment) {
+      throw new BusinessRuleError("Inscrição não encontrada");
+    }
+
     const subjectLesson = await db.subjectLesson.findFirst({
       where: {
         subjectId: this.input.subjectId,
@@ -94,7 +98,7 @@ export class UpdateLessonProgressCommand extends BaseCommand<
 
     const progress = await upsertLessonProgress({
       organizationId: this.context.organizationId,
-      studentId: enrollment!.studentId,
+      studentId: enrollment.studentId,
       enrollmentId: this.input.enrollmentId,
       subjectId: this.input.subjectId,
       lessonId: this.input.lessonId,

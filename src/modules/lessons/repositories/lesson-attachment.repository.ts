@@ -97,6 +97,26 @@ export async function createLessonAttachment(data: {
   return mapToAttachment(row);
 }
 
+export async function updateLessonAttachment(
+  id: string,
+  organizationId: string,
+  data: Partial<{
+    fileName: string;
+    fileUrl: string;
+    fileType: string;
+    fileSize: number | null;
+    isDownloadable: boolean;
+  }>
+): Promise<LessonAttachment> {
+  const db = await getDb();
+  const row = await db.lessonAttachment.update({
+    where: { id, organizationId },
+    data,
+    select: attachmentSelect,
+  });
+  return mapToAttachment(row);
+}
+
 export async function softDeleteAttachment(id: string, organizationId: string): Promise<void> {
   const db = await getDb();
   await db.lessonAttachment.update({

@@ -39,6 +39,7 @@ import {
   Trash2,
   Plus,
   Search,
+  Eye,
 } from "lucide-react";
 import type { Subject } from "@/modules/courses/types";
 
@@ -144,7 +145,8 @@ export function SubjectsTable({ subjects, canManage }: SubjectsTableProps) {
           {filtered.map((subject) => (
             <div
               key={subject.id}
-              className="flex items-center justify-between px-4 py-3"
+              className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={() => router.push(`/subjects/${subject.id}`)}
             >
               <div className="min-w-0">
                 <p className="font-medium text-sm truncate">{subject.name}</p>
@@ -156,38 +158,49 @@ export function SubjectsTable({ subjects, canManage }: SubjectsTableProps) {
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <StatusBadge status={subject.status} />
-                {canManage && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="size-7">
-                        <MoreHorizontal className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setEditTarget(subject)}>
-                        <Pencil className="size-4" />
-                        Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      {subject.status !== "ARCHIVED" && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => router.push(`/subjects/${subject.id}`)}>
+                      <Eye className="size-4" />
+                      Ver Detalhe
+                    </DropdownMenuItem>
+                    {canManage && (
+                      <>
+                        <DropdownMenuItem onClick={() => setEditTarget(subject)}>
+                          <Pencil className="size-4" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {subject.status !== "ARCHIVED" && (
+                          <DropdownMenuItem
+                            onClick={() => setArchiveTarget(subject)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Archive className="size-4" />
+                            Arquivar
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
-                          onClick={() => setArchiveTarget(subject)}
+                          onClick={() => setDeleteTarget(subject)}
                           className="text-destructive focus:text-destructive"
                         >
-                          <Archive className="size-4" />
-                          Arquivar
+                          <Trash2 className="size-4" />
+                          Eliminar
                         </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        onClick={() => setDeleteTarget(subject)}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="size-4" />
-                        Eliminar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           ))}

@@ -97,6 +97,7 @@ export async function findSubjectLessonByIdInOrganization(
 export async function findSubjectLessonByPair(
   subjectId: string,
   lessonId: string,
+  organizationId: string,
   excludeId?: string
 ): Promise<SubjectLesson | null> {
   const db = await getDb();
@@ -104,6 +105,7 @@ export async function findSubjectLessonByPair(
     where: {
       subjectId,
       lessonId,
+      organizationId,
       deletedAt: null,
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },

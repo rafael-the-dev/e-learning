@@ -52,7 +52,8 @@ export class AssignLessonToSubjectCommand extends BaseCommand<
 
     const duplicate = await findSubjectLessonByPair(
       this.input.subjectId,
-      this.input.lessonId
+      this.input.lessonId,
+      this.context.organizationId
     );
     if (duplicate) {
       throw new BusinessRuleError("Esta lição já está atribuída a esta disciplina");

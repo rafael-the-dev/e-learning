@@ -13,6 +13,20 @@ export const createLessonAttachmentSchema = z.object({
 
 export type CreateLessonAttachmentSchema = z.infer<typeof createLessonAttachmentSchema>;
 
+export const updateLessonAttachmentSchema = z.object({
+  attachmentId: z.string().min(1),
+  lessonId: z.string().min(1),
+  fileName: z.string().min(1, "O nome do ficheiro é obrigatório").optional(),
+  fileUrl: z.string().url("URL inválida").optional(),
+  fileType: z
+    .enum(["PDF", "IMAGE", "DOCUMENT", "SPREADSHEET", "PRESENTATION", "AUDIO", "VIDEO", "OTHER"])
+    .optional(),
+  fileSize: z.number().int().min(0).optional().nullable(),
+  isDownloadable: z.boolean().optional(),
+});
+
+export type UpdateLessonAttachmentSchema = z.infer<typeof updateLessonAttachmentSchema>;
+
 export const deleteLessonAttachmentSchema = z.object({
   attachmentId: z.string().min(1),
   lessonId: z.string().min(1),

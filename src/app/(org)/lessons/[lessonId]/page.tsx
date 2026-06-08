@@ -12,13 +12,13 @@ import {
   getLessonSubjects,
 } from "@/modules/lessons/services/lesson.service";
 import { LessonDetailActions } from "@/modules/lessons/components/lesson-detail-actions";
+import { LessonAttachmentsPanel } from "@/modules/lessons/components/lesson-attachments-panel";
 import {
   LESSON_STATUS_LABELS,
   LESSON_TYPE_LABELS,
   VIDEO_PROVIDER_LABELS,
-  FILE_TYPE_LABELS,
 } from "@/modules/lessons/types";
-import { Pencil, Paperclip, BookOpen, Clock, Video } from "lucide-react";
+import { Pencil, BookOpen, Clock, Video } from "lucide-react";
 import type { AuthContext } from "@/server/auth/context";
 
 export async function generateMetadata({
@@ -142,39 +142,12 @@ export default async function LessonDetailPage({
         )}
 
         {/* Attachments */}
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-            <Paperclip className="size-4" />
-            Anexos ({attachments.length})
-          </h2>
-          {attachments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem anexos.</p>
-          ) : (
-            <ul className="divide-y rounded-md border">
-              {attachments.map((a) => (
-                <li key={a.id} className="flex items-center justify-between px-4 py-2.5">
-                  <div>
-                    <p className="text-sm font-medium">{a.fileName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {FILE_TYPE_LABELS[a.fileType] ?? a.fileType}
-                      {a.fileSize ? ` · ${(a.fileSize / 1024).toFixed(0)} KB` : ""}
-                    </p>
-                  </div>
-                  {a.isDownloadable && (
-                    <a
-                      href={a.fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary underline"
-                    >
-                      Descarregar
-                    </a>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <LessonAttachmentsPanel
+          lessonId={lesson.id}
+          attachments={attachments}
+          canCreate={ability.can(PERMISSIONS.LESSON_ATTACHMENTS_CREATE)}
+          canDelete={ability.can(PERMISSIONS.LESSON_ATTACHMENTS_DELETE)}
+        />
 
         {/* Subjects using this lesson */}
         <section className="space-y-3">
