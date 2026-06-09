@@ -14,6 +14,9 @@ import { getWalletByStudentId, getRecentTransactions } from "@/modules/wallets/s
 import { StudentWalletCard } from "@/modules/wallets/components/student-wallet-card";
 import { getRecentTimelineEvents } from "@/modules/student-timeline/services/student-timeline.service";
 import { StudentTimelinePreview } from "@/modules/student-timeline/components/student-timeline-preview";
+import { getDb } from "@/server/db";
+import { calculateEnrollmentAttendanceSummary } from "@/modules/attendance/services/attendance-calculator.service";
+import type { StudentSubjectAttendance } from "@/modules/attendance/types";
 import {
   Mail,
   Phone,
@@ -49,6 +52,8 @@ export default async function StudentDetailPage({
     throw e;
   }
 
+  const canViewAttendance = context.ability.can(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
+
   const [wallet, recentTimeline] = await Promise.all([
     getWalletByStudentId(studentId, context.organizationId),
     context.ability.can(PERMISSIONS.STUDENT_TIMELINE_VIEW)
@@ -59,6 +64,40 @@ export default async function StudentDetailPage({
     ? await getRecentTransactions(wallet.id, context.organizationId, 3)
     : [];
   const canManageWallet = context.ability.can(PERMISSIONS.WALLET_TRANSACTIONS_DEPOSIT);
+
+  type EnrollmentAttendance = {
+    enrollmentId: string;
+    classGroupName: string;
+    subjects: StudentSubjectAttendance[];
+  };
+  let attendanceByEnrollment: EnrollmentAttendance[] = [];
+  if (canViewAttendance) {
+    const db = await getDb();
+    const enrollments = await db.enrollment.findMany({
+      where: { studentId, organizationId: context.organizationId, status: "ACTIVE", deletedAt: null },
+      select: {
+        id: true,
+        classGroupId: true,
+        classGroup: { select: { name: true } },
+      },
+    });
+    attendanceByEnrollment = (
+      await Promise.all(
+        enrollments
+          .filter((e) => e.classGroupId)
+          .map(async (e) => ({
+            enrollmentId: e.id,
+            classGroupName: e.classGroup?.name ?? "",
+            subjects: await calculateEnrollmentAttendanceSummary(
+              studentId,
+              e.id,
+              e.classGroupId!,
+              context.organizationId
+            ).catch(() => []),
+          }))
+      )
+    ).filter((e) => e.subjects.length > 0);
+  }
 
   const breadcrumb = (
     <nav className="flex items-center gap-2 text-muted-foreground">
@@ -192,17 +231,52 @@ export default async function StudentDetailPage({
           <StudentTimelinePreview events={recentTimeline} studentId={studentId} />
         )}
 
-        {/* Attendance placeholder */}
-        <div className="rounded-xl border border-dashed p-5 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <ClipboardList className="size-4" />
-            <h3 className="text-sm font-semibold">Presenças</h3>
+        {/* Attendance summary */}
+        {canViewAttendance && (
+          <div className="rounded-xl border p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Presenças</h3>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/attendance/sessions?studentId=${studentId}`}>
+                  Ver sessões
+                </Link>
+              </Button>
+            </div>
+            {attendanceByEnrollment.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum registo de presença disponível.</p>
+            ) : (
+              attendanceByEnrollment.map((enrollment) => (
+                <div key={enrollment.enrollmentId} className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">{enrollment.classGroupName}</p>
+                  <div className="space-y-1.5">
+                    {enrollment.subjects.map((s) => (
+                      <div key={s.levelSubjectId} className="flex items-center justify-between text-xs">
+                        <span className="truncate max-w-[55%]">{s.subjectName}</span>
+                        <span className={
+                          s.status === "BELOW_REQUIRED"
+                            ? "text-destructive font-semibold"
+                            : s.status === "AT_RISK"
+                            ? "text-yellow-600 font-semibold"
+                            : "text-green-600 font-semibold"
+                        }>
+                          {s.attendancePercentage.toFixed(1)}%
+                          {s.minimumAttendancePercentage != null && (
+                            <span className="text-muted-foreground font-normal ml-1">
+                              (mín. {s.minimumAttendancePercentage}%)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {/* TODO: implement attendance module */}
-            Nenhum registo de presença.
-          </p>
-        </div>
+        )}
       </div>
     </>
   );

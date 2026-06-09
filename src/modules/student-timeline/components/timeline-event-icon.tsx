@@ -15,6 +15,10 @@ import {
   Building2,
   Bell,
   StickyNote,
+  ShieldCheck,
+  ShieldX,
+  AlertTriangle,
+  AlertOctagon,
 } from "lucide-react";
 import type { TimelineEventType } from "@/modules/student-timeline/types";
 import { cn } from "@/shared/lib/utils";
@@ -35,6 +39,10 @@ const ICON_MAP: Record<TimelineEventType, { Icon: React.ElementType; colorClass:
   CLASSROOM_BOOKING_CHANGED: { Icon: Building2, colorClass: "text-slate-500 bg-slate-100 dark:bg-slate-800/60" },
   NOTIFICATION_SENT: { Icon: Bell, colorClass: "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40" },
   MANUAL_NOTE: { Icon: StickyNote, colorClass: "text-yellow-600 bg-yellow-50 dark:bg-yellow-950/40" },
+  ATTENDANCE_JUSTIFICATION_APPROVED: { Icon: ShieldCheck, colorClass: "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40" },
+  ATTENDANCE_JUSTIFICATION_REJECTED: { Icon: ShieldX, colorClass: "text-red-500 bg-red-50 dark:bg-red-950/40" },
+  ATTENDANCE_AT_RISK: { Icon: AlertTriangle, colorClass: "text-amber-500 bg-amber-50 dark:bg-amber-950/40" },
+  ATTENDANCE_BELOW_REQUIRED: { Icon: AlertOctagon, colorClass: "text-red-600 bg-red-50 dark:bg-red-950/40" },
 };
 
 export function TimelineEventIcon({

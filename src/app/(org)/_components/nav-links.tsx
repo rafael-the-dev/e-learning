@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, GraduationCap, BookUser, BookOpen, Tags, Library, UsersRound, CalendarDays, ClipboardList, FileText, CreditCard, Receipt, Wallet, Settings, Video, CalendarRange, DoorOpen, CalendarCheck, Activity, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, BookUser, BookOpen, Tags, Library, UsersRound, CalendarDays, ClipboardList, FileText, CreditCard, Receipt, Wallet, Settings, Video, CalendarRange, DoorOpen, CalendarCheck, Activity, CheckSquare, type LucideIcon } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
 interface NavItem {
@@ -31,6 +31,7 @@ const NAV: NavItem[] = [
   { href: "/receipts", label: "Recibos", icon: Receipt },
   { href: "/student-wallets", label: "Carteiras", icon: Wallet },
   { href: "/settings/billing", label: "Políticas de Faturação", icon: Settings },
+  { href: "/attendance", label: "Presenças", icon: CheckSquare },
   { href: "/system/events", label: "Eventos de Sistema", icon: Activity },
 ];
 

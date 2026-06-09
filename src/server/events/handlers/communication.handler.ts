@@ -15,6 +15,10 @@ const HANDLED_EVENTS = new Set<string>([
   DomainEventType.INVOICE_OVERDUE,
   DomainEventType.ENROLLMENT_ACTIVATED,
   DomainEventType.ENROLLMENT_CANCELLED,
+  DomainEventType.ATTENDANCE_STUDENT_AT_RISK,
+  DomainEventType.ATTENDANCE_STUDENT_BELOW_REQUIRED,
+  DomainEventType.ATTENDANCE_JUSTIFICATION_APPROVED,
+  DomainEventType.ATTENDANCE_JUSTIFICATION_REJECTED,
 ]);
 
 export class CommunicationEventHandler implements DomainEventHandler {
@@ -153,6 +157,123 @@ export class CommunicationEventHandler implements DomainEventHandler {
             title: "Matrícula cancelada",
             body: `A sua matrícula foi cancelada.`,
             data: JSON.stringify({ enrollmentId: payload.enrollmentId }),
+            status: "SENT",
+            sentAt: new Date(),
+          },
+        });
+        break;
+      }
+
+      case DomainEventType.ATTENDANCE_STUDENT_AT_RISK: {
+        const studentId = payload.studentId as string | undefined;
+        if (!studentId) return;
+
+        const student = await db.student.findFirst({
+          where: { id: studentId, organizationId: event.organizationId },
+          select: { userId: true },
+        });
+        if (!student?.userId) return;
+
+        const subjectName = payload.subjectName ? ` na disciplina de ${String(payload.subjectName)}` : "";
+        await db.notification.create({
+          data: {
+            organizationId: event.organizationId,
+            userId: student.userId,
+            type: "ATTENDANCE_RISK",
+            channel: "IN_APP",
+            title: "Risco de reprovação por faltas",
+            body: `A sua taxa de presenças${subjectName} está abaixo do limite de risco. Regularize a sua frequência.`,
+            data: JSON.stringify({
+              enrollmentId: payload.enrollmentId,
+              levelSubjectId: payload.levelSubjectId,
+              currentPercentage: payload.currentPercentage,
+              minimumPercentage: payload.minimumPercentage,
+            }),
+            status: "SENT",
+            sentAt: new Date(),
+          },
+        });
+        break;
+      }
+
+      case DomainEventType.ATTENDANCE_STUDENT_BELOW_REQUIRED: {
+        const studentId = payload.studentId as string | undefined;
+        if (!studentId) return;
+
+        const student = await db.student.findFirst({
+          where: { id: studentId, organizationId: event.organizationId },
+          select: { userId: true },
+        });
+        if (!student?.userId) return;
+
+        const subjectName = payload.subjectName ? ` na disciplina de ${String(payload.subjectName)}` : "";
+        await db.notification.create({
+          data: {
+            organizationId: event.organizationId,
+            userId: student.userId,
+            type: "ATTENDANCE_BELOW_REQUIRED",
+            channel: "IN_APP",
+            title: "Presenças abaixo do mínimo",
+            body: `A sua taxa de presenças${subjectName} caiu abaixo do mínimo exigido. Pode não ser aprovado por faltas.`,
+            data: JSON.stringify({
+              enrollmentId: payload.enrollmentId,
+              levelSubjectId: payload.levelSubjectId,
+              currentPercentage: payload.currentPercentage,
+              minimumPercentage: payload.minimumPercentage,
+            }),
+            status: "SENT",
+            sentAt: new Date(),
+          },
+        });
+        break;
+      }
+
+      case DomainEventType.ATTENDANCE_JUSTIFICATION_APPROVED: {
+        const studentId = payload.studentId as string | undefined;
+        if (!studentId) return;
+
+        const student = await db.student.findFirst({
+          where: { id: studentId, organizationId: event.organizationId },
+          select: { userId: true },
+        });
+        if (!student?.userId) return;
+
+        await db.notification.create({
+          data: {
+            organizationId: event.organizationId,
+            userId: student.userId,
+            type: "ATTENDANCE_JUSTIFICATION_APPROVED",
+            channel: "IN_APP",
+            title: "Justificação de falta aprovada",
+            body: `A sua justificação de falta foi aprovada.`,
+            data: JSON.stringify({ justificationId: payload.justificationId }),
+            status: "SENT",
+            sentAt: new Date(),
+          },
+        });
+        break;
+      }
+
+      case DomainEventType.ATTENDANCE_JUSTIFICATION_REJECTED: {
+        const studentId = payload.studentId as string | undefined;
+        if (!studentId) return;
+
+        const student = await db.student.findFirst({
+          where: { id: studentId, organizationId: event.organizationId },
+          select: { userId: true },
+        });
+        if (!student?.userId) return;
+
+        const reason = payload.rejectionReason ? ` Motivo: ${String(payload.rejectionReason)}` : "";
+        await db.notification.create({
+          data: {
+            organizationId: event.organizationId,
+            userId: student.userId,
+            type: "ATTENDANCE_JUSTIFICATION_REJECTED",
+            channel: "IN_APP",
+            title: "Justificação de falta rejeitada",
+            body: `A sua justificação de falta foi rejeitada.${reason}`,
+            data: JSON.stringify({ justificationId: payload.justificationId }),
             status: "SENT",
             sentAt: new Date(),
           },

@@ -46,6 +46,12 @@ export const DomainEventType = {
   NOTIFICATION_CREATED: "notification.created",
   NOTIFICATION_SENT: "notification.sent",
   NOTIFICATION_FAILED: "notification.failed",
+
+  // Attendance — only business-significant events; operational records do not emit events
+  ATTENDANCE_JUSTIFICATION_APPROVED: "attendance.justification_approved",
+  ATTENDANCE_JUSTIFICATION_REJECTED: "attendance.justification_rejected",
+  ATTENDANCE_STUDENT_AT_RISK: "attendance.student_at_risk",
+  ATTENDANCE_STUDENT_BELOW_REQUIRED: "attendance.student_below_required",
 } as const;
 
 export type DomainEventType = (typeof DomainEventType)[keyof typeof DomainEventType];
@@ -61,6 +67,8 @@ export const DomainAggregateType = {
   CLASSROOM_BOOKING: "CLASSROOM_BOOKING",
   NOTIFICATION: "NOTIFICATION",
   STUDENT: "STUDENT",
+  ATTENDANCE_JUSTIFICATION: "ATTENDANCE_JUSTIFICATION",
+  ATTENDANCE: "ATTENDANCE",
 } as const;
 
 export type DomainAggregateType = (typeof DomainAggregateType)[keyof typeof DomainAggregateType];

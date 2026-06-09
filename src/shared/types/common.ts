@@ -113,14 +113,37 @@ export const EnrollmentStatus = {
 export type EnrollmentStatus =
   (typeof EnrollmentStatus)[keyof typeof EnrollmentStatus];
 
-export const AttendanceStatus = {
+export const AttendanceSessionStatus = {
+  DRAFT: "DRAFT",
+  OPEN: "OPEN",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type AttendanceSessionStatus =
+  (typeof AttendanceSessionStatus)[keyof typeof AttendanceSessionStatus];
+
+export const AttendanceRecordStatus = {
   PRESENT: "PRESENT",
   ABSENT: "ABSENT",
   LATE: "LATE",
   EXCUSED: "EXCUSED",
+  REMOTE: "REMOTE",
 } as const;
-export type AttendanceStatus =
-  (typeof AttendanceStatus)[keyof typeof AttendanceStatus];
+export type AttendanceRecordStatus =
+  (typeof AttendanceRecordStatus)[keyof typeof AttendanceRecordStatus];
+
+export const AttendanceJustificationStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+} as const;
+export type AttendanceJustificationStatus =
+  (typeof AttendanceJustificationStatus)[keyof typeof AttendanceJustificationStatus];
+
+// Keep legacy alias for backward compatibility
+export const AttendanceStatus = AttendanceRecordStatus;
+export type AttendanceStatus = AttendanceRecordStatus;
 
 export const VehicleStatus = {
   ACTIVE: "ACTIVE",
@@ -204,6 +227,10 @@ export const NotificationType = {
   CLASS_SCHEDULED: "CLASS_SCHEDULED",
   CLASS_CANCELLED: "CLASS_CANCELLED",
   DOCUMENT_READY: "DOCUMENT_READY",
+  ATTENDANCE_RISK: "ATTENDANCE_RISK",
+  ATTENDANCE_BELOW_REQUIRED: "ATTENDANCE_BELOW_REQUIRED",
+  ATTENDANCE_JUSTIFICATION_APPROVED: "ATTENDANCE_JUSTIFICATION_APPROVED",
+  ATTENDANCE_JUSTIFICATION_REJECTED: "ATTENDANCE_JUSTIFICATION_REJECTED",
   GENERAL: "GENERAL",
 } as const;
 export type NotificationType =

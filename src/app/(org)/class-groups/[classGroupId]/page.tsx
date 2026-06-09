@@ -12,6 +12,7 @@ import {
   getActiveSlotsByOrganization,
 } from "@/modules/schedules/services/schedule.service";
 import { ClassGroupSchedulePanel } from "@/modules/schedules/components/class-group-schedule-panel";
+import { getDb } from "@/server/db";
 import { NotFoundError } from "@/shared/lib/command";
 import {
   BookOpen,
@@ -22,6 +23,7 @@ import {
   GraduationCap,
   Building2,
   CreditCard,
+  ClipboardList,
 } from "lucide-react";
 import { CLASS_GROUP_STATUS_LABELS } from "@/modules/class-groups/types";
 import type { AuthContext } from "@/server/auth/context";
@@ -58,12 +60,25 @@ export default async function ClassGroupDetailPage({
     throw e;
   }
 
+  const canViewAttendance = ability.can(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
+
   const [schedules, availableSlots] = await Promise.all([
     getSchedulesByClassGroup(classGroupId, context.organizationId),
     canAssignSchedule
       ? getActiveSlotsByOrganization(context.organizationId)
       : Promise.resolve([]),
   ]);
+
+  let attendanceStats = { total: 0, open: 0, completed: 0 };
+  if (canViewAttendance) {
+    const db = await getDb();
+    const [total, open, completed] = await Promise.all([
+      db.attendanceSession.count({ where: { classGroupId, organizationId: context.organizationId, deletedAt: null } }),
+      db.attendanceSession.count({ where: { classGroupId, organizationId: context.organizationId, status: "OPEN", deletedAt: null } }),
+      db.attendanceSession.count({ where: { classGroupId, organizationId: context.organizationId, status: "COMPLETED", deletedAt: null } }),
+    ]);
+    attendanceStats = { total, open, completed };
+  }
 
   const breadcrumb = (
     <nav className="flex items-center gap-2 text-muted-foreground">
@@ -204,6 +219,47 @@ export default async function ClassGroupDetailPage({
             Módulo de matrículas em desenvolvimento.
           </p>
         </div>
+
+        {/* Attendance */}
+        {canViewAttendance && (
+          <div className="rounded-xl border p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Presenças</h3>
+              </div>
+              <div className="flex gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/attendance/sessions?classGroupId=${classGroupId}`}>
+                    Ver sessões
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/attendance/reports?classGroupId=${classGroupId}`}>
+                    Relatórios
+                  </Link>
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <MetaCard
+                icon={<ClipboardList className="size-4 text-muted-foreground" />}
+                label="Total"
+                value={String(attendanceStats.total)}
+              />
+              <MetaCard
+                icon={<Clock className="size-4 text-muted-foreground" />}
+                label="Em aberto"
+                value={String(attendanceStats.open)}
+              />
+              <MetaCard
+                icon={<BookOpen className="size-4 text-muted-foreground" />}
+                label="Concluídas"
+                value={String(attendanceStats.completed)}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Placeholder: Payments */}
         <div className="rounded-xl border border-dashed p-5 space-y-2">

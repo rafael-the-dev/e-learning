@@ -50,6 +50,20 @@ const STATUS_MAP: Record<string, BadgeProps["variant"]> = {
 
   // Courses / Levels / Subjects
   ARCHIVED: "secondary",
+
+  // Attendance Sessions
+  OPEN: "info",
+
+  // Attendance Records
+  PRESENT: "success",
+  ABSENT: "destructive",
+  LATE: "warning",
+  EXCUSED: "info",
+  REMOTE: "secondary",
+
+  // Justifications
+  REJECTED: "destructive",
+  APPROVED: "success",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -77,6 +91,14 @@ const STATUS_LABELS: Record<string, string> = {
   DISABLED: "Desativado",
   INVITED: "Convidado",
   ARCHIVED: "Arquivado",
+  OPEN: "Aberta",
+  PRESENT: "Presente",
+  ABSENT: "Falta",
+  LATE: "Atraso",
+  EXCUSED: "Justificado",
+  REMOTE: "Remoto",
+  REJECTED: "Rejeitada",
+  APPROVED: "Aprovada",
 };
 
 interface StatusBadgeProps {

@@ -167,14 +167,33 @@ Example payload for `payment.confirmed`:
 |---|---|
 | `classroom_booking.created` | `CreateClassroomBookingCommand` |
 
+### Attendance
+| Event | Emitted by | Why |
+|---|---|---|
+| `attendance.justification_approved` | `ApproveAttendanceJustificationCommand` | Student outcome change — approval reverses absence impact |
+| `attendance.justification_rejected` | `RejectAttendanceJustificationCommand` | Student outcome change — rejection confirms absence stands |
+| `attendance.student_at_risk` | `AttendanceCalculatorService` / `AttendanceRiskService` | Threshold crossed — triggers student notification and timeline |
+| `attendance.student_below_required` | `AttendanceCalculatorService` / `AttendanceRiskService` | Minimum attendance breached — student may fail the subject |
+
+**Events NOT emitted** (operational data, tracked via AuditLog only):
+
+| Operation | Why no domain event |
+|---|---|
+| Create/Update/Cancel/Complete `AttendanceSession` | Session state is operational; no cross-module side effect |
+| `MarkAttendance` / `BulkMarkAttendance` | Records are data mutations; risk evaluation triggers events separately |
+| `UpdateAttendanceRecord` | Same as above |
+| `CreateAttendanceJustification` | Justification creation is operational; only approval/rejection have business meaning |
+
+See [attendance-management.md](./attendance-management.md) for the full audit log vs domain event distinction.
+
 ---
 
 ## Registered Handlers
 
 | Handler | Handles |
 |---|---|
-| `CommunicationEventHandler` | `payment.confirmed`, `lesson.published`, `invoice.overdue`, `enrollment.activated`, `enrollment.cancelled` |
-| `StudentTimelineEventHandler` | `enrollment.*`, `payment.confirmed`, `invoice.paid` — **placeholder**, no-op until Student Timeline is built |
+| `CommunicationEventHandler` | `payment.confirmed`, `lesson.published`, `invoice.overdue`, `enrollment.activated`, `enrollment.cancelled`, `attendance.student_at_risk`, `attendance.student_below_required`, `attendance.justification_approved`, `attendance.justification_rejected` |
+| `StudentTimelineEventHandler` | `enrollment.*`, `payment.confirmed`, `invoice.paid`, `wallet.*`, `lesson.completed`, `classroom_booking.*`, `notification.sent`, `attendance.justification_approved`, `attendance.justification_rejected`, `attendance.student_at_risk`, `attendance.student_below_required` |
 | `EnrollmentActivationEventHandler` | `payment.confirmed` — auto-activates enrollment if billing policy rule is satisfied |
 
 ---

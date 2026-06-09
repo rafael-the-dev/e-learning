@@ -35,6 +35,10 @@ const HANDLED_EVENTS = new Set<string>([
   DomainEventType.CLASSROOM_BOOKING_UPDATED,
   DomainEventType.CLASSROOM_BOOKING_CANCELLED,
   DomainEventType.NOTIFICATION_SENT,
+  DomainEventType.ATTENDANCE_JUSTIFICATION_APPROVED,
+  DomainEventType.ATTENDANCE_JUSTIFICATION_REJECTED,
+  DomainEventType.ATTENDANCE_STUDENT_AT_RISK,
+  DomainEventType.ATTENDANCE_STUDENT_BELOW_REQUIRED,
 ]);
 
 export class StudentTimelineEventHandler implements DomainEventHandler {
@@ -400,6 +404,89 @@ export class StudentTimelineEventHandler implements DomainEventHandler {
             notificationId: payload.notificationId,
             type: payload.type,
             channel: payload.channel,
+          },
+        };
+      }
+
+      // ——— Attendance ———
+      case DomainEventType.ATTENDANCE_JUSTIFICATION_APPROVED: {
+        const studentId = payload.studentId as string | undefined;
+        if (!studentId) return null;
+        return {
+          studentId,
+          eventType: TIMELINE_EVENT_TYPE.ATTENDANCE_JUSTIFICATION_APPROVED,
+          title: "Justificação de falta aprovada",
+          description: payload.subjectName
+            ? `Disciplina: ${String(payload.subjectName)}`
+            : undefined,
+          referenceType: "ATTENDANCE_JUSTIFICATION",
+          referenceId: payload.justificationId as string | undefined,
+          metadata: {
+            justificationId: payload.justificationId,
+            enrollmentId: payload.enrollmentId,
+            levelSubjectId: payload.levelSubjectId,
+          },
+        };
+      }
+
+      case DomainEventType.ATTENDANCE_JUSTIFICATION_REJECTED: {
+        const studentId = payload.studentId as string | undefined;
+        if (!studentId) return null;
+        return {
+          studentId,
+          eventType: TIMELINE_EVENT_TYPE.ATTENDANCE_JUSTIFICATION_REJECTED,
+          title: "Justificação de falta rejeitada",
+          description: payload.rejectionReason
+            ? `Motivo: ${String(payload.rejectionReason)}`
+            : undefined,
+          referenceType: "ATTENDANCE_JUSTIFICATION",
+          referenceId: payload.justificationId as string | undefined,
+          metadata: {
+            justificationId: payload.justificationId,
+            enrollmentId: payload.enrollmentId,
+            levelSubjectId: payload.levelSubjectId,
+          },
+        };
+      }
+
+      case DomainEventType.ATTENDANCE_STUDENT_AT_RISK: {
+        const studentId = payload.studentId as string | undefined;
+        if (!studentId) return null;
+        return {
+          studentId,
+          eventType: TIMELINE_EVENT_TYPE.ATTENDANCE_AT_RISK,
+          title: "Aluno em risco de reprovação por faltas",
+          description: payload.subjectName
+            ? `Disciplina: ${String(payload.subjectName)}`
+            : undefined,
+          referenceType: "ATTENDANCE_JUSTIFICATION",
+          referenceId: payload.enrollmentId as string | undefined,
+          metadata: {
+            enrollmentId: payload.enrollmentId,
+            levelSubjectId: payload.levelSubjectId,
+            currentPercentage: payload.currentPercentage,
+            minimumPercentage: payload.minimumPercentage,
+          },
+        };
+      }
+
+      case DomainEventType.ATTENDANCE_STUDENT_BELOW_REQUIRED: {
+        const studentId = payload.studentId as string | undefined;
+        if (!studentId) return null;
+        return {
+          studentId,
+          eventType: TIMELINE_EVENT_TYPE.ATTENDANCE_BELOW_REQUIRED,
+          title: "Aluno abaixo do mínimo de presenças",
+          description: payload.subjectName
+            ? `Disciplina: ${String(payload.subjectName)}`
+            : undefined,
+          referenceType: "ATTENDANCE_JUSTIFICATION",
+          referenceId: payload.enrollmentId as string | undefined,
+          metadata: {
+            enrollmentId: payload.enrollmentId,
+            levelSubjectId: payload.levelSubjectId,
+            currentPercentage: payload.currentPercentage,
+            minimumPercentage: payload.minimumPercentage,
           },
         };
       }

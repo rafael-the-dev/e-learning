@@ -84,6 +84,10 @@ export const DOMAIN_EVENT_TYPE_LABELS: Record<string, string> = {
   "notification.created": "Notificação criada",
   "notification.sent": "Notificação enviada",
   "notification.failed": "Notificação falhada",
+  "attendance.justification_approved": "Justificação de falta aprovada",
+  "attendance.justification_rejected": "Justificação de falta rejeitada",
+  "attendance.student_at_risk": "Aluno em risco de faltas",
+  "attendance.student_below_required": "Aluno abaixo do mínimo de presenças",
 };
 
 export const DOMAIN_AGGREGATE_TYPE_LABELS: Record<string, string> = {
@@ -97,4 +101,6 @@ export const DOMAIN_AGGREGATE_TYPE_LABELS: Record<string, string> = {
   CLASSROOM_BOOKING: "Reserva de Sala",
   NOTIFICATION: "Notificação",
   STUDENT: "Aluno",
+  ATTENDANCE_JUSTIFICATION: "Justificação de Presença",
+  ATTENDANCE: "Presença",
 };
