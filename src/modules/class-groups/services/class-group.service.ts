@@ -32,7 +32,7 @@ export async function getClassGroupStats(organizationId: string) {
 
 export async function getClassGroupFormReferenceData(organizationId: string) {
   const db = await getDb();
-  const [courses, levels, teachers, branches] = await Promise.all([
+  const [courses, levels, teachers, branches, academicYears, terms] = await Promise.all([
     db.course.findMany({
       where: { organizationId, deletedAt: null, status: { not: "ARCHIVED" } },
       select: { id: true, name: true },
@@ -53,6 +53,16 @@ export async function getClassGroupFormReferenceData(organizationId: string) {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    db.academicYear.findMany({
+      where: { organizationId, deletedAt: null, status: "ACTIVE" },
+      select: { id: true, name: true },
+      orderBy: { startDate: "desc" },
+    }),
+    db.academicTerm.findMany({
+      where: { organizationId: organizationId, deletedAt: null, status: "ACTIVE" },
+      select: { id: true, name: true, academicYearId: true },
+      orderBy: [{ academicYearId: "asc" }, { order: "asc" }],
+    }),
   ]);
-  return { courses, levels, teachers, branches };
+  return { courses, levels, teachers, branches, academicYears, terms };
 }

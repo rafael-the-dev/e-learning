@@ -21,7 +21,7 @@ export const metadata = { title: "Turmas" };
 
 async function getFormOptions(organizationId: string) {
   const db = await getDb();
-  const [courses, branches] = await Promise.all([
+  const [courses, branches, academicYears] = await Promise.all([
     db.course.findMany({
       where: { organizationId, deletedAt: null, status: { not: "ARCHIVED" } },
       select: { id: true, name: true },
@@ -32,8 +32,13 @@ async function getFormOptions(organizationId: string) {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    db.academicYear.findMany({
+      where: { organizationId, deletedAt: null, status: { not: "ARCHIVED" } },
+      select: { id: true, name: true },
+      orderBy: { startDate: "desc" },
+    }),
   ]);
-  return { courses, branches };
+  return { courses, branches, academicYears };
 }
 
 export default async function ClassGroupsPage({
@@ -45,6 +50,7 @@ export default async function ClassGroupsPage({
     status?: string;
     courseId?: string;
     branchId?: string;
+    yearId?: string;
   }>;
 }) {
   let context: AuthContext;
@@ -54,7 +60,7 @@ export default async function ClassGroupsPage({
     redirect("/forbidden");
   }
 
-  const { page, search, status, courseId, branchId } = await searchParams;
+  const { page, search, status, courseId, branchId, yearId } = await searchParams;
   const pagination = normalizePaginationParams(page);
 
   const perms = await getUserPermissions(context.userId, context.organizationId);
@@ -64,13 +70,14 @@ export default async function ClassGroupsPage({
   const canArchive = ability.can(PERMISSIONS.CLASS_GROUPS_ARCHIVE);
   const canDelete = ability.can(PERMISSIONS.CLASS_GROUPS_DELETE);
 
-  const [result, stats, { courses, branches }] = await Promise.all([
+  const [result, stats, { courses, branches, academicYears }] = await Promise.all([
     getClassGroupsByOrganization(context.organizationId, {
       ...pagination,
       search,
       status,
       courseId,
       branchId,
+      academicYearId: yearId,
     }),
     getClassGroupStats(context.organizationId),
     getFormOptions(context.organizationId),
@@ -110,10 +117,12 @@ export default async function ClassGroupsPage({
           result={result}
           courses={courses}
           branches={branches}
+          academicYears={academicYears}
           defaultSearch={search}
           defaultStatus={status}
           defaultCourseId={courseId}
           defaultBranchId={branchId}
+          defaultAcademicYearId={yearId}
           canEdit={canEdit}
           canArchive={canArchive}
           canDelete={canDelete}

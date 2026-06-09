@@ -3,6 +3,7 @@ import {
   AuthorizationError,
   ValidationError,
   NotFoundError,
+  BusinessRuleError,
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -16,6 +17,8 @@ import { findCourseByIdInOrganization } from "@/modules/courses/repositories/cou
 import { findLevelByIdInOrganization } from "@/modules/courses/repositories/level.repository";
 import { findBranchById } from "@/modules/organizations/repositories/branch.repository";
 import { findByIdInOrganization as findTeacherByIdInOrganization } from "@/modules/teachers/repositories/teacher.repository";
+import { findAcademicYearByIdInOrganization } from "@/modules/academic-calendar/repositories/academic-year.repository";
+import { findAcademicTermByIdInOrganization } from "@/modules/academic-calendar/repositories/academic-term.repository";
 import {
   updateClassGroupSchema,
   type UpdateClassGroupSchema,
@@ -100,6 +103,36 @@ export class UpdateClassGroupCommand extends BaseCommand<UpdateClassGroupInput, 
       if (!teacher) throw new NotFoundError("Professor", this.input.teacherId);
     }
 
+    // Validate academicYearId if changing
+    const resolvedYearId = this.input.academicYearId ?? existing.academicYearId;
+    if (this.input.academicYearId) {
+      const year = await findAcademicYearByIdInOrganization(
+        this.input.academicYearId,
+        this.context.organizationId
+      );
+      if (!year) throw new NotFoundError("Ano Letivo", this.input.academicYearId);
+      if (year.status !== "ACTIVE") {
+        throw new BusinessRuleError("O ano letivo selecionado não está ativo.");
+      }
+    }
+
+    // Validate academicTermId if changing
+    if (this.input.academicTermId) {
+      const term = await findAcademicTermByIdInOrganization(
+        this.input.academicTermId,
+        this.context.organizationId
+      );
+      if (!term) throw new NotFoundError("Período Letivo", this.input.academicTermId);
+      if (term.academicYearId !== resolvedYearId) {
+        throw new ValidationError("Dados inválidos", {
+          academicTermId: ["O período não pertence ao ano letivo selecionado"],
+        });
+      }
+      if (term.status !== "ACTIVE") {
+        throw new BusinessRuleError("O período letivo selecionado não está ativo.");
+      }
+    }
+
     const startDate = this.input.startDate !== undefined
       ? this.input.startDate
       : existing.startDate?.toISOString();
@@ -134,6 +167,8 @@ export class UpdateClassGroupCommand extends BaseCommand<UpdateClassGroupInput, 
     if (this.input.courseLevelId !== undefined) data.courseLevelId = this.input.courseLevelId;
     if (this.input.branchId !== undefined) data.branchId = this.input.branchId;
     if (this.input.teacherId !== undefined) data.teacherId = this.input.teacherId;
+    if (this.input.academicYearId !== undefined) data.academicYearId = this.input.academicYearId;
+    if (this.input.academicTermId !== undefined) data.academicTermId = this.input.academicTermId;
     if (this.input.capacity !== undefined) data.capacity = this.input.capacity;
     if (this.input.startDate !== undefined)
       data.startDate = this.input.startDate ? new Date(this.input.startDate) : null;

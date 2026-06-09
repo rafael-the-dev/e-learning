@@ -57,6 +57,8 @@ export interface ClassGroupOption {
   name: string;
   courseId: string;
   courseLevelId: string | null;
+  academicYearId: string;
+  academicTermId: string | null;
   capacity: number;
   currentCount: number;
 }
@@ -64,6 +66,17 @@ export interface ClassGroupOption {
 export interface BranchOption {
   id: string;
   name: string;
+}
+
+export interface AcademicYearOption {
+  id: string;
+  name: string;
+}
+
+export interface AcademicTermOption {
+  id: string;
+  name: string;
+  academicYearId: string;
 }
 
 // =============================================================================
@@ -76,6 +89,8 @@ interface CreateEnrollmentFormProps {
   levels: LevelOption[];
   classGroups: ClassGroupOption[];
   branches: BranchOption[];
+  academicYears: AcademicYearOption[];
+  terms: AcademicTermOption[];
 }
 
 export function CreateEnrollmentForm({
@@ -84,6 +99,8 @@ export function CreateEnrollmentForm({
   levels,
   classGroups,
   branches,
+  academicYears,
+  terms,
 }: CreateEnrollmentFormProps) {
   const router = useRouter();
   const {
@@ -102,11 +119,14 @@ export function CreateEnrollmentForm({
 
   const selectedCourseId = watch("courseId") ?? "";
   const selectedLevelId = watch("courseLevelId") ?? "";
+  const selectedYearId = watch("academicYearId") ?? "";
 
   const filteredLevels = levels.filter((l) => l.courseId === selectedCourseId);
+  const filteredTerms = terms.filter((t) => t.academicYearId === selectedYearId);
   const filteredGroups = classGroups.filter((g) => {
     if (g.courseId !== selectedCourseId) return false;
     if (selectedLevelId && g.courseLevelId && g.courseLevelId !== selectedLevelId) return false;
+    if (selectedYearId && g.academicYearId !== selectedYearId) return false;
     return true;
   });
 
@@ -132,6 +152,12 @@ export function CreateEnrollmentForm({
 
   function handleLevelChange(levelId: string | null) {
     setValue("courseLevelId", levelId);
+    setValue("classGroupId", null);
+  }
+
+  function handleYearChange(yearId: string) {
+    setValue("academicYearId", yearId);
+    setValue("academicTermId", null);
     setValue("classGroupId", null);
   }
 
@@ -274,7 +300,72 @@ export function CreateEnrollmentForm({
         </div>
       </section>
 
-      {/* Section 3: Class Group */}
+      {/* Section 3: Academic Year and Term */}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Ano Letivo e Período
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Ano Letivo *</Label>
+            <Controller
+              name="academicYearId"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value ?? ""}
+                  onValueChange={(v) => {
+                    field.onChange(v);
+                    handleYearChange(v);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar ano letivo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {academicYears.map((y) => (
+                      <SelectItem key={y.id} value={y.id}>
+                        {y.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {errors.academicYearId && (
+              <p className="text-xs text-destructive">{errors.academicYearId.message}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Período Letivo</Label>
+            <Controller
+              name="academicTermId"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value ?? "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
+                  disabled={!selectedYearId || filteredTerms.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sem período específico</SelectItem>
+                    {filteredTerms.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Section 4: Class Group */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Turma
@@ -314,7 +405,7 @@ export function CreateEnrollmentForm({
         </div>
       </section>
 
-      {/* Section 4: Dates */}
+      {/* Section 5: Dates */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Datas
@@ -448,6 +539,8 @@ interface EditEnrollmentFormProps {
   levels: LevelOption[];
   classGroups: ClassGroupOption[];
   branches: BranchOption[];
+  academicYears: AcademicYearOption[];
+  terms: AcademicTermOption[];
 }
 
 export function EditEnrollmentForm({
@@ -455,6 +548,8 @@ export function EditEnrollmentForm({
   levels,
   classGroups,
   branches,
+  academicYears,
+  terms,
 }: EditEnrollmentFormProps) {
   const router = useRouter();
   const {
@@ -470,6 +565,8 @@ export function EditEnrollmentForm({
       branchId: enrollment.branchId ?? undefined,
       courseLevelId: enrollment.courseLevelId ?? null,
       classGroupId: enrollment.classGroupId ?? null,
+      academicYearId: enrollment.academicYearId,
+      academicTermId: enrollment.academicTermId ?? null,
       startDate: enrollment.startDate
         ? new Date(enrollment.startDate).toISOString().split("T")[0]
         : null,
@@ -481,10 +578,13 @@ export function EditEnrollmentForm({
   });
 
   const selectedLevelId = watch("courseLevelId") ?? enrollment.courseLevelId ?? "";
+  const selectedYearId = watch("academicYearId") ?? enrollment.academicYearId ?? "";
   const filteredLevels = levels.filter((l) => l.courseId === enrollment.courseId);
+  const filteredTerms = terms.filter((t) => t.academicYearId === selectedYearId);
   const filteredGroups = classGroups.filter((g) => {
     if (g.courseId !== enrollment.courseId) return false;
     if (selectedLevelId && g.courseLevelId && g.courseLevelId !== selectedLevelId) return false;
+    if (selectedYearId && g.academicYearId !== selectedYearId) return false;
     return true;
   });
 
@@ -546,6 +646,69 @@ export function EditEnrollmentForm({
               </Select>
             )}
           />
+        </div>
+      </section>
+
+      {/* Editable: Academic Year and Term */}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Ano Letivo e Período
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Ano Letivo</Label>
+            <Controller
+              name="academicYearId"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value ?? ""}
+                  onValueChange={(v) => {
+                    field.onChange(v);
+                    setValue("academicTermId", null);
+                    setValue("classGroupId", null);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar ano letivo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {academicYears.map((y) => (
+                      <SelectItem key={y.id} value={y.id}>
+                        {y.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Período Letivo</Label>
+            <Controller
+              name="academicTermId"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value ?? "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
+                  disabled={!selectedYearId || filteredTerms.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sem período específico</SelectItem>
+                    {filteredTerms.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
         </div>
       </section>
 

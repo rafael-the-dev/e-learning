@@ -49,11 +49,13 @@ interface EnrollmentsTableProps {
   courses: FilterOption[];
   branches: FilterOption[];
   classGroups: FilterOption[];
+  academicYears: FilterOption[];
   defaultSearch?: string;
   defaultStatus?: string;
   defaultCourseId?: string;
   defaultBranchId?: string;
   defaultClassGroupId?: string;
+  defaultAcademicYearId?: string;
   canEdit: boolean;
   canActivate: boolean;
   canSuspend: boolean;
@@ -107,11 +109,13 @@ export function EnrollmentsTable({
   courses,
   branches,
   classGroups,
+  academicYears,
   defaultSearch = "",
   defaultStatus = "",
   defaultCourseId = "",
   defaultBranchId = "",
   defaultClassGroupId = "",
+  defaultAcademicYearId = "",
   canEdit,
   canActivate,
   canSuspend,
@@ -293,6 +297,22 @@ export function EnrollmentsTable({
             {classGroups.map((g) => (
               <SelectItem key={g.id} value={g.id}>
                 {g.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={defaultAcademicYearId || "all"}
+          onValueChange={(v) => updateParams({ yearId: v === "all" ? "" : v })}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Ano Letivo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os anos</SelectItem>
+            {academicYears.map((y) => (
+              <SelectItem key={y.id} value={y.id}>
+                {y.name}
               </SelectItem>
             ))}
           </SelectContent>

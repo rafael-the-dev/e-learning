@@ -18,6 +18,8 @@ import {
   updateEnrollmentSchema,
   type UpdateEnrollmentSchema,
 } from "@/modules/enrollments/schemas/enrollment.schema";
+import { findAcademicYearByIdInOrganization } from "@/modules/academic-calendar/repositories/academic-year.repository";
+import { findAcademicTermByIdInOrganization } from "@/modules/academic-calendar/repositories/academic-term.repository";
 import type { Enrollment } from "@/modules/enrollments/types";
 
 interface UpdateEnrollmentInput extends UpdateEnrollmentSchema {
@@ -82,6 +84,36 @@ export class UpdateEnrollmentCommand extends BaseCommand<UpdateEnrollmentInput, 
       }
     }
 
+    // Validate academicYearId if changing
+    const resolvedYearId = this.input.academicYearId ?? existing.academicYearId;
+    if (this.input.academicYearId) {
+      const year = await findAcademicYearByIdInOrganization(
+        this.input.academicYearId,
+        this.context.organizationId
+      );
+      if (!year) throw new NotFoundError("Ano Letivo", this.input.academicYearId);
+      if (year.status !== "ACTIVE") {
+        throw new BusinessRuleError("O ano letivo selecionado não está ativo.");
+      }
+    }
+
+    // Validate academicTermId if changing
+    if (this.input.academicTermId) {
+      const term = await findAcademicTermByIdInOrganization(
+        this.input.academicTermId,
+        this.context.organizationId
+      );
+      if (!term) throw new NotFoundError("Período Letivo", this.input.academicTermId);
+      if (term.academicYearId !== resolvedYearId) {
+        throw new ValidationError("Dados inválidos", {
+          academicTermId: ["O período não pertence ao ano letivo selecionado"],
+        });
+      }
+      if (term.status !== "ACTIVE") {
+        throw new BusinessRuleError("O período letivo selecionado não está ativo.");
+      }
+    }
+
     if (this.input.classGroupId) {
       const group = await db.classGroup.findFirst({
         where: {
@@ -98,6 +130,11 @@ export class UpdateEnrollmentCommand extends BaseCommand<UpdateEnrollmentInput, 
       }
       if (group.status !== "ACTIVE" && group.status !== "FORMING") {
         throw new BusinessRuleError("A turma selecionada não está ativa.");
+      }
+      if (group.academicYearId !== resolvedYearId) {
+        throw new ValidationError("Dados inválidos", {
+          classGroupId: ["A turma não pertence ao ano letivo selecionado"],
+        });
       }
 
       // Only check capacity if assigning a different group
@@ -156,6 +193,8 @@ export class UpdateEnrollmentCommand extends BaseCommand<UpdateEnrollmentInput, 
         branchId: this.input.branchId,
         courseLevelId: this.input.courseLevelId,
         classGroupId: this.input.classGroupId,
+        academicYearId: this.input.academicYearId,
+        academicTermId: this.input.academicTermId,
         startDate: this.input.startDate ? new Date(this.input.startDate) : (this.input.startDate === null ? null : undefined),
         expectedEndDate: this.input.expectedEndDate ? new Date(this.input.expectedEndDate) : (this.input.expectedEndDate === null ? null : undefined),
         notes: this.input.notes,
@@ -171,6 +210,8 @@ export class UpdateEnrollmentCommand extends BaseCommand<UpdateEnrollmentInput, 
         branchId: prev.branchId,
         courseLevelId: prev.courseLevelId,
         classGroupId: prev.classGroupId,
+        academicYearId: prev.academicYearId,
+        academicTermId: prev.academicTermId,
         startDate: prev.startDate,
         expectedEndDate: prev.expectedEndDate,
         notes: prev.notes,
@@ -179,6 +220,8 @@ export class UpdateEnrollmentCommand extends BaseCommand<UpdateEnrollmentInput, 
         branchId: enrollment.branchId,
         courseLevelId: enrollment.courseLevelId,
         classGroupId: enrollment.classGroupId,
+        academicYearId: enrollment.academicYearId,
+        academicTermId: enrollment.academicTermId,
         startDate: enrollment.startDate,
         expectedEndDate: enrollment.expectedEndDate,
         notes: enrollment.notes,

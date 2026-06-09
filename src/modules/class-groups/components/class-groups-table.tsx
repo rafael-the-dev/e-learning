@@ -35,14 +35,21 @@ interface BranchFilterOption {
   name: string;
 }
 
+interface AcademicYearFilterOption {
+  id: string;
+  name: string;
+}
+
 interface ClassGroupsTableProps {
   result: PaginatedResult<ClassGroup>;
   courses: CourseFilterOption[];
   branches: BranchFilterOption[];
+  academicYears: AcademicYearFilterOption[];
   defaultSearch?: string;
   defaultStatus?: string;
   defaultCourseId?: string;
   defaultBranchId?: string;
+  defaultAcademicYearId?: string;
   canEdit: boolean;
   canArchive: boolean;
   canDelete: boolean;
@@ -52,10 +59,12 @@ export function ClassGroupsTable({
   result,
   courses,
   branches,
+  academicYears,
   defaultSearch = "",
   defaultStatus = "",
   defaultCourseId = "",
   defaultBranchId = "",
+  defaultAcademicYearId = "",
   canEdit,
   canArchive,
   canDelete,
@@ -182,6 +191,22 @@ export function ClassGroupsTable({
             {branches.map((b) => (
               <SelectItem key={b.id} value={b.id}>
                 {b.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={defaultAcademicYearId || "all"}
+          onValueChange={(v) => updateParams({ yearId: v === "all" ? "" : v })}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Ano Letivo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os anos</SelectItem>
+            {academicYears.map((y) => (
+              <SelectItem key={y.id} value={y.id}>
+                {y.name}
               </SelectItem>
             ))}
           </SelectContent>

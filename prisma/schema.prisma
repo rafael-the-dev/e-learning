@@ -497,32 +497,36 @@ model TeacherSubject {
 // =============================================================================
 
 model ClassGroup {
-  id             String    @id @default(cuid())
-  organizationId String
-  branchId       String?
-  courseId       String
-  courseLevelId  String?
-  teacherId      String?
-  name           String
-  code           String?
-  capacity       Int       @default(30)
-  currentCount   Int       @default(0)
-  startDate      DateTime?
-  endDate        DateTime?
+  id               String    @id @default(cuid())
+  organizationId   String
+  branchId         String?
+  courseId         String
+  courseLevelId    String?
+  teacherId        String?
+  academicYearId   String
+  academicTermId   String?
+  name             String
+  code             String?
+  capacity         Int       @default(30)
+  currentCount     Int       @default(0)
+  startDate        DateTime?
+  endDate          DateTime?
   // ClassGroupStatus: FORMING | ACTIVE | COMPLETED | CANCELLED
-  status         String    @default("FORMING")
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
-  createdBy      String?
+  status           String    @default("FORMING")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+  createdBy        String?
 
-  branch      Branch?           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  course      Course            @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courseLevel CourseLevel?      @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  teacher     Teacher?          @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch        Branch?           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course        Course            @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel   CourseLevel?      @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacher       Teacher?          @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear  AcademicYear      @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm  AcademicTerm?     @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   classGroupSchedules ClassGroupSchedule[]
-  enrollments Enrollment[]
-  attendances AttendanceRecord[]
+  enrollments   Enrollment[]
+  attendances   AttendanceRecord[]
 
   @@map("class_groups")
 }
@@ -779,6 +783,8 @@ model Enrollment {
   courseId         String
   courseLevelId    String?
   classGroupId     String?
+  academicYearId   String
+  academicTermId   String?
   billingPolicyId  String?
   enrollmentNumber String?
   enrollmentDate   DateTime  @default(now())
@@ -798,6 +804,8 @@ model Enrollment {
   course         Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   courseLevel    CourseLevel?              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   classGroup     ClassGroup?               @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear   AcademicYear              @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm   AcademicTerm?             @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   billingPolicy  EnrollmentBillingPolicy?  @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   invoices        Invoice[]
   payments        Payment[]
@@ -1365,6 +1373,8 @@ model AcademicYear {
   terms        AcademicTerm[]
   holidays     AcademicHoliday[]
   events       AcademicEvent[]
+  classGroups  ClassGroup[]
+  enrollments  Enrollment[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1389,6 +1399,8 @@ model AcademicTerm {
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   events       AcademicEvent[]
+  classGroups  ClassGroup[]
+  enrollments  Enrollment[]
 
   @@unique([academicYearId, order])
   @@unique([academicYearId, code])

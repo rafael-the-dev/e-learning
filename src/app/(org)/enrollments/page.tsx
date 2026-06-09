@@ -21,7 +21,7 @@ export const metadata = { title: "Matrículas" };
 
 async function getFilterOptions(organizationId: string) {
   const db = await getDb();
-  const [courses, branches, classGroups] = await Promise.all([
+  const [courses, branches, classGroups, academicYears] = await Promise.all([
     db.course.findMany({
       where: { organizationId, deletedAt: null, status: "ACTIVE" },
       select: { id: true, name: true },
@@ -37,8 +37,13 @@ async function getFilterOptions(organizationId: string) {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    db.academicYear.findMany({
+      where: { organizationId, deletedAt: null, status: { not: "ARCHIVED" } },
+      select: { id: true, name: true },
+      orderBy: { startDate: "desc" },
+    }),
   ]);
-  return { courses, branches, classGroups };
+  return { courses, branches, classGroups, academicYears };
 }
 
 export default async function EnrollmentsPage({
@@ -51,6 +56,7 @@ export default async function EnrollmentsPage({
     courseId?: string;
     branchId?: string;
     classGroupId?: string;
+    yearId?: string;
   }>;
 }) {
   let context: AuthContext;
@@ -60,7 +66,7 @@ export default async function EnrollmentsPage({
     redirect("/forbidden");
   }
 
-  const { page, search, status, courseId, branchId, classGroupId } = await searchParams;
+  const { page, search, status, courseId, branchId, classGroupId, yearId } = await searchParams;
   const pagination = normalizePaginationParams(page);
 
   const perms = await getUserPermissions(context.userId, context.organizationId);
@@ -81,6 +87,7 @@ export default async function EnrollmentsPage({
       courseId,
       branchId,
       classGroupId,
+      academicYearId: yearId,
     }),
     getEnrollmentStats(context.organizationId),
     getFilterOptions(context.organizationId),
@@ -125,11 +132,13 @@ export default async function EnrollmentsPage({
           courses={filterOptions.courses}
           branches={filterOptions.branches}
           classGroups={filterOptions.classGroups}
+          academicYears={filterOptions.academicYears}
           defaultSearch={search}
           defaultStatus={status}
           defaultCourseId={courseId}
           defaultBranchId={branchId}
           defaultClassGroupId={classGroupId}
+          defaultAcademicYearId={yearId}
           canEdit={canEdit}
           canActivate={canActivate}
           canSuspend={canSuspend}

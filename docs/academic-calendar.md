@@ -223,14 +223,70 @@ src/modules/academic-calendar/
 
 ---
 
-## Future Integrations
+## Integrations
 
-When other modules integrate with the Academic Calendar, they should:
+### Enrollments
+
+Every `Enrollment` belongs to an `AcademicYear` and optionally an `AcademicTerm`.
+
+**Schema fields added to `Enrollment`:**
+
+| Field | Type | Notes |
+|---|---|---|
+| `academicYearId` | String | Required. FK → AcademicYear |
+| `academicTermId` | String? | Optional. FK → AcademicTerm |
+
+**Business rules enforced in `CreateEnrollmentCommand` / `UpdateEnrollmentCommand`:**
+
+1. `academicYearId` must exist and belong to `activeOrganizationId` — validated via `findAcademicYearByIdInOrganization`.
+2. `academicYear.status` must be `"ACTIVE"`.
+3. If `academicTermId` is provided:
+   - It must exist and belong to `activeOrganizationId`.
+   - `term.academicYearId` must equal the enrollment's `academicYearId` (no cross-year term references).
+   - `term.status` must be `"ACTIVE"`.
+4. If a `classGroupId` is provided:
+   - `classGroup.academicYearId` must equal the enrollment's `academicYearId`.
+   - If the class group also has an `academicTermId`, the enrollment must use the same term.
+
+**Filtering:** The enrollment list page (`/enrollments`) accepts a `yearId` URL param that filters results by `academicYearId`.
+
+---
+
+### Class Groups
+
+Every `ClassGroup` belongs to an `AcademicYear` and optionally an `AcademicTerm`.
+
+**Schema fields added to `ClassGroup`:**
+
+| Field | Type | Notes |
+|---|---|---|
+| `academicYearId` | String | Required. FK → AcademicYear |
+| `academicTermId` | String? | Optional. FK → AcademicTerm |
+
+**Business rules enforced in `CreateClassGroupCommand` / `UpdateClassGroupCommand`:**
+
+1. `academicYearId` must exist and belong to `activeOrganizationId` — validated via `findAcademicYearByIdInOrganization`.
+2. `academicYear.status` must be `"ACTIVE"`.
+3. If `academicTermId` is provided:
+   - It must exist and belong to `activeOrganizationId`.
+   - `term.academicYearId` must equal the class group's `academicYearId`.
+   - `term.status` must be `"ACTIVE"`.
+
+**Filtering:** The class groups list page (`/class-groups`) accepts a `yearId` URL param that filters results by `academicYearId`.
+
+---
+
+### Cross-Tenant Safety
+
+All commands that accept `academicYearId` or `academicTermId` call `findAcademicYearByIdInOrganization` / `findAcademicTermByIdInOrganization` before use. These helpers scope their queries to `organizationId`, preventing a client from referencing records belonging to another tenant.
+
+---
+
+## Future Integrations
 
 1. **Attendance** — filter attendance records by `academicTermId` to generate per-term reports.
 2. **Assessments** — link assessments to `AcademicEvent` of type `EXAM_PERIOD`.
-3. **Enrollment** — validate that new enrollments fall within an active `AcademicYear` with `status === "ACTIVE"`.
-4. **Billing** — use `PAYMENT_DEADLINE` events to trigger overdue notifications.
-5. **Certificates** — require a `COMPLETED` `AcademicYear` before issuing certificates.
+3. **Billing** — use `PAYMENT_DEADLINE` events to trigger overdue notifications.
+4. **Certificates** — require a `COMPLETED` `AcademicYear` before issuing certificates.
 
 All such integrations must validate FK references against `organizationId` — they must not assume that a provided `academicYearId` belongs to the same tenant without an explicit repository check.

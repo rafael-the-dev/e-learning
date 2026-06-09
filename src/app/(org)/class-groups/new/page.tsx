@@ -17,9 +17,8 @@ export default async function NewClassGroupPage() {
     redirect("/forbidden");
   }
 
-  const { courses, levels, teachers, branches } = await getClassGroupFormReferenceData(
-    context.organizationId
-  );
+  const { courses, levels, teachers, branches, academicYears, terms } =
+    await getClassGroupFormReferenceData(context.organizationId);
 
   const breadcrumb = (
     <nav className="flex items-center gap-2 text-muted-foreground">
@@ -44,6 +43,8 @@ export default async function NewClassGroupPage() {
           levels={levels}
           teachers={teachers}
           branches={branches}
+          academicYears={academicYears}
+          terms={terms}
         />
       </div>
     </>

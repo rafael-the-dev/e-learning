@@ -13,6 +13,8 @@ export interface ListClassGroupsParams extends PaginationParams {
   status?: string;
   courseId?: string;
   branchId?: string;
+  academicYearId?: string;
+  academicTermId?: string;
 }
 
 const classGroupSelect = {
@@ -22,6 +24,8 @@ const classGroupSelect = {
   courseId: true,
   courseLevelId: true,
   teacherId: true,
+  academicYearId: true,
+  academicTermId: true,
   name: true,
   code: true,
   capacity: true,
@@ -36,6 +40,8 @@ const classGroupSelect = {
   courseLevel: { select: { id: true, name: true } },
   teacher: { select: { id: true, firstName: true, lastName: true } },
   branch: { select: { id: true, name: true } },
+  academicYear: { select: { id: true, name: true } },
+  academicTerm: { select: { id: true, name: true } },
   _count: { select: { enrollments: true, classGroupSchedules: true } },
 } as const;
 
@@ -46,6 +52,8 @@ function mapToClassGroup(row: {
   courseId: string;
   courseLevelId: string | null;
   teacherId: string | null;
+  academicYearId: string;
+  academicTermId: string | null;
   name: string;
   code: string | null;
   capacity: number;
@@ -60,6 +68,8 @@ function mapToClassGroup(row: {
   courseLevel: { id: string; name: string } | null;
   teacher: { id: string; firstName: string; lastName: string } | null;
   branch: { id: string; name: string } | null;
+  academicYear: { id: string; name: string };
+  academicTerm: { id: string; name: string } | null;
   _count: { enrollments: number; classGroupSchedules: number };
 }): ClassGroup {
   return {
@@ -69,6 +79,8 @@ function mapToClassGroup(row: {
     courseId: row.courseId,
     courseLevelId: row.courseLevelId,
     teacherId: row.teacherId,
+    academicYearId: row.academicYearId,
+    academicTermId: row.academicTermId,
     name: row.name,
     code: row.code,
     capacity: row.capacity,
@@ -87,6 +99,8 @@ function mapToClassGroup(row: {
     branchName: row.branch?.name ?? null,
     enrollmentsCount: row._count.enrollments,
     schedulesCount: row._count.classGroupSchedules,
+    academicYearName: row.academicYear.name,
+    academicTermName: row.academicTerm?.name ?? null,
   };
 }
 
@@ -109,6 +123,8 @@ export async function findClassGroupsByOrganization(
     ...(params.status && { status: params.status }),
     ...(params.courseId && { courseId: params.courseId }),
     ...(params.branchId && { branchId: params.branchId }),
+    ...(params.academicYearId && { academicYearId: params.academicYearId }),
+    ...(params.academicTermId && { academicTermId: params.academicTermId }),
   };
 
   const [rows, total] = await Promise.all([
@@ -161,6 +177,8 @@ export async function createClassGroup(data: {
   courseId: string;
   courseLevelId?: string | null;
   teacherId?: string | null;
+  academicYearId: string;
+  academicTermId?: string | null;
   name: string;
   code?: string | null;
   capacity: number;
@@ -177,6 +195,8 @@ export async function createClassGroup(data: {
       courseId: data.courseId,
       courseLevelId: data.courseLevelId ?? null,
       teacherId: data.teacherId ?? null,
+      academicYearId: data.academicYearId,
+      academicTermId: data.academicTermId ?? null,
       name: data.name,
       code: data.code ?? null,
       capacity: data.capacity,
@@ -200,6 +220,8 @@ export async function updateClassGroup(
     courseLevelId?: string | null;
     branchId?: string | null;
     teacherId?: string | null;
+    academicYearId?: string;
+    academicTermId?: string | null;
     capacity?: number;
     startDate?: Date | null;
     endDate?: Date | null;
@@ -214,6 +236,8 @@ export async function updateClassGroup(
   if (data.courseLevelId !== undefined) updateData.courseLevelId = data.courseLevelId;
   if (data.branchId !== undefined) updateData.branchId = data.branchId;
   if (data.teacherId !== undefined) updateData.teacherId = data.teacherId;
+  if (data.academicYearId !== undefined) updateData.academicYearId = data.academicYearId;
+  if (data.academicTermId !== undefined) updateData.academicTermId = data.academicTermId;
   if (data.capacity !== undefined) updateData.capacity = data.capacity;
   if (data.startDate !== undefined) updateData.startDate = data.startDate;
   if (data.endDate !== undefined) updateData.endDate = data.endDate;

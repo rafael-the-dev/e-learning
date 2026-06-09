@@ -61,6 +61,17 @@ export interface BranchOption {
   name: string;
 }
 
+export interface AcademicYearOption {
+  id: string;
+  name: string;
+}
+
+export interface AcademicTermOption {
+  id: string;
+  name: string;
+  academicYearId: string;
+}
+
 // =============================================================================
 // FORM FIELDS (shared between create and edit)
 // =============================================================================
@@ -73,8 +84,12 @@ interface FormFieldsProps {
   levels: LevelOption[];
   teachers: TeacherOption[];
   branches: BranchOption[];
+  academicYears: AcademicYearOption[];
+  terms: AcademicTermOption[];
   selectedCourseId: string;
+  selectedYearId: string;
   onCourseChange: (courseId: string) => void;
+  onYearChange: (yearId: string) => void;
 }
 
 function ClassGroupFormFields({
@@ -85,10 +100,15 @@ function ClassGroupFormFields({
   levels,
   teachers,
   branches,
+  academicYears,
+  terms,
   selectedCourseId,
+  selectedYearId,
   onCourseChange,
+  onYearChange,
 }: FormFieldsProps) {
   const filteredLevels = levels.filter((l) => l.courseId === selectedCourseId);
+  const filteredTerms = terms.filter((t) => t.academicYearId === selectedYearId);
 
   return (
     <div className="space-y-6">
@@ -209,7 +229,72 @@ function ClassGroupFormFields({
         </div>
       </section>
 
-      {/* Section 3: Teacher & Branch */}
+      {/* Section 3: Academic Year & Term */}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Ano Letivo e Período
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Ano Letivo *</Label>
+            <Controller
+              name="academicYearId"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value ?? ""}
+                  onValueChange={(v) => {
+                    field.onChange(v);
+                    onYearChange(v);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar ano letivo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {academicYears.map((y) => (
+                      <SelectItem key={y.id} value={y.id}>
+                        {y.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {errors.academicYearId && (
+              <p className="text-xs text-destructive">{errors.academicYearId.message}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Período Letivo</Label>
+            <Controller
+              name="academicTermId"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value || "__none__"}
+                  onValueChange={(v) => field.onChange(v === "__none__" ? null : v)}
+                  disabled={!selectedYearId || filteredTerms.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sem período específico</SelectItem>
+                    {filteredTerms.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Section 4: Teacher & Branch */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Professor e Filial
@@ -268,7 +353,7 @@ function ClassGroupFormFields({
         </div>
       </section>
 
-      {/* Section 4: Dates & Capacity */}
+      {/* Section 5: Dates & Capacity */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Datas e Capacidade
@@ -323,6 +408,8 @@ interface CreateClassGroupFormProps {
   levels: LevelOption[];
   teachers: TeacherOption[];
   branches: BranchOption[];
+  academicYears: AcademicYearOption[];
+  terms: AcademicTermOption[];
 }
 
 export function CreateClassGroupForm({
@@ -330,6 +417,8 @@ export function CreateClassGroupForm({
   levels,
   teachers,
   branches,
+  academicYears,
+  terms,
 }: CreateClassGroupFormProps) {
   const router = useRouter();
   const {
@@ -348,10 +437,16 @@ export function CreateClassGroupForm({
   });
 
   const selectedCourseId = watch("courseId") ?? "";
+  const selectedYearId = watch("academicYearId") ?? "";
 
   function handleCourseChange(courseId: string) {
     setValue("courseId", courseId);
     setValue("courseLevelId", undefined);
+  }
+
+  function handleYearChange(yearId: string) {
+    setValue("academicYearId", yearId);
+    setValue("academicTermId", null);
   }
 
   const onSubmit = handleSubmit(async (data) => {
@@ -374,8 +469,12 @@ export function CreateClassGroupForm({
         levels={levels}
         teachers={teachers}
         branches={branches}
+        academicYears={academicYears}
+        terms={terms}
         selectedCourseId={selectedCourseId}
+        selectedYearId={selectedYearId}
         onCourseChange={handleCourseChange}
+        onYearChange={handleYearChange}
       />
       <div className="flex justify-end gap-3">
         <Button
@@ -403,6 +502,8 @@ interface EditClassGroupFormProps {
   levels: LevelOption[];
   teachers: TeacherOption[];
   branches: BranchOption[];
+  academicYears: AcademicYearOption[];
+  terms: AcademicTermOption[];
 }
 
 export function EditClassGroupForm({
@@ -411,6 +512,8 @@ export function EditClassGroupForm({
   levels,
   teachers,
   branches,
+  academicYears,
+  terms,
 }: EditClassGroupFormProps) {
   const router = useRouter();
   const {
@@ -429,6 +532,8 @@ export function EditClassGroupForm({
       courseLevelId: classGroup.courseLevelId ?? undefined,
       branchId: classGroup.branchId ?? undefined,
       teacherId: classGroup.teacherId ?? undefined,
+      academicYearId: classGroup.academicYearId,
+      academicTermId: classGroup.academicTermId ?? null,
       capacity: classGroup.capacity,
       startDate: classGroup.startDate
         ? new Date(classGroup.startDate).toISOString().split("T")[0]
@@ -441,10 +546,16 @@ export function EditClassGroupForm({
   });
 
   const selectedCourseId = watch("courseId") ?? classGroup.courseId;
+  const selectedYearId = watch("academicYearId") ?? classGroup.academicYearId;
 
   function handleCourseChange(courseId: string) {
     setValue("courseId", courseId);
     setValue("courseLevelId", null);
+  }
+
+  function handleYearChange(yearId: string) {
+    setValue("academicYearId", yearId);
+    setValue("academicTermId", null);
   }
 
   const onSubmit = handleSubmit(async (data) => {
@@ -467,8 +578,12 @@ export function EditClassGroupForm({
         levels={levels}
         teachers={teachers}
         branches={branches}
+        academicYears={academicYears}
+        terms={terms}
         selectedCourseId={selectedCourseId}
+        selectedYearId={selectedYearId}
         onCourseChange={handleCourseChange}
+        onYearChange={handleYearChange}
       />
       <div className="flex justify-end gap-3">
         <Button

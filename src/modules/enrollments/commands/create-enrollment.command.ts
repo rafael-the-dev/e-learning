@@ -19,6 +19,8 @@ import {
   createEnrollmentSchema,
   type CreateEnrollmentSchema,
 } from "@/modules/enrollments/schemas/enrollment.schema";
+import { findAcademicYearByIdInOrganization } from "@/modules/academic-calendar/repositories/academic-year.repository";
+import { findAcademicTermByIdInOrganization } from "@/modules/academic-calendar/repositories/academic-term.repository";
 import { GenerateInvoiceFromEnrollmentCommand } from "@/modules/billing/commands/generate-invoice-from-enrollment.command";
 import { findDefaultBillingPolicy } from "@/modules/billing/repositories/billing-policy.repository";
 import type { Enrollment } from "@/modules/enrollments/types";
@@ -82,7 +84,34 @@ export class CreateEnrollmentCommand extends BaseCommand<CreateEnrollmentSchema,
       }
     }
 
-    // Validate classGroup belongs to organization, matches course, is ACTIVE, has capacity
+    // Validate academicYearId belongs to org and is ACTIVE
+    const academicYear = await findAcademicYearByIdInOrganization(
+      this.input.academicYearId,
+      this.context.organizationId
+    );
+    if (!academicYear) throw new NotFoundError("Ano Letivo", this.input.academicYearId);
+    if (academicYear.status !== "ACTIVE") {
+      throw new BusinessRuleError("O ano letivo selecionado não está ativo.");
+    }
+
+    // Validate academicTermId belongs to org and to the selected year and is ACTIVE
+    if (this.input.academicTermId) {
+      const term = await findAcademicTermByIdInOrganization(
+        this.input.academicTermId,
+        this.context.organizationId
+      );
+      if (!term) throw new NotFoundError("Período Letivo", this.input.academicTermId);
+      if (term.academicYearId !== this.input.academicYearId) {
+        throw new ValidationError("Dados inválidos", {
+          academicTermId: ["O período não pertence ao ano letivo selecionado"],
+        });
+      }
+      if (term.status !== "ACTIVE") {
+        throw new BusinessRuleError("O período letivo selecionado não está ativo.");
+      }
+    }
+
+    // Validate classGroup belongs to organization, matches course, year, and is ACTIVE
     if (this.input.classGroupId) {
       const group = await db.classGroup.findFirst({
         where: {
@@ -99,6 +128,20 @@ export class CreateEnrollmentCommand extends BaseCommand<CreateEnrollmentSchema,
       }
       if (group.status !== "ACTIVE" && group.status !== "FORMING") {
         throw new BusinessRuleError("A turma selecionada não está ativa.");
+      }
+      if (group.academicYearId !== this.input.academicYearId) {
+        throw new ValidationError("Dados inválidos", {
+          classGroupId: ["A turma não pertence ao ano letivo selecionado"],
+        });
+      }
+      if (
+        group.academicTermId &&
+        this.input.academicTermId &&
+        group.academicTermId !== this.input.academicTermId
+      ) {
+        throw new ValidationError("Dados inválidos", {
+          academicTermId: ["A turma está associada a um período diferente do selecionado"],
+        });
       }
       if (this.input.courseLevelId && group.courseLevelId && group.courseLevelId !== this.input.courseLevelId) {
         throw new ValidationError("Dados inválidos", {
@@ -146,6 +189,8 @@ export class CreateEnrollmentCommand extends BaseCommand<CreateEnrollmentSchema,
       courseId: this.input.courseId,
       courseLevelId: this.input.courseLevelId ?? null,
       classGroupId: this.input.classGroupId ?? null,
+      academicYearId: this.input.academicYearId,
+      academicTermId: this.input.academicTermId ?? null,
       enrollmentNumber,
       enrollmentDate: new Date(this.input.enrollmentDate),
       startDate: this.input.startDate ? new Date(this.input.startDate) : null,

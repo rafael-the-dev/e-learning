@@ -14,6 +14,8 @@ export interface ListEnrollmentsParams extends PaginationParams {
   courseId?: string;
   branchId?: string;
   classGroupId?: string;
+  academicYearId?: string;
+  academicTermId?: string;
 }
 
 const enrollmentSelect = {
@@ -24,6 +26,8 @@ const enrollmentSelect = {
   courseId: true,
   courseLevelId: true,
   classGroupId: true,
+  academicYearId: true,
+  academicTermId: true,
   enrollmentNumber: true,
   enrollmentDate: true,
   startDate: true,
@@ -40,6 +44,8 @@ const enrollmentSelect = {
   courseLevel: { select: { id: true, name: true } },
   classGroup: { select: { id: true, name: true } },
   branch: { select: { id: true, name: true } },
+  academicYear: { select: { id: true, name: true } },
+  academicTerm: { select: { id: true, name: true } },
 } as const;
 
 function mapToEnrollment(row: {
@@ -50,6 +56,8 @@ function mapToEnrollment(row: {
   courseId: string;
   courseLevelId: string | null;
   classGroupId: string | null;
+  academicYearId: string;
+  academicTermId: string | null;
   enrollmentNumber: string | null;
   enrollmentDate: Date;
   startDate: Date | null;
@@ -66,6 +74,8 @@ function mapToEnrollment(row: {
   courseLevel: { id: string; name: string } | null;
   classGroup: { id: string; name: string } | null;
   branch: { id: string; name: string } | null;
+  academicYear: { id: string; name: string };
+  academicTerm: { id: string; name: string } | null;
 }): Enrollment {
   return {
     id: row.id,
@@ -75,6 +85,8 @@ function mapToEnrollment(row: {
     courseId: row.courseId,
     courseLevelId: row.courseLevelId,
     classGroupId: row.classGroupId,
+    academicYearId: row.academicYearId,
+    academicTermId: row.academicTermId,
     enrollmentNumber: row.enrollmentNumber,
     enrollmentDate: row.enrollmentDate,
     startDate: row.startDate,
@@ -92,6 +104,8 @@ function mapToEnrollment(row: {
     courseLevelName: row.courseLevel?.name ?? null,
     classGroupName: row.classGroup?.name ?? null,
     branchName: row.branch?.name ?? null,
+    academicYearName: row.academicYear.name,
+    academicTermName: row.academicTerm?.name ?? null,
   };
 }
 
@@ -109,6 +123,8 @@ export async function findEnrollmentsByOrganization(
     ...(params.courseId && { courseId: params.courseId }),
     ...(params.branchId && { branchId: params.branchId }),
     ...(params.classGroupId && { classGroupId: params.classGroupId }),
+    ...(params.academicYearId && { academicYearId: params.academicYearId }),
+    ...(params.academicTermId && { academicTermId: params.academicTermId }),
     ...(params.search && {
       OR: [
         { enrollmentNumber: { contains: params.search } },
@@ -152,6 +168,8 @@ export async function createEnrollment(data: {
   courseId: string;
   courseLevelId?: string | null;
   classGroupId?: string | null;
+  academicYearId: string;
+  academicTermId?: string | null;
   enrollmentNumber: string;
   enrollmentDate: Date;
   startDate?: Date | null;
@@ -169,6 +187,8 @@ export async function createEnrollment(data: {
       courseId: data.courseId,
       courseLevelId: data.courseLevelId ?? null,
       classGroupId: data.classGroupId ?? null,
+      academicYearId: data.academicYearId,
+      academicTermId: data.academicTermId ?? null,
       enrollmentNumber: data.enrollmentNumber,
       enrollmentDate: data.enrollmentDate,
       startDate: data.startDate ?? null,
@@ -189,6 +209,8 @@ export async function updateEnrollment(
     branchId?: string | null;
     courseLevelId?: string | null;
     classGroupId?: string | null;
+    academicYearId?: string;
+    academicTermId?: string | null;
     startDate?: Date | null;
     expectedEndDate?: Date | null;
     notes?: string | null;
@@ -200,6 +222,8 @@ export async function updateEnrollment(
   if (data.branchId !== undefined) updateData.branchId = data.branchId;
   if (data.courseLevelId !== undefined) updateData.courseLevelId = data.courseLevelId;
   if (data.classGroupId !== undefined) updateData.classGroupId = data.classGroupId;
+  if (data.academicYearId !== undefined) updateData.academicYearId = data.academicYearId;
+  if (data.academicTermId !== undefined) updateData.academicTermId = data.academicTermId;
   if (data.startDate !== undefined) updateData.startDate = data.startDate;
   if (data.expectedEndDate !== undefined) updateData.expectedEndDate = data.expectedEndDate;
   if (data.notes !== undefined) updateData.notes = data.notes;

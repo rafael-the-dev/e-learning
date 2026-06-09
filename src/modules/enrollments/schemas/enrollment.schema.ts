@@ -12,6 +12,8 @@ export const createEnrollmentSchema = z.object({
   courseId: z.string().min(1, "O curso é obrigatório"),
   courseLevelId: z.string().optional().nullable(),
   classGroupId: z.string().optional().nullable(),
+  academicYearId: z.string().min(1, "O ano letivo é obrigatório"),
+  academicTermId: z.string().optional().nullable(),
   enrollmentDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de data inválido (AAAA-MM-DD)"),
@@ -26,6 +28,8 @@ export const updateEnrollmentSchema = z.object({
   branchId: z.string().min(1).optional().nullable(),
   courseLevelId: z.string().optional().nullable(),
   classGroupId: z.string().optional().nullable(),
+  academicYearId: z.string().min(1).optional(),
+  academicTermId: z.string().optional().nullable(),
   startDate: isoDate,
   expectedEndDate: isoDate,
   notes: z.string().max(2000).optional().nullable(),

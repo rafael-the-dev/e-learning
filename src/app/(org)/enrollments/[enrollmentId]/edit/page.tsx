@@ -15,7 +15,7 @@ export async function generateMetadata() {
 
 async function getFormOptions(organizationId: string, courseId: string) {
   const db = await getDb();
-  const [levels, classGroups, branches] = await Promise.all([
+  const [levels, classGroups, branches, academicYears, terms] = await Promise.all([
     db.courseLevel.findMany({
       where: { courseId, status: "ACTIVE" },
       select: { id: true, name: true, courseId: true },
@@ -33,6 +33,8 @@ async function getFormOptions(organizationId: string, courseId: string) {
         name: true,
         courseId: true,
         courseLevelId: true,
+        academicYearId: true,
+        academicTermId: true,
         capacity: true,
         currentCount: true,
       },
@@ -43,8 +45,18 @@ async function getFormOptions(organizationId: string, courseId: string) {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    db.academicYear.findMany({
+      where: { organizationId, deletedAt: null, status: { not: "ARCHIVED" } },
+      select: { id: true, name: true },
+      orderBy: { startDate: "desc" },
+    }),
+    db.academicTerm.findMany({
+      where: { organizationId: organizationId, deletedAt: null, status: "ACTIVE" },
+      select: { id: true, name: true, academicYearId: true },
+      orderBy: [{ academicYearId: "asc" }, { order: "asc" }],
+    }),
   ]);
-  return { levels, classGroups, branches };
+  return { levels, classGroups, branches, academicYears, terms };
 }
 
 export default async function EditEnrollmentPage({
@@ -105,6 +117,8 @@ export default async function EditEnrollmentPage({
           levels={options.levels}
           classGroups={options.classGroups}
           branches={options.branches}
+          academicYears={options.academicYears}
+          terms={options.terms}
         />
       </div>
     </>

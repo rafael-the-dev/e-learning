@@ -11,7 +11,7 @@ export const metadata = { title: "Nova Matrícula" };
 
 async function getFormOptions(organizationId: string) {
   const db = await getDb();
-  const [students, courses, levels, classGroups, branches] = await Promise.all([
+  const [students, courses, levels, classGroups, branches, academicYears, terms] = await Promise.all([
     db.student.findMany({
       where: {
         organizationId,
@@ -42,6 +42,8 @@ async function getFormOptions(organizationId: string) {
         name: true,
         courseId: true,
         courseLevelId: true,
+        academicYearId: true,
+        academicTermId: true,
         capacity: true,
         currentCount: true,
       },
@@ -52,8 +54,18 @@ async function getFormOptions(organizationId: string) {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    db.academicYear.findMany({
+      where: { organizationId, deletedAt: null, status: "ACTIVE" },
+      select: { id: true, name: true },
+      orderBy: { startDate: "desc" },
+    }),
+    db.academicTerm.findMany({
+      where: { organizationId: organizationId, deletedAt: null, status: "ACTIVE" },
+      select: { id: true, name: true, academicYearId: true },
+      orderBy: [{ academicYearId: "asc" }, { order: "asc" }],
+    }),
   ]);
-  return { students, courses, levels, classGroups, branches };
+  return { students, courses, levels, classGroups, branches, academicYears, terms };
 }
 
 export default async function NewEnrollmentPage() {
@@ -90,6 +102,8 @@ export default async function NewEnrollmentPage() {
           levels={options.levels}
           classGroups={options.classGroups}
           branches={options.branches}
+          academicYears={options.academicYears}
+          terms={options.terms}
         />
       </div>
     </>

@@ -10,6 +10,8 @@ export interface Enrollment {
   courseId: string;
   courseLevelId: string | null;
   classGroupId: string | null;
+  academicYearId: string;
+  academicTermId: string | null;
   enrollmentNumber: string | null;
   enrollmentDate: Date;
   startDate: Date | null;
@@ -28,6 +30,8 @@ export interface Enrollment {
   courseLevelName?: string | null;
   classGroupName?: string | null;
   branchName?: string | null;
+  academicYearName?: string;
+  academicTermName?: string | null;
 }
 
 export interface EnrollmentStatusHistory {

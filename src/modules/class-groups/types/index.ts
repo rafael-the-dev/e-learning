@@ -9,6 +9,8 @@ export interface ClassGroup {
   courseId: string;
   courseLevelId: string | null;
   teacherId: string | null;
+  academicYearId: string;
+  academicTermId: string | null;
   name: string;
   code: string | null;
   capacity: number;
@@ -26,6 +28,8 @@ export interface ClassGroup {
   branchName?: string | null;
   enrollmentsCount?: number;
   schedulesCount?: number;
+  academicYearName?: string;
+  academicTermName?: string | null;
 }
 
 export const CLASS_GROUP_STATUS_LABELS: Record<string, string> = {
