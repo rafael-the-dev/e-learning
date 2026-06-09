@@ -4,6 +4,8 @@ import { createInvoice, getLastInvoiceNumber } from "@/modules/finance/repositor
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import type { Invoice } from "@/modules/finance/types";
 import type { ServiceContext } from "@/shared/types/common";
 import { getDb } from "@/server/db";
@@ -87,6 +89,21 @@ export class CreateInvoiceCommand extends BaseCommand<CreateInvoiceInput, Invoic
       entityId: invoice.id,
       action: "CREATED",
       newValues: { invoiceNumber, totalAmount, status: "PENDING" },
+    });
+
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.INVOICE_CREATED,
+      aggregateType: DomainAggregateType.INVOICE,
+      aggregateId: invoice.id,
+      actorId: this.context.userId,
+      payload: {
+        invoiceId: invoice.id,
+        invoiceNumber,
+        enrollmentId: invoice.enrollmentId ?? undefined,
+        studentId: invoice.studentId ?? undefined,
+        totalAmount,
+      },
     });
 
     return invoice;

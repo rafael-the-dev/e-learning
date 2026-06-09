@@ -23,6 +23,8 @@ import { findAcademicYearByIdInOrganization } from "@/modules/academic-calendar/
 import { findAcademicTermByIdInOrganization } from "@/modules/academic-calendar/repositories/academic-term.repository";
 import { GenerateInvoiceFromEnrollmentCommand } from "@/modules/billing/commands/generate-invoice-from-enrollment.command";
 import { findDefaultBillingPolicy } from "@/modules/billing/repositories/billing-policy.repository";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import type { Enrollment } from "@/modules/enrollments/types";
 
 export class CreateEnrollmentCommand extends BaseCommand<CreateEnrollmentSchema, Enrollment> {
@@ -226,6 +228,21 @@ export class CreateEnrollmentCommand extends BaseCommand<CreateEnrollmentSchema,
         courseId: enrollment.courseId,
         status: enrollment.status,
         organizationId: this.context.organizationId,
+      },
+    });
+
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.ENROLLMENT_CREATED,
+      aggregateType: DomainAggregateType.ENROLLMENT,
+      aggregateId: enrollment.id,
+      actorId: this.context.userId,
+      payload: {
+        enrollmentId: enrollment.id,
+        enrollmentNumber,
+        studentId: enrollment.studentId,
+        courseId: enrollment.courseId,
+        status: enrollment.status,
       },
     });
 

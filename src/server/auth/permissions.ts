@@ -289,6 +289,9 @@ export const PERMISSIONS = {
   // Audit Logs
   AUDIT_LOGS_VIEW: "audit_logs.view",
 
+  // Domain Events
+  DOMAIN_EVENTS_VIEW: "domainEvents.view",
+
   // Dashboard
   DASHBOARD_VIEW: "dashboard.view",
 } as const;

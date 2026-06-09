@@ -4,6 +4,8 @@ import { findPaymentById } from "@/modules/finance/repositories/payment.reposito
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { getDb } from "@/server/db";
 import type { Payment } from "@/modules/finance/types";
 
@@ -168,6 +170,22 @@ export class CancelPaymentCommand extends BaseCommand<CancelPaymentInput, Paymen
       newValues: {
         status: "CANCELLED",
         reason: this.input.reason,
+      },
+    });
+
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.PAYMENT_CANCELLED,
+      aggregateType: DomainAggregateType.PAYMENT,
+      aggregateId: updated.id,
+      actorId: this.context.userId,
+      payload: {
+        paymentId: updated.id,
+        invoiceId: updated.invoiceId ?? undefined,
+        studentId: updated.studentId ?? undefined,
+        enrollmentId: updated.enrollmentId ?? undefined,
+        reason: this.input.reason ?? undefined,
+        previousStatus: existing.status,
       },
     });
 

@@ -8,6 +8,8 @@ import {
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { classroomAvailabilityService } from "@/modules/classrooms/services/classroom-availability.service";
 import { createClassroomBooking } from "@/modules/classrooms/repositories/classroom-booking.repository";
 import { findAcademicYearByIdInOrganization } from "@/modules/academic-calendar/repositories/academic-year.repository";
@@ -144,6 +146,22 @@ export class CreateClassroomBookingCommand extends BaseCommand<CreateClassroomBo
         classroomId: this.input.classroomId,
         classGroupId: this.input.classGroupId,
         academicYearId: this.input.academicYearId,
+      },
+    });
+
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.CLASSROOM_BOOKING_CREATED,
+      aggregateType: DomainAggregateType.CLASSROOM_BOOKING,
+      aggregateId: booking.id,
+      actorId: this.context.userId,
+      payload: {
+        bookingId: booking.id,
+        classroomId: this.input.classroomId,
+        classGroupId: this.input.classGroupId ?? undefined,
+        academicYearId: this.input.academicYearId,
+        startDate: this.input.startDate,
+        endDate: this.input.endDate,
       },
     });
 

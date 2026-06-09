@@ -80,6 +80,8 @@ model Organization {
   classroomResources       ClassroomResource[]
   classroomMaintenances    ClassroomMaintenance[]
   classroomBookings        ClassroomBooking[]
+  domainEvents             DomainEvent[]
+  domainEventHandlerLogs   DomainEventHandlerLog[]
 
   @@map("organizations")
 }
@@ -1610,4 +1612,58 @@ model ClassroomBooking {
   @@index([organizationId, classroomId, status])
   @@index([organizationId, academicYearId])
   @@map("classroom_bookings")
+}
+
+// =============================================================================
+// DOMAIN EVENTS
+// =============================================================================
+
+model DomainEvent {
+  id             String    @id @default(cuid())
+  organizationId String
+  eventType      String
+  aggregateType  String
+  aggregateId    String
+  payload        String    @db.NVarChar(Max)
+  // DomainEventStatus: PENDING | PROCESSING | PROCESSED | FAILED | CANCELLED
+  status         String    @default("PENDING")
+  occurredAt     DateTime  @default(now())
+  processedAt    DateTime?
+  failedAt       DateTime?
+  failureReason  String?   @db.NVarChar(Max)
+  retryCount     Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization  Organization           @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  handlerLogs   DomainEventHandlerLog[]
+
+  @@index([organizationId, eventType, status])
+  @@index([organizationId, aggregateType, aggregateId])
+  @@index([organizationId, status, occurredAt])
+  @@map("domain_events")
+}
+
+model DomainEventHandlerLog {
+  id             String    @id @default(cuid())
+  organizationId String
+  eventId        String
+  handlerName    String
+  // DomainEventHandlerStatus: PENDING | PROCESSING | PROCESSED | FAILED | SKIPPED
+  status         String    @default("PENDING")
+  startedAt      DateTime?
+  completedAt    DateTime?
+  failedAt       DateTime?
+  failureReason  String?   @db.NVarChar(Max)
+  retryCount     Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  event        DomainEvent  @relation(fields: [eventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([eventId, handlerName])
+  @@index([organizationId, eventId])
+  @@index([organizationId, handlerName, status])
+  @@map("domain_event_handler_logs")
 }

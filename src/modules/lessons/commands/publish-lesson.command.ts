@@ -11,6 +11,8 @@ import {
   findLessonByIdInOrganization,
   updateLesson,
 } from "@/modules/lessons/repositories/lesson.repository";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 
 export class PublishLessonCommand extends BaseCommand<{ lessonId: string }, void> {
   async validate(): Promise<void> {
@@ -44,6 +46,15 @@ export class PublishLessonCommand extends BaseCommand<{ lessonId: string }, void
       entityId: this.input.lessonId,
       action: "lesson.published",
       newValues: { status: "PUBLISHED" },
+    });
+
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.LESSON_PUBLISHED,
+      aggregateType: DomainAggregateType.LESSON,
+      aggregateId: this.input.lessonId,
+      actorId: this.context.userId,
+      payload: { lessonId: this.input.lessonId },
     });
   }
 }

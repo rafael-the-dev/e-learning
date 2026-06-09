@@ -18,6 +18,8 @@ import {
   type ActivateEnrollmentSchema,
 } from "@/modules/enrollments/schemas/enrollment.schema";
 import { ENROLLMENT_TRANSITIONS } from "@/modules/enrollments/types";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import type { Enrollment } from "@/modules/enrollments/types";
 
 export class ActivateEnrollmentCommand extends BaseCommand<ActivateEnrollmentSchema, Enrollment> {
@@ -80,6 +82,20 @@ export class ActivateEnrollmentCommand extends BaseCommand<ActivateEnrollmentSch
       action: "enrollment.activated",
       oldValues: { status: prev.status },
       newValues: { status: "ACTIVE" },
+    });
+
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.ENROLLMENT_ACTIVATED,
+      aggregateType: DomainAggregateType.ENROLLMENT,
+      aggregateId: enrollment.id,
+      actorId: this.context.userId,
+      payload: {
+        enrollmentId: enrollment.id,
+        studentId: enrollment.studentId,
+        courseId: enrollment.courseId,
+        fromStatus: prev.status,
+      },
     });
 
     return enrollment;

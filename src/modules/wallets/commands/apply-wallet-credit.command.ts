@@ -5,6 +5,8 @@ import { findInvoiceById } from "@/modules/finance/repositories/invoice.reposito
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { getDb } from "@/server/db";
 import type { StudentWallet } from "@/modules/wallets/types";
 
@@ -183,6 +185,20 @@ export class ApplyWalletCreditCommand extends BaseCommand<ApplyWalletCreditInput
         amount: this.input.amount,
         invoiceId: this.input.invoiceId,
         studentId: wallet.studentId,
+      },
+    });
+
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.WALLET_CREDIT_APPLIED,
+      aggregateType: DomainAggregateType.WALLET,
+      aggregateId: wallet.id,
+      actorId: this.context.userId,
+      payload: {
+        walletId: wallet.id,
+        studentId: wallet.studentId,
+        invoiceId: this.input.invoiceId,
+        amount: this.input.amount,
       },
     });
 

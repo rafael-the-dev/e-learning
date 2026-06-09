@@ -5,6 +5,8 @@ import { findWalletByStudentId } from "@/modules/wallets/repositories/wallet.rep
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { getDb } from "@/server/db";
 import type { Payment } from "@/modules/finance/types";
 import type { StudentWallet } from "@/modules/wallets/types";
@@ -332,6 +334,23 @@ export class ConfirmPaymentCommand extends BaseCommand<ConfirmPaymentInput, Paym
         },
       });
     }
+
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.PAYMENT_CONFIRMED,
+      aggregateType: DomainAggregateType.PAYMENT,
+      aggregateId: updated.id,
+      actorId: this.context.userId,
+      payload: {
+        paymentId: updated.id,
+        invoiceId: updated.invoiceId ?? undefined,
+        studentId: updated.studentId ?? undefined,
+        enrollmentId: updated.enrollmentId ?? undefined,
+        walletCreditApplied: walletCreditApplied > 0 ? walletCreditApplied : undefined,
+        overpayment: overpaymentResult > 0 ? overpaymentResult : undefined,
+        confirmedAt: new Date().toISOString(),
+      },
+    });
 
     return updated;
   }

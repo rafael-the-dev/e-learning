@@ -4,6 +4,8 @@ import { findWalletById } from "@/modules/wallets/repositories/wallet.repository
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { getDb } from "@/server/db";
 import type { WalletTransaction } from "@/modules/wallets/types";
 
@@ -53,6 +55,20 @@ export class CreateDepositCommand extends BaseCommand<CreateDepositInput, Wallet
       entityId: this.input.walletId,
       action: "wallet.deposit",
       newValues: { amount: this.input.amount, studentId: this.walletStudentId },
+    });
+
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.WALLET_DEPOSIT_CREATED,
+      aggregateType: DomainAggregateType.WALLET,
+      aggregateId: this.input.walletId,
+      actorId: this.context.userId,
+      payload: {
+        walletId: this.input.walletId,
+        studentId: this.walletStudentId ?? undefined,
+        amount: this.input.amount,
+        transactionId: row.id,
+      },
     });
 
     return {
