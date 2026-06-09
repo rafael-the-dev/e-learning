@@ -19,6 +19,7 @@ import {
 import {
   DOMAIN_EVENT_STATUS_LABELS,
   DOMAIN_EVENT_HANDLER_STATUS_LABELS,
+  DOMAIN_AGGREGATE_TYPE_LABELS,
 } from "../types";
 import type { DomainEventRecord } from "../types";
 
@@ -68,7 +69,9 @@ export function EventDetailPanel({ event }: EventDetailPanelProps) {
             </div>
             <div>
               <dt className="text-muted-foreground">Tipo de Agregado</dt>
-              <dd className="font-medium">{event.aggregateType}</dd>
+              <dd className="font-medium">
+                {DOMAIN_AGGREGATE_TYPE_LABELS[event.aggregateType] ?? event.aggregateType}
+              </dd>
             </div>
             <div>
               <dt className="text-muted-foreground">ID do Agregado</dt>

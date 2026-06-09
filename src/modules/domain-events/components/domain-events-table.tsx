@@ -18,7 +18,11 @@ import {
 } from "@/shared/components/ui/select";
 import { Activity, ExternalLink } from "lucide-react";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
-import { DOMAIN_EVENT_STATUS_LABELS } from "../types";
+import {
+  DOMAIN_EVENT_STATUS_LABELS,
+  DOMAIN_EVENT_TYPE_LABELS,
+  DOMAIN_AGGREGATE_TYPE_LABELS,
+} from "../types";
 import type { DomainEventRecord } from "../types";
 import type { PaginatedResult } from "@/shared/types/common";
 
@@ -88,7 +92,9 @@ export function DomainEventsTable({
       accessorKey: "aggregateType",
       header: "Agregado",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{row.original.aggregateType}</span>
+        <span className="text-xs text-muted-foreground">
+          {DOMAIN_AGGREGATE_TYPE_LABELS[row.original.aggregateType] ?? row.original.aggregateType}
+        </span>
       ),
     },
     {
@@ -166,7 +172,7 @@ export function DomainEventsTable({
             <SelectItem value="ALL">Todos os tipos</SelectItem>
             {EVENT_TYPES.map((t) => (
               <SelectItem key={t} value={t}>
-                {t}
+                {DOMAIN_EVENT_TYPE_LABELS[t] ?? t}
               </SelectItem>
             ))}
           </SelectContent>
@@ -205,7 +211,9 @@ export function DomainEventsTable({
           <SelectContent>
             <SelectItem value="ALL">Todos os agregados</SelectItem>
             {AGGREGATE_TYPES.map((t) => (
-              <SelectItem key={t} value={t}>{t}</SelectItem>
+              <SelectItem key={t} value={t}>
+                {DOMAIN_AGGREGATE_TYPE_LABELS[t] ?? t}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
