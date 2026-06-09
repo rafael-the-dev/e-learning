@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, GraduationCap, BookUser, BookOpen, Tags, Library, UsersRound, CalendarDays, ClipboardList, FileText, CreditCard, Receipt, Wallet, Settings, Video, CalendarRange, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, BookUser, BookOpen, Tags, Library, UsersRound, CalendarDays, ClipboardList, FileText, CreditCard, Receipt, Wallet, Settings, Video, CalendarRange, DoorOpen, CalendarCheck, type LucideIcon } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
 interface NavItem {
@@ -23,6 +23,8 @@ const NAV: NavItem[] = [
   { href: "/class-groups", label: "Turmas", icon: UsersRound },
   { href: "/schedules", label: "Horários", icon: CalendarDays },
   { href: "/academic-calendar", label: "Calendário Académico", icon: CalendarRange },
+  { href: "/classrooms", label: "Salas", icon: DoorOpen },
+  { href: "/classroom-bookings", label: "Reservas de Sala", icon: CalendarCheck },
   { href: "/enrollments", label: "Matrículas", icon: ClipboardList },
   { href: "/invoices", label: "Faturas", icon: FileText },
   { href: "/payments", label: "Pagamentos", icon: CreditCard },

@@ -254,6 +254,34 @@ export const PERMISSIONS = {
   ACADEMIC_EVENTS_ARCHIVE: "academicEvents.archive",
   ACADEMIC_EVENTS_DELETE: "academicEvents.delete",
 
+  // Classrooms
+  CLASSROOMS_VIEW: "classrooms.view",
+  CLASSROOMS_CREATE: "classrooms.create",
+  CLASSROOMS_UPDATE: "classrooms.update",
+  CLASSROOMS_ARCHIVE: "classrooms.archive",
+  CLASSROOMS_DELETE: "classrooms.delete",
+
+  // Classroom Features
+  CLASSROOM_FEATURES_MANAGE: "classroomFeatures.manage",
+
+  // Classroom Resources
+  CLASSROOM_RESOURCES_VIEW: "classroomResources.view",
+  CLASSROOM_RESOURCES_CREATE: "classroomResources.create",
+  CLASSROOM_RESOURCES_UPDATE: "classroomResources.update",
+  CLASSROOM_RESOURCES_DELETE: "classroomResources.delete",
+
+  // Classroom Maintenance
+  CLASSROOM_MAINTENANCE_VIEW: "classroomMaintenance.view",
+  CLASSROOM_MAINTENANCE_CREATE: "classroomMaintenance.create",
+  CLASSROOM_MAINTENANCE_UPDATE: "classroomMaintenance.update",
+  CLASSROOM_MAINTENANCE_CANCEL: "classroomMaintenance.cancel",
+
+  // Classroom Bookings
+  CLASSROOM_BOOKINGS_VIEW: "classroomBookings.view",
+  CLASSROOM_BOOKINGS_CREATE: "classroomBookings.create",
+  CLASSROOM_BOOKINGS_UPDATE: "classroomBookings.update",
+  CLASSROOM_BOOKINGS_CANCEL: "classroomBookings.cancel",
+
   // Reports
   REPORTS_VIEW: "reports.view",
   REPORTS_EXPORT: "reports.export",
@@ -289,6 +317,13 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ) as Permission[],
 
   SECRETARY: [
+    PERMISSIONS.CLASSROOMS_VIEW,
+    PERMISSIONS.CLASSROOM_RESOURCES_VIEW,
+    PERMISSIONS.CLASSROOM_MAINTENANCE_VIEW,
+    PERMISSIONS.CLASSROOM_BOOKINGS_VIEW,
+    PERMISSIONS.CLASSROOM_BOOKINGS_CREATE,
+    PERMISSIONS.CLASSROOM_BOOKINGS_UPDATE,
+    PERMISSIONS.CLASSROOM_BOOKINGS_CANCEL,
     PERMISSIONS.LESSONS_VIEW,
     PERMISSIONS.SUBJECT_LESSONS_VIEW,
     PERMISSIONS.LESSON_ATTACHMENTS_VIEW,
@@ -359,6 +394,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   TEACHER: [
+    PERMISSIONS.CLASSROOMS_VIEW,
+    PERMISSIONS.CLASSROOM_BOOKINGS_VIEW,
     PERMISSIONS.LESSONS_VIEW,
     PERMISSIONS.LESSONS_CREATE,
     PERMISSIONS.LESSONS_UPDATE,
@@ -387,6 +424,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   STUDENT: [
+    PERMISSIONS.CLASSROOM_BOOKINGS_VIEW,
     PERMISSIONS.LESSONS_VIEW,
     PERMISSIONS.LESSON_PROGRESS_VIEW,
     PERMISSIONS.LESSON_PROGRESS_UPDATE,

@@ -75,6 +75,11 @@ model Organization {
   academicTerms            AcademicTerm[]
   academicHolidays         AcademicHoliday[]
   academicEvents           AcademicEvent[]
+  classrooms               Classroom[]
+  classroomFeatures        ClassroomFeature[]
+  classroomResources       ClassroomResource[]
+  classroomMaintenances    ClassroomMaintenance[]
+  classroomBookings        ClassroomBooking[]
 
   @@map("organizations")
 }
@@ -103,6 +108,8 @@ model Branch {
   invoices     Invoice[]
   payments     Payment[]
   receipts     Receipt[]
+  classrooms   Classroom[]
+  classroomBookings ClassroomBooking[]
 
   @@map("branches")
 }
@@ -525,8 +532,9 @@ model ClassGroup {
   academicYear  AcademicYear      @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   academicTerm  AcademicTerm?     @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   classGroupSchedules ClassGroupSchedule[]
-  enrollments   Enrollment[]
-  attendances   AttendanceRecord[]
+  enrollments         Enrollment[]
+  attendances         AttendanceRecord[]
+  classroomBookings   ClassroomBooking[]
 
   @@map("class_groups")
 }
@@ -572,6 +580,7 @@ model ScheduleSlot {
   organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   schedulePeriod      SchedulePeriod       @relation(fields: [schedulePeriodId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   classGroupSchedules ClassGroupSchedule[]
+  classroomBookings   ClassroomBooking[]
 
   @@unique([schedulePeriodId, dayOfWeek, startTime, endTime])
   @@map("schedule_slots")
@@ -1369,12 +1378,13 @@ model AcademicYear {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  terms        AcademicTerm[]
-  holidays     AcademicHoliday[]
-  events       AcademicEvent[]
-  classGroups  ClassGroup[]
-  enrollments  Enrollment[]
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  terms             AcademicTerm[]
+  holidays          AcademicHoliday[]
+  events            AcademicEvent[]
+  classGroups       ClassGroup[]
+  enrollments       Enrollment[]
+  classroomBookings ClassroomBooking[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1396,11 +1406,12 @@ model AcademicTerm {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  events       AcademicEvent[]
-  classGroups  ClassGroup[]
-  enrollments  Enrollment[]
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear      AcademicYear       @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events            AcademicEvent[]
+  classGroups       ClassGroup[]
+  enrollments       Enrollment[]
+  classroomBookings ClassroomBooking[]
 
   @@unique([academicYearId, order])
   @@unique([academicYearId, code])
@@ -1454,4 +1465,149 @@ model AcademicEvent {
   @@index([organizationId, academicYearId])
   @@index([organizationId, eventType])
   @@map("academic_events")
+}
+
+// =============================================================================
+// CLASSROOM MANAGEMENT
+// =============================================================================
+
+model Classroom {
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String?
+
+  code        String
+  name        String
+  description String?   @db.NVarChar(Max)
+
+  // ClassroomType: STANDARD_ROOM | COMPUTER_LAB | LANGUAGE_LAB | DESIGN_STUDIO |
+  //                DRIVING_ROOM | MEETING_ROOM | ONLINE_ROOM | OTHER
+  classroomType String    @default("STANDARD_ROOM")
+  capacity      Int       @default(1)
+
+  location String?
+  floor    String?
+
+  // MeetingProvider: ZOOM | GOOGLE_MEET | MICROSOFT_TEAMS | CUSTOM
+  meetingProvider String?
+  meetingUrl      String?   @db.NVarChar(Max)
+
+  // ClassroomStatus: ACTIVE | MAINTENANCE | INACTIVE | ARCHIVED
+  status String @default("ACTIVE")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch         Branch?                @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  features       ClassroomFeature[]
+  resources      ClassroomResource[]
+  maintenances   ClassroomMaintenance[]
+  bookings       ClassroomBooking[]
+
+  @@index([organizationId, branchId, code])
+  @@index([organizationId, status])
+  @@map("classrooms")
+}
+
+model ClassroomFeature {
+  id             String @id @default(cuid())
+  organizationId String
+  classroomId    String
+
+  // ClassroomFeatureType: AIR_CONDITIONING | INTERNET | PROJECTOR | SMART_BOARD |
+  //                       RECORDING | ACCESSIBLE | SOUND_SYSTEM | CCTV | GENERATOR | OTHER
+  feature String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classroom    Classroom    @relation(fields: [classroomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([classroomId, feature])
+  @@map("classroom_features")
+}
+
+model ClassroomResource {
+  id             String @id @default(cuid())
+  organizationId String
+  classroomId    String
+
+  name        String
+  quantity    Int       @default(0)
+  description String?
+
+  // ClassroomResourceStatus: ACTIVE | INACTIVE | ARCHIVED
+  status String @default("ACTIVE")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classroom    Classroom    @relation(fields: [classroomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("classroom_resources")
+}
+
+model ClassroomMaintenance {
+  id             String @id @default(cuid())
+  organizationId String
+  classroomId    String
+
+  title       String
+  description String?   @db.NVarChar(Max)
+  startDate   DateTime
+  endDate     DateTime
+
+  // ClassroomMaintenanceStatus: SCHEDULED | IN_PROGRESS | COMPLETED | CANCELLED
+  status String @default("SCHEDULED")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classroom    Classroom    @relation(fields: [classroomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, classroomId, status])
+  @@map("classroom_maintenances")
+}
+
+model ClassroomBooking {
+  id             String  @id @default(cuid())
+  organizationId String
+  branchId       String?
+
+  classroomId    String
+  classGroupId   String?
+  scheduleSlotId String?
+
+  academicYearId String
+  academicTermId String?
+
+  startDate DateTime
+  endDate   DateTime
+
+  // ClassroomBookingStatus: ACTIVE | COMPLETED | CANCELLED | ARCHIVED
+  status String @default("ACTIVE")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classroom      Classroom     @relation(fields: [classroomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup     ClassGroup?   @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  scheduleSlot   ScheduleSlot? @relation(fields: [scheduleSlotId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear   AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm   AcademicTerm? @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, classroomId, status])
+  @@index([organizationId, academicYearId])
+  @@map("classroom_bookings")
 }
