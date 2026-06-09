@@ -466,20 +466,27 @@ model Subject {
 }
 
 model LevelSubject {
-  id                  String    @id @default(cuid())
-  organizationId      String
-  courseId            String
-  courseLevelId       String
-  subjectId           String
-  order               Int       @default(0)
-  workloadHours       Int?
-  minimumPassingGrade Decimal?  @db.Decimal(5, 2)
-  isRequired          Boolean   @default(false)
+  id                          String    @id @default(cuid())
+  organizationId              String
+  courseId                    String
+  courseLevelId               String
+  subjectId                   String
+  order                       Int       @default(0)
+  workloadHours               Int?
+  theoryHours                 Int?
+  practicalHours              Int?
+  minimumPassingGrade         Decimal?  @db.Decimal(5, 2)
+  minimumAttendancePercentage Decimal?  @db.Decimal(5, 2)
+  maxAbsences                 Int?
+  isRequired                  Boolean   @default(true)
+  allowRetakeExam             Boolean   @default(true)
+  allowCompensation           Boolean   @default(false)
+  certificateRequired         Boolean   @default(false)
   // LevelSubjectStatus: ACTIVE | INACTIVE | ARCHIVED
-  status              String    @default("ACTIVE")
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  deletedAt           DateTime?
+  status                      String    @default("ACTIVE")
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+  deletedAt                   DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   course       Course       @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)

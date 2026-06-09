@@ -15,8 +15,15 @@ const levelSubjectSelect = {
   subjectId: true,
   order: true,
   workloadHours: true,
+  theoryHours: true,
+  practicalHours: true,
   minimumPassingGrade: true,
+  minimumAttendancePercentage: true,
+  maxAbsences: true,
   isRequired: true,
+  allowRetakeExam: true,
+  allowCompensation: true,
+  certificateRequired: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -37,8 +44,15 @@ function mapToLevelSubject(row: {
   subjectId: string;
   order: number;
   workloadHours: number | null;
+  theoryHours: number | null;
+  practicalHours: number | null;
   minimumPassingGrade: { toString(): string } | null;
+  minimumAttendancePercentage: { toString(): string } | null;
+  maxAbsences: number | null;
   isRequired: boolean;
+  allowRetakeExam: boolean;
+  allowCompensation: boolean;
+  certificateRequired: boolean;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -54,8 +68,17 @@ function mapToLevelSubject(row: {
     subjectId: row.subjectId,
     order: row.order,
     workloadHours: row.workloadHours,
+    theoryHours: row.theoryHours,
+    practicalHours: row.practicalHours,
     minimumPassingGrade: row.minimumPassingGrade ? row.minimumPassingGrade.toString() : null,
+    minimumAttendancePercentage: row.minimumAttendancePercentage
+      ? row.minimumAttendancePercentage.toString()
+      : null,
+    maxAbsences: row.maxAbsences,
     isRequired: row.isRequired,
+    allowRetakeExam: row.allowRetakeExam,
+    allowCompensation: row.allowCompensation,
+    certificateRequired: row.certificateRequired,
     status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -139,8 +162,15 @@ export async function createLevelSubject(data: {
   subjectId: string;
   order: number;
   workloadHours?: number | null;
+  theoryHours?: number | null;
+  practicalHours?: number | null;
   minimumPassingGrade?: number | null;
+  minimumAttendancePercentage?: number | null;
+  maxAbsences?: number | null;
   isRequired: boolean;
+  allowRetakeExam: boolean;
+  allowCompensation: boolean;
+  certificateRequired: boolean;
   status: string;
 }): Promise<LevelSubject> {
   const db = await getDb();
@@ -152,8 +182,15 @@ export async function createLevelSubject(data: {
       subjectId: data.subjectId,
       order: data.order,
       workloadHours: data.workloadHours ?? null,
+      theoryHours: data.theoryHours ?? null,
+      practicalHours: data.practicalHours ?? null,
       minimumPassingGrade: data.minimumPassingGrade ?? null,
+      minimumAttendancePercentage: data.minimumAttendancePercentage ?? null,
+      maxAbsences: data.maxAbsences ?? null,
       isRequired: data.isRequired,
+      allowRetakeExam: data.allowRetakeExam,
+      allowCompensation: data.allowCompensation,
+      certificateRequired: data.certificateRequired,
       status: data.status,
     },
     select: levelSubjectSelect,
@@ -167,8 +204,15 @@ export async function updateLevelSubject(
   data: {
     order?: number;
     workloadHours?: number | null;
+    theoryHours?: number | null;
+    practicalHours?: number | null;
     minimumPassingGrade?: number | null;
+    minimumAttendancePercentage?: number | null;
+    maxAbsences?: number | null;
     isRequired?: boolean;
+    allowRetakeExam?: boolean;
+    allowCompensation?: boolean;
+    certificateRequired?: boolean;
     status?: string;
   }
 ): Promise<LevelSubject> {
@@ -176,8 +220,15 @@ export async function updateLevelSubject(
   const updateData: Record<string, unknown> = {};
   if (data.order !== undefined) updateData.order = data.order;
   if (data.workloadHours !== undefined) updateData.workloadHours = data.workloadHours;
+  if (data.theoryHours !== undefined) updateData.theoryHours = data.theoryHours;
+  if (data.practicalHours !== undefined) updateData.practicalHours = data.practicalHours;
   if (data.minimumPassingGrade !== undefined) updateData.minimumPassingGrade = data.minimumPassingGrade;
+  if (data.minimumAttendancePercentage !== undefined) updateData.minimumAttendancePercentage = data.minimumAttendancePercentage;
+  if (data.maxAbsences !== undefined) updateData.maxAbsences = data.maxAbsences;
   if (data.isRequired !== undefined) updateData.isRequired = data.isRequired;
+  if (data.allowRetakeExam !== undefined) updateData.allowRetakeExam = data.allowRetakeExam;
+  if (data.allowCompensation !== undefined) updateData.allowCompensation = data.allowCompensation;
+  if (data.certificateRequired !== undefined) updateData.certificateRequired = data.certificateRequired;
   if (data.status !== undefined) updateData.status = data.status;
 
   const row = await db.levelSubject.update({

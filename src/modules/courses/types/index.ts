@@ -73,8 +73,15 @@ export interface LevelSubject {
   subjectId: string;
   order: number;
   workloadHours: number | null;
+  theoryHours: number | null;
+  practicalHours: number | null;
   minimumPassingGrade: string | null;
+  minimumAttendancePercentage: string | null;
+  maxAbsences: number | null;
   isRequired: boolean;
+  allowRetakeExam: boolean;
+  allowCompensation: boolean;
+  certificateRequired: boolean;
   status: string;
   createdAt: Date;
   updatedAt: Date;

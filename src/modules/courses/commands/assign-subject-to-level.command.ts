@@ -109,9 +109,15 @@ export class AssignSubjectToLevelCommand extends BaseCommand<AssignSubjectInput,
       subjectId: this.input.subjectId,
       order,
       workloadHours: this.input.workloadHours ?? null,
-      minimumPassingGrade:
-        this.input.minimumPassingGrade !== undefined ? this.input.minimumPassingGrade : null,
+      theoryHours: this.input.theoryHours ?? null,
+      practicalHours: this.input.practicalHours ?? null,
+      minimumPassingGrade: this.input.minimumPassingGrade ?? null,
+      minimumAttendancePercentage: this.input.minimumAttendancePercentage ?? null,
+      maxAbsences: this.input.maxAbsences ?? null,
       isRequired: this.input.isRequired,
+      allowRetakeExam: this.input.allowRetakeExam,
+      allowCompensation: this.input.allowCompensation,
+      certificateRequired: this.input.certificateRequired,
       status: this.input.status,
     });
 
@@ -123,6 +129,9 @@ export class AssignSubjectToLevelCommand extends BaseCommand<AssignSubjectInput,
         courseLevelId: levelSubject.courseLevelId,
         subjectId: levelSubject.subjectId,
         order: levelSubject.order,
+        workloadHours: levelSubject.workloadHours,
+        isRequired: levelSubject.isRequired,
+        certificateRequired: levelSubject.certificateRequired,
       },
     });
 

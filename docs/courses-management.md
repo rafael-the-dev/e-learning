@@ -29,30 +29,65 @@ A `Subject` is a **global entity** within the organization. It is not tied to an
 
 **Important**: `minimumPassingGrade` and `workloadHours` do NOT belong to Subject. They belong to `LevelSubject` because they vary per level.
 
-### LevelSubject (relationship)
+### LevelSubject (academic rule engine)
 
-A `LevelSubject` represents the contextual relationship between a `CourseLevel` and a `Subject`. It holds all rules that are specific to how a subject is used within a particular level.
+`LevelSubject` is the **academic rule engine** for a subject within a course level. It holds all context-specific rules that determine how a subject is taught and evaluated in a particular level. The same `Subject` (e.g. "Código da Estrada") can appear in multiple levels with completely different rules.
+
+#### Identity
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | `String` | CUID |
-| `organizationId` | `String` | Tenant key |
+| `organizationId` | `String` | Tenant key — always server-side |
 | `courseId` | `String` | FK → Course (for fast joins) |
 | `courseLevelId` | `String` | FK → CourseLevel |
 | `subjectId` | `String` | FK → Subject |
 | `order` | `Int` | Sort position within the level (0-based, unique per level) |
-| `workloadHours` | `Int?` | Hours allocated for this subject in this level |
-| `minimumPassingGrade` | `Decimal?` | 0–100; passing threshold for this subject in this level |
-| `isRequired` | `Boolean` | Whether the subject is mandatory in this level |
 | `status` | `String` | `ACTIVE \| INACTIVE \| ARCHIVED` |
 | `createdAt` / `updatedAt` | `DateTime` | — |
 | `deletedAt` | `DateTime?` | Soft delete |
+
+#### Workload
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `workloadHours` | `Int?` | — | Total hours allocated. Must be > 0 if provided |
+| `theoryHours` | `Int?` | — | Theory hours component. Must be ≥ 0 |
+| `practicalHours` | `Int?` | — | Practical hours component. Must be ≥ 0 |
+
+**Rule:** `theoryHours + practicalHours` must not exceed `workloadHours` when both are provided.
+
+#### Academic Thresholds
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `minimumPassingGrade` | `Decimal?` | — | 0–100; controls academic approval |
+| `minimumAttendancePercentage` | `Decimal?` | — | 0–100; controls attendance eligibility |
+| `maxAbsences` | `Int?` | — | Maximum allowed absences (≥ 0) |
+
+#### Behavioural Flags
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `isRequired` | `Boolean` | `true` | Subject is mandatory in this level |
+| `allowRetakeExam` | `Boolean` | `true` | Student may sit a retake exam if failed |
+| `allowCompensation` | `Boolean` | `false` | Grade compensation by other subjects is allowed |
+| `certificateRequired` | `Boolean` | `false` | Subject must be completed before certificate issuance |
 
 **Constraints:**
 - `@@unique([courseLevelId, subjectId])` — same subject cannot be linked twice to the same level
 - `order` must be unique within the same `courseLevelId` (enforced in commands)
 - `workloadHours` must be > 0 if provided
 - `minimumPassingGrade` must be between 0 and 100
+- `minimumAttendancePercentage` must be between 0 and 100
+- `maxAbsences` must be ≥ 0 when provided
+- `theoryHours + practicalHours` must not exceed `workloadHours`
+
+**Future modules that depend on LevelSubject:**
+- **Attendance** — uses `minimumAttendancePercentage` and `maxAbsences` to determine attendance eligibility
+- **Assessments** — uses `minimumPassingGrade` to determine pass/fail; `allowRetakeExam` to gate retakes
+- **Progression** — uses `isRequired` and `allowCompensation` for level completion logic
+- **Certificates** — uses `certificateRequired` to gate certificate issuance
 
 ### CourseLevel
 
@@ -192,7 +227,12 @@ SECRETARY can **view** level subjects but cannot assign, update, remove, or reor
 - `order`: must be unique within the same `courseLevelId` (enforced in command)
 - Same subject cannot be linked twice to the same level (`@@unique([courseLevelId, subjectId])`)
 - `workloadHours`: optional; if provided, must be > 0
+- `theoryHours`: optional; must be ≥ 0; `theoryHours + practicalHours` must not exceed `workloadHours`
+- `practicalHours`: optional; must be ≥ 0
 - `minimumPassingGrade`: optional; if provided, must be between 0 and 100
+- `minimumAttendancePercentage`: optional; if provided, must be between 0 and 100
+- `maxAbsences`: optional; must be ≥ 0
+- Boolean defaults: `isRequired=true`, `allowRetakeExam=true`, `allowCompensation=false`, `certificateRequired=false`
 
 ### CourseLevel
 - `name`: required, min 2, max 200 chars; unique within the same course

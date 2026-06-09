@@ -22,10 +22,32 @@ Organization
 
 | Concept | Purpose |
 |---|---|
-| `Subject` | Global discipline definition (name, code, description) |
-| `LevelSubject` | Junction: Subject × CourseLevel with curriculum-specific rules (hours, passing grade, order) |
+| `Subject` | Global discipline definition (name, code, description). Org-scoped, reusable. |
+| `LevelSubject` | Academic rule engine: Subject × CourseLevel with all context-specific rules |
 
-The same `Subject` (e.g., "Código da Estrada") can appear in multiple course levels with different workload hours or passing grades.
+The same `Subject` (e.g., "Código da Estrada") can appear in multiple course levels with completely different rules.
+
+### What lives in LevelSubject (not in Subject)
+
+| Rule | Field | Why it belongs to LevelSubject |
+|---|---|---|
+| Workload | `workloadHours`, `theoryHours`, `practicalHours` | Hours vary per level (theory-heavy vs practical-heavy) |
+| Academic approval | `minimumPassingGrade` | The passing threshold differs per level |
+| Attendance | `minimumAttendancePercentage`, `maxAbsences` | Attendance rules differ per level |
+| Curriculum | `isRequired`, `order` | A subject may be mandatory in one level and optional in another |
+| Progression | `allowRetakeExam`, `allowCompensation` | Retake and compensation policies are level-specific |
+| Certification | `certificateRequired` | A subject may only be required for certificate in certain levels |
+
+### Future module dependencies
+
+| Module | LevelSubject fields used |
+|---|---|
+| **Attendance** | `minimumAttendancePercentage`, `maxAbsences` — eligibility gating |
+| **Assessments** | `minimumPassingGrade`, `allowRetakeExam` — pass/fail and retake logic |
+| **Progression** | `isRequired`, `allowCompensation` — level completion rules |
+| **Certificates** | `certificateRequired` — gates certificate issuance |
+
+> These modules are **not yet implemented**. LevelSubject stores the rules that will drive them.
 
 ---
 
