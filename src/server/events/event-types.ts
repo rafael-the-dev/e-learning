@@ -24,6 +24,9 @@ export const DomainEventType = {
   PAYMENT_CANCELLED: "payment.cancelled",
   PAYMENT_REFUNDED: "payment.refunded",
 
+  // Receipt
+  RECEIPT_ISSUED: "receipt.issued",
+
   // Wallet
   WALLET_DEPOSIT_CREATED: "wallet.deposit_created",
   WALLET_CREDIT_APPLIED: "wallet.credit_applied",
@@ -51,6 +54,7 @@ export const DomainAggregateType = {
   ENROLLMENT: "ENROLLMENT",
   INVOICE: "INVOICE",
   PAYMENT: "PAYMENT",
+  RECEIPT: "RECEIPT",
   WALLET: "WALLET",
   LESSON: "LESSON",
   CLASS_GROUP: "CLASS_GROUP",

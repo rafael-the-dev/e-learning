@@ -4,6 +4,8 @@ import { findPaymentById } from "@/modules/finance/repositories/payment.reposito
 import { createReceipt, hasIssuedReceiptForPayment, getLastReceiptNumber } from "@/modules/finance/repositories/receipt.repository";
 import { sumAllocationsByPayment } from "@/modules/finance/repositories/payment-allocation.repository";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import type { Receipt, Payment } from "@/modules/finance/types";
@@ -61,6 +63,22 @@ export class IssueReceiptCommand extends BaseCommand<IssueReceiptInput, Receipt>
       newValues: {
         receiptNumber,
         paymentId: payment.id,
+        amount: totalSettled,
+      },
+    });
+
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.RECEIPT_ISSUED,
+      aggregateType: DomainAggregateType.RECEIPT,
+      aggregateId: receipt.id,
+      actorId: this.context.userId,
+      payload: {
+        receiptId: receipt.id,
+        receiptNumber,
+        paymentId: payment.id,
+        invoiceId: payment.invoiceId,
+        studentId: payment.studentId,
         amount: totalSettled,
       },
     });

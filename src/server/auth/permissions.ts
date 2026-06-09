@@ -292,6 +292,11 @@ export const PERMISSIONS = {
   // Domain Events
   DOMAIN_EVENTS_VIEW: "domainEvents.view",
 
+  // Student Timeline
+  STUDENT_TIMELINE_VIEW: "studentTimeline.view",
+  STUDENT_TIMELINE_CREATE_NOTE: "studentTimeline.createNote",
+  STUDENT_TIMELINE_DELETE_NOTE: "studentTimeline.deleteNote",
+
   // Dashboard
   DASHBOARD_VIEW: "dashboard.view",
 } as const;
@@ -320,6 +325,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ) as Permission[],
 
   SECRETARY: [
+    PERMISSIONS.STUDENT_TIMELINE_VIEW,
+    PERMISSIONS.STUDENT_TIMELINE_CREATE_NOTE,
     PERMISSIONS.CLASSROOMS_VIEW,
     PERMISSIONS.CLASSROOM_RESOURCES_VIEW,
     PERMISSIONS.CLASSROOM_MAINTENANCE_VIEW,
@@ -397,6 +404,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   TEACHER: [
+    PERMISSIONS.STUDENT_TIMELINE_VIEW,
+    PERMISSIONS.STUDENT_TIMELINE_CREATE_NOTE,
     PERMISSIONS.CLASSROOMS_VIEW,
     PERMISSIONS.CLASSROOM_BOOKINGS_VIEW,
     PERMISSIONS.LESSONS_VIEW,

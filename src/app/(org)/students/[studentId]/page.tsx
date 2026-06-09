@@ -12,6 +12,8 @@ import { NotFoundError } from "@/shared/lib/command";
 import { GENDER_LABELS, ID_TYPE_LABELS } from "@/modules/students/types";
 import { getWalletByStudentId, getRecentTransactions } from "@/modules/wallets/services/wallet.service";
 import { StudentWalletCard } from "@/modules/wallets/components/student-wallet-card";
+import { getRecentTimelineEvents } from "@/modules/student-timeline/services/student-timeline.service";
+import { StudentTimelinePreview } from "@/modules/student-timeline/components/student-timeline-preview";
 import {
   Mail,
   Phone,
@@ -47,7 +49,12 @@ export default async function StudentDetailPage({
     throw e;
   }
 
-  const wallet = await getWalletByStudentId(studentId, context.organizationId);
+  const [wallet, recentTimeline] = await Promise.all([
+    getWalletByStudentId(studentId, context.organizationId),
+    context.ability.can(PERMISSIONS.STUDENT_TIMELINE_VIEW)
+      ? getRecentTimelineEvents(studentId, context.organizationId, 5)
+      : Promise.resolve([]),
+  ]);
   const recentWalletTxs = wallet
     ? await getRecentTransactions(wallet.id, context.organizationId, 3)
     : [];
@@ -179,6 +186,11 @@ export default async function StudentDetailPage({
           canDeposit={canManageWallet}
           studentId={studentId}
         />
+
+        {/* Timeline preview */}
+        {context.ability.can(PERMISSIONS.STUDENT_TIMELINE_VIEW) && (
+          <StudentTimelinePreview events={recentTimeline} studentId={studentId} />
+        )}
 
         {/* Attendance placeholder */}
         <div className="rounded-xl border border-dashed p-5 space-y-2">

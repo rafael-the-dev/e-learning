@@ -82,6 +82,7 @@ model Organization {
   classroomBookings        ClassroomBooking[]
   domainEvents             DomainEvent[]
   domainEventHandlerLogs   DomainEventHandlerLog[]
+  studentTimelineEvents    StudentTimelineEvent[]
 
   @@map("organizations")
 }
@@ -321,6 +322,7 @@ model Student {
   receipts         Receipt[]
   wallets          StudentWallet[]
   lessonProgress   StudentLessonProgress[]
+  timelineEvents   StudentTimelineEvent[]
 
   @@map("students")
 }
@@ -1612,6 +1614,52 @@ model ClassroomBooking {
   @@index([organizationId, classroomId, status])
   @@index([organizationId, academicYearId])
   @@map("classroom_bookings")
+}
+
+// =============================================================================
+// STUDENT TIMELINE
+// =============================================================================
+
+model StudentTimelineEvent {
+  id             String    @id @default(cuid())
+  organizationId String
+  studentId      String
+
+  // TimelineEventType: ENROLLMENT_CREATED | ENROLLMENT_ACTIVATED | ENROLLMENT_CANCELLED |
+  //   INVOICE_CREATED | INVOICE_PAID | PAYMENT_CONFIRMED | RECEIPT_ISSUED |
+  //   WALLET_DEPOSIT_CREATED | WALLET_CREDIT_APPLIED | WALLET_OVERPAYMENT_CREATED |
+  //   LESSON_COMPLETED | CLASS_GROUP_ASSIGNED | CLASSROOM_BOOKING_CHANGED |
+  //   NOTIFICATION_SENT | MANUAL_NOTE
+  eventType      String
+
+  title          String
+  description    String?   @db.NVarChar(Max)
+
+  // TimelineReferenceType: ENROLLMENT | INVOICE | PAYMENT | RECEIPT | WALLET |
+  //   LESSON | CLASS_GROUP | CLASSROOM_BOOKING | NOTIFICATION | USER | SYSTEM
+  referenceType  String?
+  referenceId    String?
+
+  sourceEventId  String?   // DomainEvent.id — used for idempotency
+  actorUserId    String?
+
+  // TimelineVisibility: INTERNAL | STUDENT_VISIBLE
+  visibility     String    @default("INTERNAL")
+
+  metadata       String?   @db.NVarChar(Max)
+
+  occurredAt     DateTime
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, studentId, occurredAt])
+  @@index([organizationId, studentId, eventType])
+  @@index([sourceEventId])
+  @@map("student_timeline_events")
 }
 
 // =============================================================================
