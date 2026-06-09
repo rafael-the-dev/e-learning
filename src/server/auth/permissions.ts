@@ -226,6 +226,34 @@ export const PERMISSIONS = {
   LESSON_PROGRESS_VIEW: "lessonProgress.view",
   LESSON_PROGRESS_UPDATE: "lessonProgress.update",
 
+  // Academic Calendar
+  ACADEMIC_CALENDAR_VIEW: "academicCalendar.view",
+
+  // Academic Years
+  ACADEMIC_YEARS_CREATE: "academicYears.create",
+  ACADEMIC_YEARS_UPDATE: "academicYears.update",
+  ACADEMIC_YEARS_ARCHIVE: "academicYears.archive",
+  ACADEMIC_YEARS_DELETE: "academicYears.delete",
+  ACADEMIC_YEARS_SET_DEFAULT: "academicYears.setDefault",
+
+  // Academic Terms
+  ACADEMIC_TERMS_CREATE: "academicTerms.create",
+  ACADEMIC_TERMS_UPDATE: "academicTerms.update",
+  ACADEMIC_TERMS_ARCHIVE: "academicTerms.archive",
+  ACADEMIC_TERMS_DELETE: "academicTerms.delete",
+
+  // Academic Holidays
+  ACADEMIC_HOLIDAYS_CREATE: "academicHolidays.create",
+  ACADEMIC_HOLIDAYS_UPDATE: "academicHolidays.update",
+  ACADEMIC_HOLIDAYS_ARCHIVE: "academicHolidays.archive",
+  ACADEMIC_HOLIDAYS_DELETE: "academicHolidays.delete",
+
+  // Academic Events
+  ACADEMIC_EVENTS_CREATE: "academicEvents.create",
+  ACADEMIC_EVENTS_UPDATE: "academicEvents.update",
+  ACADEMIC_EVENTS_ARCHIVE: "academicEvents.archive",
+  ACADEMIC_EVENTS_DELETE: "academicEvents.delete",
+
   // Reports
   REPORTS_VIEW: "reports.view",
   REPORTS_EXPORT: "reports.export",
@@ -319,6 +347,15 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.BILLING_POLICIES_VIEW,
     PERMISSIONS.DISCOUNT_RULES_VIEW,
     PERMISSIONS.TAX_RULES_VIEW,
+    PERMISSIONS.ACADEMIC_CALENDAR_VIEW,
+    PERMISSIONS.ACADEMIC_YEARS_CREATE,
+    PERMISSIONS.ACADEMIC_YEARS_UPDATE,
+    PERMISSIONS.ACADEMIC_TERMS_CREATE,
+    PERMISSIONS.ACADEMIC_TERMS_UPDATE,
+    PERMISSIONS.ACADEMIC_HOLIDAYS_CREATE,
+    PERMISSIONS.ACADEMIC_HOLIDAYS_UPDATE,
+    PERMISSIONS.ACADEMIC_EVENTS_CREATE,
+    PERMISSIONS.ACADEMIC_EVENTS_UPDATE,
   ],
 
   TEACHER: [
@@ -346,6 +383,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.PRACTICAL_LESSONS_READ,
     PERMISSIONS.PRACTICAL_LESSONS_UPDATE,
     PERMISSIONS.VEHICLES_READ,
+    PERMISSIONS.ACADEMIC_CALENDAR_VIEW,
   ],
 
   STUDENT: [
@@ -358,5 +396,6 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.PAYMENTS_VIEW,
     PERMISSIONS.RECEIPTS_VIEW,
     PERMISSIONS.PRACTICAL_LESSONS_READ,
+    PERMISSIONS.ACADEMIC_CALENDAR_VIEW,
   ],
 };

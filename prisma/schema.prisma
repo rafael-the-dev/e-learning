@@ -71,6 +71,10 @@ model Organization {
   taxRules                 TaxRule[]
   appliedDiscounts         AppliedDiscount[]
   appliedTaxes             AppliedTax[]
+  academicYears            AcademicYear[]
+  academicTerms            AcademicTerm[]
+  academicHolidays         AcademicHoliday[]
+  academicEvents           AcademicEvent[]
 
   @@map("organizations")
 }
@@ -1337,4 +1341,105 @@ model AuditLog {
   @@index([organizationId, actorId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// =============================================================================
+// ACADEMIC CALENDAR
+// =============================================================================
+
+model AcademicYear {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  startDate      DateTime
+  endDate        DateTime
+  // AcademicYearStatus: DRAFT | ACTIVE | COMPLETED | CANCELLED | ARCHIVED
+  status         String    @default("DRAFT")
+  isDefault      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  terms        AcademicTerm[]
+  holidays     AcademicHoliday[]
+  events       AcademicEvent[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("academic_years")
+}
+
+model AcademicTerm {
+  id             String    @id @default(cuid())
+  organizationId String
+  academicYearId String
+  name           String
+  code           String
+  startDate      DateTime
+  endDate        DateTime
+  order          Int
+  // AcademicTermStatus: DRAFT | ACTIVE | COMPLETED | CANCELLED | ARCHIVED
+  status         String    @default("DRAFT")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events       AcademicEvent[]
+
+  @@unique([academicYearId, order])
+  @@unique([academicYearId, code])
+  @@index([organizationId, academicYearId])
+  @@map("academic_terms")
+}
+
+model AcademicHoliday {
+  id             String    @id @default(cuid())
+  organizationId String
+  academicYearId String?
+  name           String
+  description    String?   @db.NVarChar(Max)
+  startDate      DateTime
+  endDate        DateTime
+  isRecurring    Boolean   @default(false)
+  // AcademicHolidayStatus: DRAFT | ACTIVE | COMPLETED | CANCELLED | ARCHIVED
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, academicYearId])
+  @@map("academic_holidays")
+}
+
+model AcademicEvent {
+  id             String    @id @default(cuid())
+  organizationId String
+  academicYearId String?
+  academicTermId String?
+  title          String
+  description    String?   @db.NVarChar(Max)
+  // AcademicEventType: GENERAL | EXAM_PERIOD | ENROLLMENT_PERIOD | PAYMENT_DEADLINE | HOLIDAY | TEACHER_MEETING | GRADUATION | OTHER
+  eventType      String    @default("GENERAL")
+  startDate      DateTime
+  endDate        DateTime
+  // AcademicEventStatus: DRAFT | ACTIVE | COMPLETED | CANCELLED | ARCHIVED
+  status         String    @default("DRAFT")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm AcademicTerm? @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, academicYearId])
+  @@index([organizationId, eventType])
+  @@map("academic_events")
 }
