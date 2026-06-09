@@ -149,14 +149,18 @@ export function ClassroomBookingForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Período Letivo (opcional)</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? ""} disabled={!selectedYearId}>
+                <Select
+                  onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
+                  value={field.value || "__none__"}
+                  disabled={!selectedYearId}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecionar período" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">Sem período</SelectItem>
+                    <SelectItem value="__none__">Sem período</SelectItem>
                     {filteredTerms.map((t) => (
                       <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                     ))}
@@ -176,14 +180,17 @@ export function ClassroomBookingForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Turma (opcional)</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                <Select
+                  onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
+                  value={field.value || "__none__"}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecionar turma" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">Sem turma</SelectItem>
+                    <SelectItem value="__none__">Sem turma</SelectItem>
                     {classGroups.map((g) => (
                       <SelectItem key={g.id} value={g.id}>
                         {g.name} ({g.capacity} lugares)
@@ -201,14 +208,17 @@ export function ClassroomBookingForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Horário (opcional)</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                <Select
+                  onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
+                  value={field.value || "__none__"}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecionar horário" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">Sem horário</SelectItem>
+                    <SelectItem value="__none__">Sem horário</SelectItem>
                     {scheduleSlots.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {DAY_LABELS[s.dayOfWeek] ?? s.dayOfWeek} {s.startTime}–{s.endTime}

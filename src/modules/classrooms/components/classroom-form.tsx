@@ -166,14 +166,17 @@ export function ClassroomForm({ classroom, branches }: ClassroomFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Filial</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value ?? ""}>
+              <Select
+                onValueChange={(v) => field.onChange(v === "__none__" ? undefined : v)}
+                defaultValue={field.value ?? "__none__"}
+              >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecionar filial (opcional)" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="">Sem filial</SelectItem>
+                  <SelectItem value="__none__">Sem filial</SelectItem>
                   {branches.map((b) => (
                     <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                   ))}
@@ -237,14 +240,17 @@ export function ClassroomForm({ classroom, branches }: ClassroomFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Plataforma</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value ?? ""}>
+                  <Select
+                    onValueChange={(v) => field.onChange(v === "__none__" ? undefined : v)}
+                    defaultValue={field.value ?? "__none__"}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecionar plataforma" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">Nenhuma</SelectItem>
+                      <SelectItem value="__none__">Nenhuma</SelectItem>
                       {Object.entries(MEETING_PROVIDER_LABELS).map(([value, label]) => (
                         <SelectItem key={value} value={value}>{label}</SelectItem>
                       ))}
