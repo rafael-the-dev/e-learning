@@ -5,12 +5,12 @@ import { DomainEventType } from "../event-types";
 
 // =============================================================================
 // ENROLLMENT ACTIVATION HANDLER
-// On payment.confirmed: checks enrollment billing policy activation rule.
-// If activationRule is AFTER_FIRST_PAYMENT or AFTER_FULL_PAYMENT, attempts
-// to activate the enrollment automatically.
+// On payment.confirmed: loads the enrollment's own billingPolicyId (stored at
+// invoice-generation time) and evaluates the activationRule. Falls back to the
+// org's default active policy if the enrollment has no stored policyId.
 //
-// Critical: This handler only triggers side-effect activation.
-// Financial correctness remains inside ConfirmPaymentCommand.
+// Critical: financial correctness (invoice/payment state) remains inside
+// ConfirmPaymentCommand. This handler only drives the enrollment status side-effect.
 // =============================================================================
 
 export class EnrollmentActivationEventHandler implements DomainEventHandler {
@@ -29,76 +29,102 @@ export class EnrollmentActivationEventHandler implements DomainEventHandler {
 
     const enrollment = await db.enrollment.findFirst({
       where: { id: enrollmentId, organizationId: event.organizationId },
-      select: { id: true, status: true, courseId: true },
+      select: { id: true, status: true, billingPolicyId: true, studentId: true },
     });
     if (!enrollment || enrollment.status !== "PENDING_PAYMENT") return;
 
-    // Find the billing policy associated with this enrollment's course
-    const policy = await db.enrollmentBillingPolicy.findFirst({
-      where: {
-        organizationId: event.organizationId,
-        isDefault: true,
-        status: "ACTIVE",
-      },
-      select: { activationRule: true },
-    });
+    // Resolve billing policy: use the one stored on the enrollment (set at invoice
+    // generation time), falling back to the org default only if none was stored.
+    const policy = enrollment.billingPolicyId
+      ? await db.enrollmentBillingPolicy.findFirst({
+          where: { id: enrollment.billingPolicyId, organizationId: event.organizationId, status: "ACTIVE" },
+          select: { activationRule: true },
+        })
+      : await db.enrollmentBillingPolicy.findFirst({
+          where: { organizationId: event.organizationId, isDefault: true, status: "ACTIVE" },
+          select: { activationRule: true },
+        });
+
     if (!policy) return;
 
-    if (
-      policy.activationRule === "AFTER_FIRST_PAYMENT" ||
-      policy.activationRule === "AFTER_FULL_PAYMENT"
-    ) {
-      if (policy.activationRule === "AFTER_FULL_PAYMENT") {
-        // Only activate if the invoice associated with this payment is fully paid
-        const invoiceId = payload.invoiceId as string | undefined;
-        if (invoiceId) {
-          const invoice = await db.invoice.findFirst({
-            where: { id: invoiceId, organizationId: event.organizationId },
-            select: { status: true },
-          });
-          if (invoice?.status !== "PAID") return;
-        }
+    const { activationRule } = policy;
+    if (activationRule === "MANUAL" || activationRule === "AFTER_INVOICE_CREATED") return;
+
+    const invoiceId = payload.invoiceId as string | undefined;
+    let shouldActivate = false;
+
+    if (activationRule === "AFTER_FIRST_PAYMENT") {
+      // Any confirmed payment is enough — invoice may still be PARTIALLY_PAID.
+      shouldActivate = true;
+    } else if (activationRule === "AFTER_FULL_PAYMENT") {
+      if (invoiceId) {
+        const invoice = await db.invoice.findFirst({
+          where: { id: invoiceId, organizationId: event.organizationId },
+          select: { status: true },
+        });
+        shouldActivate = invoice?.status === "PAID";
+      }
+    } else if (activationRule === "AFTER_REGISTRATION_FEE") {
+      // Activate when the REGISTRATION_FEE invoice item has been fully paid.
+      // Check: sum of all allocations against REGISTRATION_FEE items equals
+      // the item's totalPrice (i.e. balanceAmount == 0).
+      if (invoiceId) {
+        const regFeeItem = await db.invoiceItem.findFirst({
+          where: {
+            invoiceId,
+            invoice: { organizationId: event.organizationId },
+            itemType: "REGISTRATION_FEE",
+          },
+          select: { id: true, status: true },
+        });
+        // Item status is set to "PAID" when balanceAmount reaches 0 in ConfirmPaymentCommand
+        shouldActivate = regFeeItem?.status === "PAID";
+      }
+    }
+
+    if (!shouldActivate) return;
+
+    await db.enrollment.update({
+      where: { id: enrollment.id },
+      data: { status: "ACTIVE", updatedAt: new Date() },
+    });
+
+    await db.enrollmentStatusHistory.create({
+      data: {
+        enrollmentId: enrollment.id,
+        fromStatus: "PENDING_PAYMENT",
+        toStatus: "ACTIVE",
+        changedBy: (payload._actorId as string | undefined) ?? null,
+        reason: `Ativação automática — regra: ${activationRule}`,
+      },
+    });
+
+    // Resolve the student's user account via email (Student has no direct userId FK).
+    const studentId = enrollment.studentId;
+    if (studentId) {
+      const student = await db.student.findFirst({
+        where: { id: studentId, organizationId: event.organizationId },
+        select: { email: true },
+      });
+      let userId: string | null = null;
+      if (student?.email) {
+        const user = await db.user.findFirst({ where: { email: student.email }, select: { id: true } });
+        userId = user?.id ?? null;
       }
 
-      await db.enrollment.update({
-        where: { id: enrollment.id },
-        data: { status: "ACTIVE", updatedAt: new Date() },
-      });
-
-      await db.enrollmentStatusHistory.create({
+      await db.notification.create({
         data: {
-          enrollmentId: enrollment.id,
-          fromStatus: "PENDING_PAYMENT",
-          toStatus: "ACTIVE",
-          changedBy: (payload._actorId as string | undefined) ?? null,
-          reason: "Ativação automática por pagamento",
+          organizationId: event.organizationId,
+          userId: userId ?? undefined,
+          type: "ENROLLMENT_APPROVED",
+          channel: "IN_APP",
+          title: "Matrícula ativada",
+          body: "A sua matrícula foi ativada automaticamente após confirmação do pagamento.",
+          data: JSON.stringify({ enrollmentId: enrollment.id }),
+          status: "SENT",
+          sentAt: new Date(),
         },
       });
-
-      // Notify student — cannot re-publish enrollment.activated here (circular dep
-      // with event-publisher → registry → this handler), so create notification directly.
-      const studentId = payload.studentId as string | undefined;
-      if (studentId) {
-        const student = await db.student.findFirst({
-          where: { id: studentId, organizationId: event.organizationId },
-          select: { userId: true },
-        });
-        if (student?.userId) {
-          await db.notification.create({
-            data: {
-              organizationId: event.organizationId,
-              userId: student.userId,
-              type: "ENROLLMENT_APPROVED",
-              channel: "IN_APP",
-              title: "Matrícula ativada",
-              body: "A sua matrícula foi ativada automaticamente após confirmação do pagamento.",
-              data: JSON.stringify({ enrollmentId: enrollment.id }),
-              status: "SENT",
-              sentAt: new Date(),
-            },
-          });
-        }
-      }
     }
   }
 }
