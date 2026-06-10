@@ -137,7 +137,7 @@ export async function getLevelSubjectsForCourseLevel(
   organizationId: string
 ) {
   const db = await getDb();
-  return db.levelSubject.findMany({
+  const rows = await db.levelSubject.findMany({
     where: { courseLevelId, organizationId, status: "ACTIVE", deletedAt: null },
     select: {
       id: true,
@@ -147,4 +147,10 @@ export async function getLevelSubjectsForCourseLevel(
     },
     orderBy: { order: "asc" },
   });
+  return rows.map((r) => ({
+    ...r,
+    minimumAttendancePercentage: r.minimumAttendancePercentage
+      ? Number(r.minimumAttendancePercentage)
+      : null,
+  }));
 }

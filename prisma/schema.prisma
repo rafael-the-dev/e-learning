@@ -473,10 +473,11 @@ model Subject {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levelSubjects   LevelSubject[]
-  teacherSubjects TeacherSubject[]
-  subjectLessons  SubjectLesson[]
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubjects      LevelSubject[]
+  teacherSubjects    TeacherSubject[]
+  subjectLessons     SubjectLesson[]
+  attendanceSessions AttendanceSession[]
 
   @@unique([organizationId, code])
   @@map("subjects")
@@ -505,11 +506,12 @@ model LevelSubject {
   updatedAt                   DateTime  @updatedAt
   deletedAt                   DateTime?
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  course       Course       @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courseLevel  CourseLevel  @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assessmentPolicies AssessmentPolicy[]
+  organization           Organization             @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course                 Course                   @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel            CourseLevel              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject                Subject                  @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentPolicies     AssessmentPolicy[]
+  studentSubjectProgress StudentSubjectProgress[]
 
   @@unique([courseLevelId, subjectId])
   @@map("level_subjects")
@@ -909,6 +911,7 @@ model AttendanceSession {
   academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   academicTerm AcademicTerm? @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   classGroup   ClassGroup    @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject      Subject       @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   teacher      Teacher?      @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   classroom    Classroom?    @relation(fields: [classroomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   scheduleSlot ScheduleSlot? @relation(fields: [scheduleSlotId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -2014,9 +2017,10 @@ model StudentSubjectProgress {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student       Student       @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment    Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject  LevelSubject  @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([enrollmentId, levelSubjectId])
   @@index([organizationId, studentId])
