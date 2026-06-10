@@ -33,6 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { useSidebar } from "./sidebar-context";
 import type { NavIconName, NavigationGroup } from "./nav-config";
 
 const ICONS: Record<NavIconName, LucideIcon> = {
@@ -71,10 +72,10 @@ interface Props {
 
 export function NavLinksClient({ groups }: Props) {
   const pathname = usePathname();
+  const { collapsed: sidebarCollapsed } = useSidebar();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const loadedRef = useRef(false);
 
-  // Active href — longest prefix match wins (e.g. /students/123 → /students)
   const allHrefs = groups.flatMap((g) => g.items.map((i) => i.href));
   const activeHref = allHrefs
     .filter((href) => pathname === href || pathname.startsWith(href + "/"))
@@ -84,7 +85,6 @@ export function NavLinksClient({ groups }: Props) {
     g.items.some((item) => activeHref === item.href)
   )?.id;
 
-  // Load persisted state once on mount; never collapse the group containing the active route
   useEffect(() => {
     if (loadedRef.current) return;
     loadedRef.current = true;
@@ -95,7 +95,6 @@ export function NavLinksClient({ groups }: Props) {
     } catch {}
   }, [activeGroupId]);
 
-  // When the user navigates into a collapsed group, auto-expand it
   useEffect(() => {
     if (!activeGroupId) return;
     setCollapsed((prev) => {
@@ -122,34 +121,42 @@ export function NavLinksClient({ groups }: Props) {
     <div className="flex flex-col gap-4">
       {groups.map((group) => {
         const isCollapsible = Boolean(group.label);
-        const isCollapsed = isCollapsible && collapsed.has(group.id);
+        // When sidebar is collapsed, ignore group collapse state — show all items
+        const isGroupCollapsed = !sidebarCollapsed && isCollapsible && collapsed.has(group.id);
 
         return (
           <div key={group.id}>
-            {/* Section header — clickable only when there's a label */}
+            {/* Section header — hidden smoothly when sidebar is collapsed */}
             {isCollapsible && (
-              <button
-                type="button"
-                onClick={() => toggleGroup(group.id)}
-                className="group/header flex w-full items-center justify-between px-3 mb-1 py-0.5"
+              <div
+                className={cn(
+                  "overflow-hidden transition-[max-height,opacity] duration-200",
+                  sidebarCollapsed ? "max-h-0 opacity-0 pointer-events-none" : "max-h-10 opacity-100"
+                )}
               >
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 group-hover/header:text-muted-foreground/75 transition-colors select-none">
-                  {group.label}
-                </span>
-                <ChevronRight
-                  className={cn(
-                    "size-3 text-muted-foreground/35 group-hover/header:text-muted-foreground/60 transition-all duration-200 shrink-0",
-                    !isCollapsed && "rotate-90"
-                  )}
-                />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  className="group/header flex w-full items-center justify-between px-3 mb-1 py-0.5"
+                >
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 group-hover/header:text-muted-foreground/75 transition-colors select-none">
+                    {group.label}
+                  </span>
+                  <ChevronRight
+                    className={cn(
+                      "size-3 text-muted-foreground/35 group-hover/header:text-muted-foreground/60 transition-all duration-200 shrink-0",
+                      !isGroupCollapsed && "rotate-90"
+                    )}
+                  />
+                </button>
+              </div>
             )}
 
-            {/* Items — CSS grid trick for smooth collapse without JS height calc */}
+            {/* Items */}
             <div
               style={{
                 display: "grid",
-                gridTemplateRows: isCollapsed ? "0fr" : "1fr",
+                gridTemplateRows: isGroupCollapsed ? "0fr" : "1fr",
                 transition: "grid-template-rows 200ms ease",
               }}
             >
@@ -162,15 +169,24 @@ export function NavLinksClient({ groups }: Props) {
                       <Link
                         key={href}
                         href={href}
+                        title={sidebarCollapsed ? label : undefined}
                         className={cn(
-                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                          "flex items-center rounded-md py-2 text-sm transition-colors",
+                          sidebarCollapsed ? "justify-center px-0 gap-0" : "gap-3 px-3",
                           isActive
                             ? "bg-accent text-foreground font-medium"
                             : "text-muted-foreground hover:bg-accent hover:text-foreground"
                         )}
                       >
                         <Icon className="size-4 shrink-0" />
-                        {label}
+                        <span
+                          className={cn(
+                            "whitespace-nowrap overflow-hidden transition-opacity duration-200",
+                            sidebarCollapsed ? "opacity-0 w-0" : "opacity-100"
+                          )}
+                        >
+                          {label}
+                        </span>
                       </Link>
                     );
                   })}
