@@ -32,21 +32,27 @@ export class CommunicationEventHandler implements DomainEventHandler {
     const db = await getDb();
     const payload = event.payload as Record<string, unknown>;
 
+    async function resolveStudentUserId(studentId: string): Promise<string | null> {
+      const student = await db.student.findFirst({
+        where: { id: studentId, organizationId: event.organizationId },
+        select: { email: true },
+      });
+      if (!student?.email) return null;
+      const user = await db.user.findFirst({ where: { email: student.email }, select: { id: true } });
+      return user?.id ?? null;
+    }
+
     switch (event.eventType) {
       case DomainEventType.PAYMENT_CONFIRMED: {
         const studentId = payload.studentId as string | undefined;
         if (!studentId) return;
 
-        const student = await db.student.findFirst({
-          where: { id: studentId, organizationId: event.organizationId },
-          select: { userId: true, firstName: true, lastName: true },
-        });
-        if (!student?.userId) return;
+        const userId = await resolveStudentUserId(studentId);
 
         await db.notification.create({
           data: {
             organizationId: event.organizationId,
-            userId: student.userId,
+            userId: userId ?? undefined,
             type: "PAYMENT_RECEIVED",
             channel: "IN_APP",
             title: "Pagamento confirmado",
@@ -69,8 +75,6 @@ export class CommunicationEventHandler implements DomainEventHandler {
         });
         if (!lesson) return;
 
-        // Notify enrolled students who have access to this lesson's subject
-        // For now, create a general system notification record
         await db.notification.create({
           data: {
             organizationId: event.organizationId,
@@ -90,16 +94,12 @@ export class CommunicationEventHandler implements DomainEventHandler {
         const studentId = payload.studentId as string | undefined;
         if (!studentId) return;
 
-        const student = await db.student.findFirst({
-          where: { id: studentId, organizationId: event.organizationId },
-          select: { userId: true },
-        });
-        if (!student?.userId) return;
+        const userId = await resolveStudentUserId(studentId);
 
         await db.notification.create({
           data: {
             organizationId: event.organizationId,
-            userId: student.userId,
+            userId: userId ?? undefined,
             type: "PAYMENT_OVERDUE",
             channel: "IN_APP",
             title: "Fatura em atraso",
@@ -116,16 +116,12 @@ export class CommunicationEventHandler implements DomainEventHandler {
         const studentId = payload.studentId as string | undefined;
         if (!studentId) return;
 
-        const student = await db.student.findFirst({
-          where: { id: studentId, organizationId: event.organizationId },
-          select: { userId: true },
-        });
-        if (!student?.userId) return;
+        const userId = await resolveStudentUserId(studentId);
 
         await db.notification.create({
           data: {
             organizationId: event.organizationId,
-            userId: student.userId,
+            userId: userId ?? undefined,
             type: "ENROLLMENT_APPROVED",
             channel: "IN_APP",
             title: "Matrícula ativada",
@@ -142,16 +138,12 @@ export class CommunicationEventHandler implements DomainEventHandler {
         const studentId = payload.studentId as string | undefined;
         if (!studentId) return;
 
-        const student = await db.student.findFirst({
-          where: { id: studentId, organizationId: event.organizationId },
-          select: { userId: true },
-        });
-        if (!student?.userId) return;
+        const userId = await resolveStudentUserId(studentId);
 
         await db.notification.create({
           data: {
             organizationId: event.organizationId,
-            userId: student.userId,
+            userId: userId ?? undefined,
             type: "ENROLLMENT_CANCELLED",
             channel: "IN_APP",
             title: "Matrícula cancelada",
@@ -168,17 +160,13 @@ export class CommunicationEventHandler implements DomainEventHandler {
         const studentId = payload.studentId as string | undefined;
         if (!studentId) return;
 
-        const student = await db.student.findFirst({
-          where: { id: studentId, organizationId: event.organizationId },
-          select: { userId: true },
-        });
-        if (!student?.userId) return;
-
+        const userId = await resolveStudentUserId(studentId);
         const subjectName = payload.subjectName ? ` na disciplina de ${String(payload.subjectName)}` : "";
+
         await db.notification.create({
           data: {
             organizationId: event.organizationId,
-            userId: student.userId,
+            userId: userId ?? undefined,
             type: "ATTENDANCE_RISK",
             channel: "IN_APP",
             title: "Risco de reprovação por faltas",
@@ -200,17 +188,13 @@ export class CommunicationEventHandler implements DomainEventHandler {
         const studentId = payload.studentId as string | undefined;
         if (!studentId) return;
 
-        const student = await db.student.findFirst({
-          where: { id: studentId, organizationId: event.organizationId },
-          select: { userId: true },
-        });
-        if (!student?.userId) return;
-
+        const userId = await resolveStudentUserId(studentId);
         const subjectName = payload.subjectName ? ` na disciplina de ${String(payload.subjectName)}` : "";
+
         await db.notification.create({
           data: {
             organizationId: event.organizationId,
-            userId: student.userId,
+            userId: userId ?? undefined,
             type: "ATTENDANCE_BELOW_REQUIRED",
             channel: "IN_APP",
             title: "Presenças abaixo do mínimo",
@@ -232,16 +216,12 @@ export class CommunicationEventHandler implements DomainEventHandler {
         const studentId = payload.studentId as string | undefined;
         if (!studentId) return;
 
-        const student = await db.student.findFirst({
-          where: { id: studentId, organizationId: event.organizationId },
-          select: { userId: true },
-        });
-        if (!student?.userId) return;
+        const userId = await resolveStudentUserId(studentId);
 
         await db.notification.create({
           data: {
             organizationId: event.organizationId,
-            userId: student.userId,
+            userId: userId ?? undefined,
             type: "ATTENDANCE_JUSTIFICATION_APPROVED",
             channel: "IN_APP",
             title: "Justificação de falta aprovada",
@@ -258,17 +238,13 @@ export class CommunicationEventHandler implements DomainEventHandler {
         const studentId = payload.studentId as string | undefined;
         if (!studentId) return;
 
-        const student = await db.student.findFirst({
-          where: { id: studentId, organizationId: event.organizationId },
-          select: { userId: true },
-        });
-        if (!student?.userId) return;
-
+        const userId = await resolveStudentUserId(studentId);
         const reason = payload.rejectionReason ? ` Motivo: ${String(payload.rejectionReason)}` : "";
+
         await db.notification.create({
           data: {
             organizationId: event.organizationId,
-            userId: student.userId,
+            userId: userId ?? undefined,
             type: "ATTENDANCE_JUSTIFICATION_REJECTED",
             channel: "IN_APP",
             title: "Justificação de falta rejeitada",
