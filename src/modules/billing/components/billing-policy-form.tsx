@@ -128,7 +128,7 @@ export function BillingPolicyForm({ open, onOpenChange, policy, onSuccess }: Pro
 
           <div className="space-y-1.5">
             <Label>Modo de Faturação</Label>
-            <Select defaultValue="SINGLE_INVOICE" onValueChange={(v) => setValue("invoiceMode", v)}>
+            <Select value={watch("invoiceMode")} onValueChange={(v) => setValue("invoiceMode", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {Object.entries(INVOICE_MODE_LABELS).map(([val, label]) => (
@@ -140,7 +140,7 @@ export function BillingPolicyForm({ open, onOpenChange, policy, onSuccess }: Pro
 
           <div className="space-y-1.5">
             <Label>Regra de Ativação da Matrícula</Label>
-            <Select defaultValue="MANUAL" onValueChange={(v) => setValue("activationRule", v)}>
+            <Select value={watch("activationRule")} onValueChange={(v) => setValue("activationRule", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {Object.entries(ACTIVATION_RULE_LABELS).map(([val, label]) => (
