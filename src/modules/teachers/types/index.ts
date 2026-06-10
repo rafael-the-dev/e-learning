@@ -51,7 +51,6 @@ export const TEACHER_STATUS_LABELS: Record<string, string> = {
 export const GENDER_LABELS: Record<string, string> = {
   MALE: "Masculino",
   FEMALE: "Feminino",
-  OTHER: "Outro",
 };
 
 export const ID_TYPE_LABELS: Record<string, string> = {
