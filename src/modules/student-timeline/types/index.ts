@@ -22,6 +22,9 @@ export const TIMELINE_EVENT_TYPE = {
   ATTENDANCE_JUSTIFICATION_REJECTED: "ATTENDANCE_JUSTIFICATION_REJECTED",
   ATTENDANCE_AT_RISK: "ATTENDANCE_AT_RISK",
   ATTENDANCE_BELOW_REQUIRED: "ATTENDANCE_BELOW_REQUIRED",
+  SUBJECT_PASSED: "SUBJECT_PASSED",
+  SUBJECT_FAILED: "SUBJECT_FAILED",
+  ASSESSMENT_RESULTS_PUBLISHED: "ASSESSMENT_RESULTS_PUBLISHED",
 } as const;
 
 export type TimelineEventType = (typeof TIMELINE_EVENT_TYPE)[keyof typeof TIMELINE_EVENT_TYPE];
@@ -39,6 +42,7 @@ export const TIMELINE_REFERENCE_TYPE = {
   USER: "USER",
   SYSTEM: "SYSTEM",
   ATTENDANCE_JUSTIFICATION: "ATTENDANCE_JUSTIFICATION",
+  ASSESSMENT: "ASSESSMENT",
 } as const;
 
 export type TimelineReferenceType = (typeof TIMELINE_REFERENCE_TYPE)[keyof typeof TIMELINE_REFERENCE_TYPE];
@@ -102,6 +106,9 @@ export const TIMELINE_EVENT_TYPE_LABELS: Record<TimelineEventType, string> = {
   ATTENDANCE_JUSTIFICATION_REJECTED: "Justificação Rejeitada",
   ATTENDANCE_AT_RISK: "Aluno em Risco de Faltas",
   ATTENDANCE_BELOW_REQUIRED: "Abaixo do Mínimo de Presenças",
+  SUBJECT_PASSED: "Disciplina Aprovada",
+  SUBJECT_FAILED: "Disciplina Reprovada",
+  ASSESSMENT_RESULTS_PUBLISHED: "Resultados Publicados",
 };
 
 export const TIMELINE_REFERENCE_TYPE_LABELS: Record<TimelineReferenceType, string> = {
@@ -117,6 +124,7 @@ export const TIMELINE_REFERENCE_TYPE_LABELS: Record<TimelineReferenceType, strin
   USER: "Utilizador",
   SYSTEM: "Sistema",
   ATTENDANCE_JUSTIFICATION: "Justificação de Presença",
+  ASSESSMENT: "Avaliação",
 };
 
 export const TIMELINE_VISIBILITY_LABELS: Record<TimelineVisibility, string> = {
@@ -145,6 +153,9 @@ export const TIMELINE_EVENT_DEFAULT_VISIBILITY: Record<TimelineEventType, Timeli
   ATTENDANCE_JUSTIFICATION_REJECTED: "STUDENT_VISIBLE",
   ATTENDANCE_AT_RISK: "INTERNAL",
   ATTENDANCE_BELOW_REQUIRED: "INTERNAL",
+  SUBJECT_PASSED: "STUDENT_VISIBLE",
+  SUBJECT_FAILED: "STUDENT_VISIBLE",
+  ASSESSMENT_RESULTS_PUBLISHED: "STUDENT_VISIBLE",
 };
 
 // Source module label per event type
@@ -168,4 +179,7 @@ export const TIMELINE_EVENT_MODULE: Record<TimelineEventType, string> = {
   ATTENDANCE_JUSTIFICATION_REJECTED: "Presenças",
   ATTENDANCE_AT_RISK: "Presenças",
   ATTENDANCE_BELOW_REQUIRED: "Presenças",
+  SUBJECT_PASSED: "Avaliações",
+  SUBJECT_FAILED: "Avaliações",
+  ASSESSMENT_RESULTS_PUBLISHED: "Avaliações",
 };

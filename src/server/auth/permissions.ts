@@ -309,6 +309,39 @@ export const PERMISSIONS = {
   STUDENT_TIMELINE_CREATE_NOTE: "studentTimeline.createNote",
   STUDENT_TIMELINE_DELETE_NOTE: "studentTimeline.deleteNote",
 
+  // Assessment Policies
+  ASSESSMENT_POLICIES_VIEW: "assessmentPolicies.view",
+  ASSESSMENT_POLICIES_CREATE: "assessmentPolicies.create",
+  ASSESSMENT_POLICIES_UPDATE: "assessmentPolicies.update",
+  ASSESSMENT_POLICIES_ARCHIVE: "assessmentPolicies.archive",
+
+  // Assessment Components
+  ASSESSMENT_COMPONENTS_MANAGE: "assessmentComponents.manage",
+
+  // Assessment Periods
+  ASSESSMENT_PERIODS_VIEW: "assessmentPeriods.view",
+  ASSESSMENT_PERIODS_CREATE: "assessmentPeriods.create",
+  ASSESSMENT_PERIODS_UPDATE: "assessmentPeriods.update",
+  ASSESSMENT_PERIODS_ARCHIVE: "assessmentPeriods.archive",
+
+  // Assessments
+  ASSESSMENTS_VIEW: "assessments.view",
+  ASSESSMENTS_CREATE: "assessments.create",
+  ASSESSMENTS_UPDATE: "assessments.update",
+  ASSESSMENTS_CANCEL: "assessments.cancel",
+
+  // Assessment Results
+  ASSESSMENT_RESULTS_VIEW: "assessmentResults.view",
+  ASSESSMENT_RESULTS_GRADE: "assessmentResults.grade",
+  ASSESSMENT_RESULTS_UPDATE: "assessmentResults.update",
+  ASSESSMENT_RESULTS_INVALIDATE: "assessmentResults.invalidate",
+
+  // Assessment Publications
+  ASSESSMENT_PUBLICATIONS_PUBLISH: "assessmentPublications.publish",
+
+  // Student Subject Progress
+  STUDENT_SUBJECT_PROGRESS_VIEW: "studentSubjectProgress.view",
+
   // Dashboard
   DASHBOARD_VIEW: "dashboard.view",
 } as const;
@@ -337,6 +370,11 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ) as Permission[],
 
   SECRETARY: [
+    PERMISSIONS.ASSESSMENT_POLICIES_VIEW,
+    PERMISSIONS.ASSESSMENT_PERIODS_VIEW,
+    PERMISSIONS.ASSESSMENTS_VIEW,
+    PERMISSIONS.ASSESSMENT_RESULTS_VIEW,
+    PERMISSIONS.STUDENT_SUBJECT_PROGRESS_VIEW,
     PERMISSIONS.STUDENT_TIMELINE_VIEW,
     PERMISSIONS.STUDENT_TIMELINE_CREATE_NOTE,
     PERMISSIONS.CLASSROOMS_VIEW,
@@ -426,6 +464,15 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   TEACHER: [
+    PERMISSIONS.ASSESSMENT_POLICIES_VIEW,
+    PERMISSIONS.ASSESSMENT_PERIODS_VIEW,
+    PERMISSIONS.ASSESSMENTS_VIEW,
+    PERMISSIONS.ASSESSMENTS_CREATE,
+    PERMISSIONS.ASSESSMENTS_UPDATE,
+    PERMISSIONS.ASSESSMENT_RESULTS_VIEW,
+    PERMISSIONS.ASSESSMENT_RESULTS_GRADE,
+    PERMISSIONS.ASSESSMENT_PUBLICATIONS_PUBLISH,
+    PERMISSIONS.STUDENT_SUBJECT_PROGRESS_VIEW,
     PERMISSIONS.STUDENT_TIMELINE_VIEW,
     PERMISSIONS.STUDENT_TIMELINE_CREATE_NOTE,
     PERMISSIONS.CLASSROOMS_VIEW,
@@ -463,6 +510,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   STUDENT: [
+    PERMISSIONS.ASSESSMENT_RESULTS_VIEW,
+    PERMISSIONS.STUDENT_SUBJECT_PROGRESS_VIEW,
     PERMISSIONS.CLASSROOM_BOOKINGS_VIEW,
     PERMISSIONS.LESSONS_VIEW,
     PERMISSIONS.LESSON_PROGRESS_VIEW,

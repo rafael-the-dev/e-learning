@@ -1,26 +1,32 @@
 import type { PaginatedResult, PaginationParams } from "@/shared/types/common";
 
+type LoosePaginationParams = { page?: number; pageSize?: number };
+
 export function buildPaginationMeta<T>(
   data: T[],
   total: number,
-  params: PaginationParams
+  params: PaginationParams | LoosePaginationParams
 ): PaginatedResult<T> {
-  const totalPages = Math.ceil(total / params.pageSize);
+  const page = params.page ?? 1;
+  const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
+  const totalPages = Math.ceil(total / pageSize);
   return {
     data,
     total,
-    page: params.page,
-    pageSize: params.pageSize,
+    page,
+    pageSize,
     totalPages,
-    hasNextPage: params.page < totalPages,
-    hasPreviousPage: params.page > 1,
+    hasNextPage: page < totalPages,
+    hasPreviousPage: page > 1,
   };
 }
 
-export function buildSkipTake(params: PaginationParams) {
+export function buildSkipTake(params: PaginationParams | LoosePaginationParams) {
+  const page = params.page ?? 1;
+  const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
   return {
-    skip: (params.page - 1) * params.pageSize,
-    take: params.pageSize,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
   };
 }
 

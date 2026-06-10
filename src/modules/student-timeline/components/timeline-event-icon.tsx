@@ -19,6 +19,9 @@ import {
   ShieldX,
   AlertTriangle,
   AlertOctagon,
+  ClipboardCheck,
+  Award,
+  TrendingDown,
 } from "lucide-react";
 import type { TimelineEventType } from "@/modules/student-timeline/types";
 import { cn } from "@/shared/lib/utils";
@@ -43,6 +46,9 @@ const ICON_MAP: Record<TimelineEventType, { Icon: React.ElementType; colorClass:
   ATTENDANCE_JUSTIFICATION_REJECTED: { Icon: ShieldX, colorClass: "text-red-500 bg-red-50 dark:bg-red-950/40" },
   ATTENDANCE_AT_RISK: { Icon: AlertTriangle, colorClass: "text-amber-500 bg-amber-50 dark:bg-amber-950/40" },
   ATTENDANCE_BELOW_REQUIRED: { Icon: AlertOctagon, colorClass: "text-red-600 bg-red-50 dark:bg-red-950/40" },
+  ASSESSMENT_RESULTS_PUBLISHED: { Icon: ClipboardCheck, colorClass: "text-blue-500 bg-blue-50 dark:bg-blue-950/40" },
+  SUBJECT_PASSED: { Icon: Award, colorClass: "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40" },
+  SUBJECT_FAILED: { Icon: TrendingDown, colorClass: "text-red-500 bg-red-50 dark:bg-red-950/40" },
 };
 
 export function TimelineEventIcon({

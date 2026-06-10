@@ -52,6 +52,11 @@ export const DomainEventType = {
   ATTENDANCE_JUSTIFICATION_REJECTED: "attendance.justification_rejected",
   ATTENDANCE_STUDENT_AT_RISK: "attendance.student_at_risk",
   ATTENDANCE_STUDENT_BELOW_REQUIRED: "attendance.student_below_required",
+
+  // Assessments
+  ASSESSMENT_RESULTS_PUBLISHED: "assessment.results_published",
+  STUDENT_SUBJECT_PASSED: "student_subject.passed",
+  STUDENT_SUBJECT_FAILED: "student_subject.failed",
 } as const;
 
 export type DomainEventType = (typeof DomainEventType)[keyof typeof DomainEventType];
@@ -69,6 +74,7 @@ export const DomainAggregateType = {
   STUDENT: "STUDENT",
   ATTENDANCE_JUSTIFICATION: "ATTENDANCE_JUSTIFICATION",
   ATTENDANCE: "ATTENDANCE",
+  ASSESSMENT: "ASSESSMENT",
 } as const;
 
 export type DomainAggregateType = (typeof DomainAggregateType)[keyof typeof DomainAggregateType];

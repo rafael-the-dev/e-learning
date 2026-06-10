@@ -86,6 +86,14 @@ model Organization {
   attendanceSessions       AttendanceSession[]
   attendanceRecords        AttendanceRecord[]
   attendanceJustifications AttendanceJustification[]
+  assessmentPolicies       AssessmentPolicy[]
+  assessmentComponents     AssessmentComponent[]
+  assessmentPeriods        AssessmentPeriod[]
+  assessments              Assessment[]
+  assessmentResults        AssessmentResult[]
+  assessmentPublications   AssessmentPublication[]
+  studentSubjectProgress   StudentSubjectProgress[]
+  assessmentRetakes        AssessmentRetake[]
 
   @@map("organizations")
 }
@@ -327,7 +335,10 @@ model Student {
   receipts                 Receipt[]
   wallets                  StudentWallet[]
   lessonProgress           StudentLessonProgress[]
-  timelineEvents   StudentTimelineEvent[]
+  timelineEvents           StudentTimelineEvent[]
+  assessmentResults        AssessmentResult[]
+  studentSubjectProgress   StudentSubjectProgress[]
+  assessmentRetakes        AssessmentRetake[]
 
   @@map("students")
 }
@@ -369,6 +380,7 @@ model Teacher {
   classGroups        ClassGroup[]
   practicalLessons   PracticalLesson[]
   attendanceSessions AttendanceSession[]
+  assessments        Assessment[]
 
   @@map("teachers")
 }
@@ -497,6 +509,7 @@ model LevelSubject {
   course       Course       @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   courseLevel  CourseLevel  @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentPolicies AssessmentPolicy[]
 
   @@unique([courseLevelId, subjectId])
   @@map("level_subjects")
@@ -551,6 +564,7 @@ model ClassGroup {
   enrollments         Enrollment[]
   attendanceSessions  AttendanceSession[]
   classroomBookings   ClassroomBooking[]
+  assessments         Assessment[]
 
   @@map("class_groups")
 }
@@ -833,10 +847,13 @@ model Enrollment {
   academicYear   AcademicYear              @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   academicTerm   AcademicTerm?             @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   billingPolicy  EnrollmentBillingPolicy?  @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  invoices        Invoice[]
-  payments        Payment[]
-  statusHistory   EnrollmentStatusHistory[]
-  lessonProgress  StudentLessonProgress[]
+  invoices               Invoice[]
+  payments               Payment[]
+  statusHistory          EnrollmentStatusHistory[]
+  lessonProgress         StudentLessonProgress[]
+  assessmentResults      AssessmentResult[]
+  studentSubjectProgress StudentSubjectProgress[]
+  assessmentRetakes      AssessmentRetake[]
 
   @@unique([organizationId, enrollmentNumber])
   @@map("enrollments")
@@ -1477,6 +1494,8 @@ model AcademicYear {
   enrollments        Enrollment[]
   classroomBookings  ClassroomBooking[]
   attendanceSessions AttendanceSession[]
+  assessmentPeriods  AssessmentPeriod[]
+  assessments        Assessment[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1505,6 +1524,8 @@ model AcademicTerm {
   enrollments        Enrollment[]
   classroomBookings  ClassroomBooking[]
   attendanceSessions AttendanceSession[]
+  assessmentPeriods  AssessmentPeriod[]
+  assessments        Assessment[]
 
   @@unique([academicYearId, order])
   @@unique([academicYearId, code])
@@ -1804,4 +1825,231 @@ model DomainEventHandlerLog {
   @@index([organizationId, eventId])
   @@index([organizationId, handlerName, status])
   @@map("domain_event_handler_logs")
+}
+
+// =============================================================================
+// ASSESSMENTS
+// =============================================================================
+
+model AssessmentPolicy {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  levelSubjectId      String
+  name                String
+  description         String?   @db.NVarChar(Max)
+  // CalculationMethod: WEIGHTED_AVERAGE | SIMPLE_AVERAGE
+  calculationMethod   String    @default("WEIGHTED_AVERAGE")
+  // RoundingMethod: NONE | NEAREST_INTEGER | ONE_DECIMAL | TWO_DECIMALS
+  roundingMethod      String    @default("NONE")
+  minimumPassingGrade Decimal   @db.Decimal(5, 2)
+  allowRetake         Boolean   @default(true)
+  maxRetakes          Int       @default(1)
+  // AssessmentPolicyStatus: ACTIVE | INACTIVE | ARCHIVED
+  status              String    @default("ACTIVE")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject LevelSubject     @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  components   AssessmentComponent[]
+  assessments  Assessment[]
+
+  @@index([organizationId, levelSubjectId, status])
+  @@map("assessment_policies")
+}
+
+model AssessmentComponent {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  assessmentPolicyId String
+  name               String
+  // ComponentType: TEST | QUIZ | EXAM | ASSIGNMENT | PROJECT | ORAL | PRACTICAL | PARTICIPATION | FINAL_EXAM | OTHER
+  componentType      String    @default("TEST")
+  weight             Decimal   @db.Decimal(5, 2)
+  order              Int       @default(0)
+  isRequired         Boolean   @default(true)
+  // AssessmentComponentStatus: ACTIVE | INACTIVE | ARCHIVED
+  status             String    @default("ACTIVE")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentPolicy AssessmentPolicy @relation(fields: [assessmentPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessments      Assessment[]
+
+  @@index([organizationId, assessmentPolicyId, status])
+  @@map("assessment_components")
+}
+
+model AssessmentPeriod {
+  id             String    @id @default(cuid())
+  organizationId String
+  academicYearId String
+  academicTermId String?
+  name           String
+  code           String
+  startDate      DateTime
+  endDate        DateTime
+  order          Int       @default(0)
+  // AssessmentPeriodStatus: ACTIVE | INACTIVE | ARCHIVED
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm AcademicTerm? @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessments  Assessment[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, academicYearId, status])
+  @@map("assessment_periods")
+}
+
+model Assessment {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  assessmentPolicyId    String
+  assessmentComponentId String
+  assessmentPeriodId    String
+  academicYearId        String
+  academicTermId        String?
+  classGroupId          String
+  courseId              String
+  courseLevelId         String
+  levelSubjectId        String
+  subjectId             String
+  teacherId             String?
+  title                 String
+  description           String?   @db.NVarChar(Max)
+  assessmentDate        DateTime
+  maxScore              Decimal   @db.Decimal(5, 2)
+  // AssessmentStatus: DRAFT | SCHEDULED | OPEN | GRADED | CANCELLED | ARCHIVED
+  status                String    @default("DRAFT")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+
+  organization        Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentPolicy    AssessmentPolicy    @relation(fields: [assessmentPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentComponent AssessmentComponent @relation(fields: [assessmentComponentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentPeriod    AssessmentPeriod    @relation(fields: [assessmentPeriodId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear        AcademicYear        @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm        AcademicTerm?       @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup          ClassGroup          @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacher             Teacher?            @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  results             AssessmentResult[]
+  publication         AssessmentPublication?
+  retakes             AssessmentRetake[]
+
+  @@index([organizationId, classGroupId, status])
+  @@index([organizationId, assessmentPeriodId])
+  @@index([organizationId, levelSubjectId])
+  @@map("assessments")
+}
+
+model AssessmentResult {
+  id              String    @id @default(cuid())
+  organizationId  String
+  assessmentId    String
+  studentId       String
+  enrollmentId    String?
+  score           Decimal?  @db.Decimal(5, 2)
+  normalizedScore Decimal?  @db.Decimal(5, 2)
+  feedback        String?   @db.NVarChar(Max)
+  // AssessmentResultStatus: PENDING | SUBMITTED | GRADED | MISSING | EXCUSED | INVALIDATED
+  status          String    @default("PENDING")
+  gradedByUserId  String?
+  gradedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessment   Assessment   @relation(fields: [assessmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment?  @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  retakes      AssessmentRetake[]
+
+  @@unique([assessmentId, studentId])
+  @@index([organizationId, studentId])
+  @@index([organizationId, assessmentId, status])
+  @@map("assessment_results")
+}
+
+model AssessmentPublication {
+  id                String    @id @default(cuid())
+  organizationId    String
+  assessmentId      String    @unique
+  // PublicationStatus: DRAFT | READY | PUBLISHED | ARCHIVED
+  publicationStatus String    @default("DRAFT")
+  publishedAt       DateTime?
+  publishedByUserId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessment   Assessment   @relation(fields: [assessmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, publicationStatus])
+  @@map("assessment_publications")
+}
+
+model StudentSubjectProgress {
+  id                   String    @id @default(cuid())
+  organizationId       String
+  studentId            String
+  enrollmentId         String
+  levelSubjectId       String
+  finalGrade           Decimal?  @db.Decimal(5, 2)
+  attendancePercentage Decimal?  @db.Decimal(5, 2)
+  // StudentSubjectProgressStatus: NOT_STARTED | IN_PROGRESS | PASSED | FAILED | INCOMPLETE | BLOCKED
+  status               String    @default("NOT_STARTED")
+  progressReason       String?   @db.NVarChar(Max)
+  completedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([enrollmentId, levelSubjectId])
+  @@index([organizationId, studentId])
+  @@index([organizationId, levelSubjectId])
+  @@map("student_subject_progress")
+}
+
+model AssessmentRetake {
+  id                         String    @id @default(cuid())
+  organizationId             String
+  originalAssessmentResultId String
+  assessmentId               String
+  studentId                  String
+  enrollmentId               String?
+  attemptNumber              Int       @default(1)
+  score                      Decimal?  @db.Decimal(5, 2)
+  normalizedScore            Decimal?  @db.Decimal(5, 2)
+  // AssessmentRetakeStatus: REQUESTED | APPROVED | REJECTED | GRADED
+  status                     String    @default("REQUESTED")
+  requestedAt                DateTime  @default(now())
+  approvedAt                 DateTime?
+  approvedByUserId           String?
+  gradedAt                   DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  originalResult AssessmentResult @relation(fields: [originalAssessmentResultId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessment     Assessment       @relation(fields: [assessmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student        Student          @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment     Enrollment?      @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, studentId])
+  @@index([organizationId, assessmentId])
+  @@map("assessment_retakes")
 }

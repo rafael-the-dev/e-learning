@@ -1,6 +1,7 @@
 import { CommunicationEventHandler } from "./handlers/communication.handler";
 import { StudentTimelineEventHandler } from "./handlers/student-timeline.handler";
 import { EnrollmentActivationEventHandler } from "./handlers/enrollment-activation.handler";
+import { AssessmentEventHandler } from "./handlers/assessment.handler";
 import type { DomainEventHandler } from "./event-handlers";
 
 // =============================================================================
@@ -13,4 +14,5 @@ export const registeredHandlers: DomainEventHandler[] = [
   new CommunicationEventHandler(),
   new StudentTimelineEventHandler(),
   new EnrollmentActivationEventHandler(),
+  new AssessmentEventHandler(),
 ];
