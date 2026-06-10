@@ -33,7 +33,14 @@
       "Bash(dir \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\" /b)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\(sorted\\(list\\(d.get\\('dependencies',{}\\).keys\\(\\)\\) + list\\(d.get\\('devDependencies',{}\\).keys\\(\\)\\)\\)\\)\\)\")",
       "Bash(Get-ChildItem -Path \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\" -Directory)",
-      "Bash(Select-Object -ExpandProperty Name)"
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(dir \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\students\" /b)",
+      "Bash(Select-Object -Property Name, PSIsContainer)",
+      "Bash(Format-Table)",
+      "Bash(Get-ChildItem -Path \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\" -Directory)",
+      "Bash(Select-Object Name)"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]",
