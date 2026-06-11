@@ -8,6 +8,7 @@ const componentSelect = {
   name: true,
   componentType: true,
   weight: true,
+  maxGrade: true,
   order: true,
   isRequired: true,
   status: true,
@@ -24,6 +25,7 @@ function mapToComponent(row: any): AssessmentComponent {
     name: row.name,
     componentType: row.componentType,
     weight: Number(row.weight),
+    maxGrade: Number(row.maxGrade),
     order: row.order,
     isRequired: row.isRequired,
     status: row.status,
@@ -77,6 +79,7 @@ export async function createAssessmentComponent(data: {
   name: string;
   componentType: string;
   weight: number;
+  maxGrade: number;
   order: number;
   isRequired: boolean;
 }): Promise<AssessmentComponent> {
@@ -88,6 +91,7 @@ export async function createAssessmentComponent(data: {
       name: data.name,
       componentType: data.componentType,
       weight: data.weight,
+      maxGrade: data.maxGrade,
       order: data.order,
       isRequired: data.isRequired,
       status: "ACTIVE",
@@ -97,6 +101,17 @@ export async function createAssessmentComponent(data: {
   return mapToComponent(row);
 }
 
+export async function softDeleteAssessmentComponent(
+  id: string,
+  organizationId: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.assessmentComponent.update({
+    where: { id },
+    data: { deletedAt: new Date(), status: "ARCHIVED" },
+  });
+}
+
 export async function updateAssessmentComponent(
   id: string,
   organizationId: string,
@@ -104,6 +119,7 @@ export async function updateAssessmentComponent(
     name: string;
     componentType: string;
     weight: number;
+    maxGrade: number;
     order: number;
     isRequired: boolean;
     status: string;

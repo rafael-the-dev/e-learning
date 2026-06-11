@@ -14,6 +14,7 @@ const policySelect = {
   minimumPassingGrade: true,
   allowRetake: true,
   maxRetakes: true,
+  allowRecovery: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -40,6 +41,7 @@ function mapToPolicy(row: any): AssessmentPolicy {
     minimumPassingGrade: Number(row.minimumPassingGrade),
     allowRetake: row.allowRetake,
     maxRetakes: row.maxRetakes,
+    allowRecovery: row.allowRecovery,
     status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -112,6 +114,7 @@ export async function createAssessmentPolicy(data: {
   minimumPassingGrade: number;
   allowRetake: boolean;
   maxRetakes: number;
+  allowRecovery: boolean;
 }): Promise<AssessmentPolicy> {
   const db = await getDb();
   const row = await db.assessmentPolicy.create({
@@ -125,7 +128,8 @@ export async function createAssessmentPolicy(data: {
       minimumPassingGrade: data.minimumPassingGrade,
       allowRetake: data.allowRetake,
       maxRetakes: data.maxRetakes,
-      status: "ACTIVE",
+      allowRecovery: data.allowRecovery,
+      status: "INACTIVE",
     },
     select: policySelect,
   });
@@ -143,6 +147,7 @@ export async function updateAssessmentPolicy(
     minimumPassingGrade: number;
     allowRetake: boolean;
     maxRetakes: number;
+    allowRecovery: boolean;
     status: string;
   }>
 ): Promise<AssessmentPolicy> {

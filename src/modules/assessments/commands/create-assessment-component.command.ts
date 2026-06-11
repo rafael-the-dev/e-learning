@@ -72,6 +72,7 @@ export class CreateAssessmentComponentCommand extends BaseCommand<
       name: this.input.name,
       componentType: this.input.componentType,
       weight: this.input.weight,
+      maxGrade: 20,
       order: this.input.order,
       isRequired: this.input.isRequired,
     });

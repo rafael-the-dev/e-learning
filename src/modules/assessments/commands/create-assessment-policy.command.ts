@@ -69,6 +69,7 @@ export class CreateAssessmentPolicyCommand extends BaseCommand<
       minimumPassingGrade: this.input.minimumPassingGrade,
       allowRetake: this.input.allowRetake,
       maxRetakes: this.input.maxRetakes,
+      allowRecovery: false,
     });
 
     await auditService.log(this.context, {
