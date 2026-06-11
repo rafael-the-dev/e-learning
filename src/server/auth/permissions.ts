@@ -329,6 +329,8 @@ export const PERMISSIONS = {
   ASSESSMENTS_CREATE: "assessments.create",
   ASSESSMENTS_UPDATE: "assessments.update",
   ASSESSMENTS_CANCEL: "assessments.cancel",
+  ASSESSMENTS_LOCK: "assessments.lock",
+  ASSESSMENTS_REOPEN: "assessments.reopen",
 
   // Assessment Results
   ASSESSMENT_RESULTS_VIEW: "assessmentResults.view",
@@ -341,6 +343,28 @@ export const PERMISSIONS = {
 
   // Student Subject Progress
   STUDENT_SUBJECT_PROGRESS_VIEW: "studentSubjectProgress.view",
+
+  // Grade Engine — Assessment Policies (subject-level)
+  GRADE_POLICIES_VIEW: "gradePolicies.view",
+  GRADE_POLICIES_CREATE: "gradePolicies.create",
+  GRADE_POLICIES_UPDATE: "gradePolicies.update",
+  GRADE_POLICIES_ARCHIVE: "gradePolicies.archive",
+
+  // Grade Engine — Components
+  GRADE_COMPONENTS_VIEW: "gradeComponents.view",
+  GRADE_COMPONENTS_CREATE: "gradeComponents.create",
+  GRADE_COMPONENTS_UPDATE: "gradeComponents.update",
+  GRADE_COMPONENTS_DELETE: "gradeComponents.delete",
+
+  // Grade Engine — Student Grades
+  GRADES_VIEW: "grades.view",
+  GRADES_CREATE: "grades.create",
+  GRADES_UPDATE: "grades.update",
+  GRADES_CANCEL: "grades.cancel",
+  GRADES_CALCULATE: "grades.calculate",
+
+  // Grade Engine — Student Progress
+  STUDENT_PROGRESS_CALCULATE: "studentProgress.calculate",
 
   // Dashboard
   DASHBOARD_VIEW: "dashboard.view",
@@ -370,6 +394,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ) as Permission[],
 
   SECRETARY: [
+    PERMISSIONS.GRADE_POLICIES_VIEW,
+    PERMISSIONS.GRADE_COMPONENTS_VIEW,
+    PERMISSIONS.GRADES_VIEW,
     PERMISSIONS.ASSESSMENT_POLICIES_VIEW,
     PERMISSIONS.ASSESSMENT_PERIODS_VIEW,
     PERMISSIONS.ASSESSMENTS_VIEW,
@@ -464,6 +491,13 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   TEACHER: [
+    PERMISSIONS.GRADE_POLICIES_VIEW,
+    PERMISSIONS.GRADE_COMPONENTS_VIEW,
+    PERMISSIONS.GRADES_VIEW,
+    PERMISSIONS.GRADES_CREATE,
+    PERMISSIONS.GRADES_UPDATE,
+    PERMISSIONS.GRADES_CALCULATE,
+    PERMISSIONS.STUDENT_PROGRESS_CALCULATE,
     PERMISSIONS.ASSESSMENT_POLICIES_VIEW,
     PERMISSIONS.ASSESSMENT_PERIODS_VIEW,
     PERMISSIONS.ASSESSMENTS_VIEW,
@@ -510,6 +544,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   STUDENT: [
+    PERMISSIONS.GRADES_VIEW,
     PERMISSIONS.ASSESSMENT_RESULTS_VIEW,
     PERMISSIONS.STUDENT_SUBJECT_PROGRESS_VIEW,
     PERMISSIONS.CLASSROOM_BOOKINGS_VIEW,
