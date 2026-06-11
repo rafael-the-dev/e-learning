@@ -24,13 +24,44 @@ import {
   Award,
   ArrowRight,
   BarChart3,
+  FileText,
 } from "lucide-react";
 import { ENROLLMENT_STATUS_LABELS } from "@/modules/enrollments/types";
-import { findStudentAssessmentResults } from "@/modules/grades/repositories/student-assessment-result.repository";
 import { Badge } from "@/shared/components/ui/badge";
-import { STUDENT_RESULT_STATUS_LABELS } from "@/modules/grades/types";
-import type { StudentAssessmentResult } from "@/modules/grades/types";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/shared/components/ui/accordion";
+import { getEnrollmentAcademicProgress } from "@/modules/grades/services/academic-progress.service";
 import type { AuthContext } from "@/server/auth/context";
+
+const PROGRESS_STATUS_LABELS: Record<string, string> = {
+  NOT_STARTED: "Por Iniciar",
+  IN_PROGRESS: "Em Progresso",
+  PASSED: "Aprovado",
+  FAILED: "Reprovado",
+  RECOVERY_REQUIRED: "Recuperação",
+  INCOMPLETE: "Incompleto",
+  BLOCKED: "Bloqueado",
+};
+
+const PROGRESS_BADGE_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  PASSED: "default",
+  FAILED: "destructive",
+  RECOVERY_REQUIRED: "destructive",
+  BLOCKED: "destructive",
+  IN_PROGRESS: "secondary",
+  INCOMPLETE: "outline",
+  NOT_STARTED: "outline",
+};
+
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  CONTINUOUS: "Contínua",
+  SCHEDULED_EVENT: "Evento",
+  RECOVERY: "Recuperação",
+};
 
 export async function generateMetadata() {
   return { title: "Detalhes da Matrícula" };
@@ -68,24 +99,10 @@ export default async function EnrollmentDetailPage({
 
   const history = await getEnrollmentHistory(enrollmentId, context.organizationId);
 
-  const canViewGrades = ability.can(PERMISSIONS.GRADES_VIEW);
-  const gradeResults = canViewGrades
-    ? await findStudentAssessmentResults(context.organizationId, {
-        enrollmentId,
-        pageSize: 100,
-      })
-    : null;
-
-  // Group grade results by subject
-  const gradesBySubject = new Map<string, { subjectName: string; results: StudentAssessmentResult[] }>();
-  if (gradeResults) {
-    for (const r of gradeResults.data) {
-      if (!gradesBySubject.has(r.subjectId)) {
-        gradesBySubject.set(r.subjectId, { subjectName: r.subjectName ?? r.subjectId, results: [] });
-      }
-      gradesBySubject.get(r.subjectId)!.results.push(r);
-    }
-  }
+  const canViewProgress = ability.can(PERMISSIONS.STUDENT_SUBJECT_PROGRESS_VIEW);
+  const academicProgress = canViewProgress
+    ? await getEnrollmentAcademicProgress(enrollmentId, context.organizationId)
+    : [];
 
   const isEditable = !["COMPLETED", "CANCELLED"].includes(enrollment.status);
 
@@ -277,7 +294,7 @@ export default async function EnrollmentDetailPage({
         </div>
 
         {/* Academic Progress */}
-        {canViewGrades && (
+        {canViewProgress && (
           <div className="rounded-xl border p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -285,49 +302,121 @@ export default async function EnrollmentDetailPage({
                 <h3 className="text-sm font-semibold">Progresso Académico</h3>
               </div>
               <Button asChild variant="outline" size="sm">
-                <Link href={`/grades?studentId=${enrollment.studentId}`}>
-                  Ver notas
+                <Link href={`/students/${enrollment.studentId}/transcript`}>
+                  <FileText className="size-3.5 mr-1.5" />
+                  Boletim
                 </Link>
               </Button>
             </div>
 
-            {gradesBySubject.size === 0 ? (
+            {academicProgress.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sem notas registadas para esta matrícula.</p>
             ) : (
-              <div className="space-y-3">
-                {Array.from(gradesBySubject.entries()).map(([subjectId, { subjectName, results }]) => {
-                  const gradedResults = results.filter((r) => r.status === "GRADED");
-                  const avgNorm = gradedResults.length > 0
-                    ? gradedResults.reduce((s, r) => s + r.normalizedGrade, 0) / gradedResults.length
-                    : null;
+              <Accordion type="multiple" className="space-y-2">
+                {academicProgress.map((subject) => {
+                  const statusVariant = PROGRESS_BADGE_VARIANT[subject.status] ?? "outline";
                   return (
-                    <div key={subjectId} className="rounded-md border p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">{subjectName}</span>
-                        {avgNorm != null && (
-                          <span className="text-sm font-mono font-semibold">
-                            {avgNorm.toFixed(1)}%
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {results.map((r) => (
-                          <div
-                            key={r.id}
-                            className="text-xs border rounded px-2 py-1 flex items-center gap-1.5"
-                          >
-                            <span className="text-muted-foreground">{r.componentName}</span>
-                            <span className="font-mono font-medium">{r.grade}/{r.maxGrade}</span>
-                            <Badge variant={r.status === "GRADED" ? "default" : "secondary"} className="text-xs py-0">
-                              {STUDENT_RESULT_STATUS_LABELS[r.status] ?? r.status}
+                    <AccordionItem
+                      key={subject.levelSubjectId}
+                      value={subject.levelSubjectId}
+                      className="border rounded-lg px-4"
+                    >
+                      <AccordionTrigger className="py-3 hover:no-underline">
+                        <div className="flex items-center justify-between w-full pr-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-sm font-medium truncate">{subject.subjectName}</span>
+                            <Badge variant={statusVariant} className="text-xs shrink-0">
+                              {PROGRESS_STATUS_LABELS[subject.status] ?? subject.status}
                             </Badge>
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                          <div className="flex items-center gap-4 shrink-0 text-sm">
+                            {subject.finalGrade != null && (
+                              <span className="font-mono font-semibold">
+                                {subject.finalGrade.toLocaleString("pt-PT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                {subject.minimumPassingGrade != null && (
+                                  <span className="text-muted-foreground font-normal text-xs ml-1">
+                                    / mín. {subject.minimumPassingGrade}
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {subject.gradedCount}/{subject.components.length} componentes
+                            </span>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-3">
+                        <div className="space-y-2">
+                          {subject.missingRequiredCount > 0 && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              {subject.missingRequiredCount} componente(s) obrigatório(s) sem nota
+                            </p>
+                          )}
+                          {subject.components.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">Sem componentes configurados.</p>
+                          ) : (
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b text-muted-foreground">
+                                  <th className="text-left py-1.5 font-medium">Componente</th>
+                                  <th className="text-right py-1.5 font-medium w-20">Peso</th>
+                                  <th className="text-right py-1.5 font-medium w-28">Nota</th>
+                                  <th className="text-right py-1.5 font-medium w-24">Normalizada</th>
+                                  <th className="text-left py-1.5 font-medium w-28 pl-3">Fonte</th>
+                                  <th className="text-left py-1.5 font-medium w-28 pl-3">Data</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y">
+                                {subject.components.map((comp) => (
+                                  <tr key={comp.componentId} className="text-muted-foreground hover:text-foreground">
+                                    <td className="py-1.5">
+                                      <span className={comp.isRequired ? "font-medium text-foreground" : ""}>
+                                        {comp.componentName}
+                                      </span>
+                                      {comp.isRequired && (
+                                        <span className="ml-1 text-destructive">*</span>
+                                      )}
+                                    </td>
+                                    <td className="text-right py-1.5 tabular-nums">
+                                      {comp.weight > 0 ? `${comp.weight}%` : "—"}
+                                    </td>
+                                    <td className="text-right py-1.5 tabular-nums font-mono">
+                                      {comp.grade != null
+                                        ? `${comp.grade.toLocaleString("pt-PT")} / ${comp.maxGrade}`
+                                        : <span className="text-muted-foreground/50">—</span>}
+                                    </td>
+                                    <td className="text-right py-1.5 tabular-nums">
+                                      {comp.normalizedGrade != null
+                                        ? `${comp.normalizedGrade.toLocaleString("pt-PT", { maximumFractionDigits: 1 })}%`
+                                        : <span className="text-muted-foreground/50">—</span>}
+                                    </td>
+                                    <td className="py-1.5 pl-3">
+                                      {comp.sourceType
+                                        ? SOURCE_TYPE_LABELS[comp.sourceType] ?? comp.sourceType
+                                        : <span className="text-muted-foreground/50">—</span>}
+                                    </td>
+                                    <td className="py-1.5 pl-3">
+                                      {comp.gradedAt
+                                        ? new Date(comp.gradedAt).toLocaleDateString("pt-PT")
+                                        : <span className="text-muted-foreground/50">—</span>}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                          {subject.completedAt && (
+                            <p className="text-xs text-muted-foreground pt-1">
+                              Concluído a {new Date(subject.completedAt).toLocaleDateString("pt-PT")}
+                            </p>
+                          )}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
                   );
                 })}
-              </div>
+              </Accordion>
             )}
           </div>
         )}
