@@ -110,11 +110,11 @@ export function AssessmentDetail({ assessment, results, canEdit, canCancel, canP
               Publicar Resultados
             </Button>
           )}
-          {canEdit && ["DRAFT", "SCHEDULED"].includes(assessment.status) && (
+          {canEdit && !["CANCELLED", "ARCHIVED"].includes(assessment.status) && (
             <Button size="sm" asChild>
               <Link href={`/assessments/${assessment.id}/grade`}>
                 <ClipboardEdit className="size-4 mr-1.5" />
-                Lançar Notas
+                {assessment.status === "GRADED" ? "Editar Notas" : "Lançar Notas"}
               </Link>
             </Button>
           )}
