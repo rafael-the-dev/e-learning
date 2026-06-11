@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "@/shared/hooks/use-toast";
-import { MoreHorizontal, Pencil, Archive } from "lucide-react";
+import { MoreHorizontal, Pencil, Archive, ExternalLink } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { Input } from "@/shared/components/ui/input";
@@ -114,7 +115,14 @@ export function AssessmentPoliciesTable({ result, defaultSearch, canEdit, canArc
             <TableBody>
               {result.data.map((policy) => (
                 <TableRow key={policy.id}>
-                  <TableCell className="font-medium">{policy.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/assessment-policies/${policy.id}`}
+                      className="hover:underline"
+                    >
+                      {policy.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>
                     {policy.subjectName && (
                       <span>
@@ -139,7 +147,7 @@ export function AssessmentPoliciesTable({ result, defaultSearch, canEdit, canArc
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {(canEdit || canArchive) && (
+                    {true && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="size-8">
@@ -147,6 +155,12 @@ export function AssessmentPoliciesTable({ result, defaultSearch, canEdit, canArc
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/assessment-policies/${policy.id}`}>
+                              <ExternalLink className="size-4 mr-2" />
+                              Ver detalhes
+                            </Link>
+                          </DropdownMenuItem>
                           {canEdit && (
                             <DropdownMenuItem onClick={() => setEditTarget(policy)}>
                               <Pencil className="size-4 mr-2" />
