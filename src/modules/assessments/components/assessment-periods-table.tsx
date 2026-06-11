@@ -38,17 +38,23 @@ import { AssessmentPeriodDrawer } from "./assessment-period-drawer";
 import type { AssessmentPeriod } from "@/modules/assessments/types";
 import type { PaginatedResult } from "@/shared/types/common";
 
+interface AcademicYear {
+  id: string;
+  name: string;
+}
+
 interface Props {
   result: PaginatedResult<AssessmentPeriod>;
   defaultSearch?: string;
   canEdit: boolean;
   canArchive: boolean;
+  academicYears: AcademicYear[];
 }
 
 const statusVariant = (s: string) =>
   s === "ACTIVE" ? "default" : s === "UPCOMING" ? "secondary" : "outline";
 
-export function AssessmentPeriodsTable({ result, defaultSearch, canEdit, canArchive }: Props) {
+export function AssessmentPeriodsTable({ result, defaultSearch, canEdit, canArchive, academicYears }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState(defaultSearch ?? "");
   const [archiveTarget, setArchiveTarget] = useState<AssessmentPeriod | null>(null);

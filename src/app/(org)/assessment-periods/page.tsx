@@ -8,6 +8,7 @@ import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { findAssessmentPeriodsByOrganization } from "@/modules/assessments/repositories/assessment-period.repository";
 import { AssessmentPeriodsTable } from "@/modules/assessments/components/assessment-periods-table";
 import { NewAssessmentPeriodButton } from "@/modules/assessments/components/new-assessment-period-button";
+import { getDb } from "@/server/db";
 import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Períodos de Avaliação" };
@@ -33,11 +34,19 @@ export default async function AssessmentPeriodsPage({
   const canEdit = ability.can(PERMISSIONS.ASSESSMENT_PERIODS_UPDATE);
   const canArchive = ability.can(PERMISSIONS.ASSESSMENT_PERIODS_ARCHIVE);
 
-  const result = await findAssessmentPeriodsByOrganization(context.organizationId, {
-    ...pagination,
-    search,
-    status,
-  });
+  const db = await getDb();
+  const [result, academicYears] = await Promise.all([
+    findAssessmentPeriodsByOrganization(context.organizationId, {
+      ...pagination,
+      search,
+      status,
+    }),
+    db.academicYear.findMany({
+      where: { organizationId: context.organizationId, deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: "desc" },
+    }),
+  ]);
 
   const active = result.data.filter((p) => p.status === "ACTIVE").length;
   const upcoming = result.data.filter((p) => p.status === "UPCOMING").length;
@@ -47,7 +56,11 @@ export default async function AssessmentPeriodsPage({
       <PageHeader
         title="Períodos de Avaliação"
         description="Gerir os períodos letivos de avaliação."
-        actions={canCreate ? <NewAssessmentPeriodButton /> : undefined}
+        actions={
+          canCreate ? (
+            <NewAssessmentPeriodButton academicYears={academicYears} />
+          ) : undefined
+        }
       />
       <div className="p-8 space-y-6">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -61,6 +74,7 @@ export default async function AssessmentPeriodsPage({
           defaultSearch={search}
           canEdit={canEdit}
           canArchive={canArchive}
+          academicYears={academicYears}
         />
       </div>
     </>

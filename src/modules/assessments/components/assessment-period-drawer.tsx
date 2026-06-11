@@ -19,6 +19,13 @@ import {
   FormLabel,
   FormMessage,
 } from "@/shared/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { Input } from "@/shared/components/ui/input";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -33,40 +40,57 @@ import {
 } from "@/modules/assessments/actions/assessment.actions";
 import type { AssessmentPeriod } from "@/modules/assessments/types";
 
+interface AcademicYear {
+  id: string;
+  name: string;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   period?: AssessmentPeriod;
+  academicYears?: AcademicYear[];
 }
 
 function toDateInput(d: Date | string): string {
   return new Date(d).toISOString().split("T")[0];
 }
 
-export function AssessmentPeriodDrawer({ open, onClose, period }: Props) {
+export function AssessmentPeriodDrawer({ open, onClose, period, academicYears = [] }: Props) {
   const router = useRouter();
   const isEdit = !!period;
 
   const form = useForm<CreateAssessmentPeriodSchema>({
     resolver: zodResolver(createAssessmentPeriodSchema) as any,
     defaultValues: {
+      academicYearId: "",
       name: period?.name ?? "",
       code: period?.code ?? "",
       startDate: period?.startDate ? toDateInput(period.startDate) : "",
       endDate: period?.endDate ? toDateInput(period.endDate) : "",
+      order: 0,
     },
   });
 
   useEffect(() => {
     if (open && period) {
       form.reset({
+        academicYearId: period.academicYearId ?? "",
         name: period.name,
         code: period.code,
         startDate: toDateInput(period.startDate),
         endDate: toDateInput(period.endDate),
+        order: 0,
       });
     } else if (open && !period) {
-      form.reset();
+      form.reset({
+        academicYearId: "",
+        name: "",
+        code: "",
+        startDate: "",
+        endDate: "",
+        order: 0,
+      });
     }
   }, [open, period, form]);
 
@@ -106,6 +130,34 @@ export function AssessmentPeriodDrawer({ open, onClose, period }: Props) {
         </SheetHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-6 pb-8">
+
+            {!isEdit && (
+              <FormField
+                control={form.control}
+                name="academicYearId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ano Letivo</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecionar ano letivo" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {academicYears.map((y) => (
+                          <SelectItem key={y.id} value={y.id}>
+                            {y.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
               name="name"

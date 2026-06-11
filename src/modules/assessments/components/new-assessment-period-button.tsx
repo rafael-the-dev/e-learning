@@ -5,7 +5,16 @@ import { Plus } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { AssessmentPeriodDrawer } from "./assessment-period-drawer";
 
-export function NewAssessmentPeriodButton() {
+interface AcademicYear {
+  id: string;
+  name: string;
+}
+
+interface Props {
+  academicYears: AcademicYear[];
+}
+
+export function NewAssessmentPeriodButton({ academicYears }: Props) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -13,7 +22,11 @@ export function NewAssessmentPeriodButton() {
         <Plus className="size-4 mr-1.5" />
         Novo Período
       </Button>
-      <AssessmentPeriodDrawer open={open} onClose={() => setOpen(false)} />
+      <AssessmentPeriodDrawer
+        open={open}
+        onClose={() => setOpen(false)}
+        academicYears={academicYears}
+      />
     </>
   );
 }
