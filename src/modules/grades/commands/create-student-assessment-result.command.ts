@@ -1,0 +1,126 @@
+import {
+  BaseCommand,
+  AuthorizationError,
+  ValidationError,
+  NotFoundError,
+  BusinessRuleError,
+} from "@/shared/lib/command";
+import { getUserPermissions, createAbility } from "@/server/auth/rbac";
+import { PERMISSIONS } from "@/server/auth/permissions";
+import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { getDb } from "@/server/db";
+import { upsertStudentAssessmentResult } from "@/modules/grades/repositories/student-assessment-result.repository";
+import { findComponentById } from "@/modules/assessments/repositories/assessment-component.repository";
+import { findAssessmentPolicyById } from "@/modules/assessments/repositories/assessment-policy.repository";
+import { gradeCalculationService } from "@/modules/grades/services/grade-calculation.service";
+import {
+  createStudentAssessmentResultSchema,
+  type CreateStudentAssessmentResultSchema,
+} from "@/modules/grades/schemas/grade.schema";
+import type { StudentAssessmentResult } from "@/modules/grades/types";
+
+export class CreateStudentAssessmentResultCommand extends BaseCommand<
+  CreateStudentAssessmentResultSchema,
+  StudentAssessmentResult
+> {
+  async validate(): Promise<void> {
+    const result = createStudentAssessmentResultSchema.safeParse(this.input);
+    if (!result.success) {
+      const fieldErrors: Record<string, string[]> = {};
+      for (const issue of result.error.issues) {
+        const key = issue.path.join(".");
+        if (!fieldErrors[key]) fieldErrors[key] = [];
+        fieldErrors[key].push(issue.message);
+      }
+      throw new ValidationError("Dados inválidos", fieldErrors);
+    }
+
+    const db = await getDb();
+    const { organizationId } = this.context;
+
+    const enrollment = await db.enrollment.findFirst({
+      where: { id: this.input.enrollmentId, organizationId, deletedAt: null },
+    });
+    if (!enrollment) throw new NotFoundError("Matrícula", this.input.enrollmentId);
+    if (enrollment.studentId !== this.input.studentId) {
+      throw new ValidationError("Dados inválidos", {
+        studentId: ["O aluno não corresponde à matrícula"],
+      });
+    }
+
+    const component = await findComponentById(this.input.assessmentComponentId, organizationId);
+    if (!component) throw new NotFoundError("Componente", this.input.assessmentComponentId);
+    if (component.status === "ARCHIVED") {
+      throw new BusinessRuleError("Não é possível lançar nota para um componente arquivado");
+    }
+
+    if (this.input.grade > component.maxGrade) {
+      throw new ValidationError("Dados inválidos", {
+        grade: [`A nota (${this.input.grade}) excede o máximo do componente (${component.maxGrade})`],
+      });
+    }
+  }
+
+  async authorize(): Promise<void> {
+    const perms = await getUserPermissions(this.context.userId, this.context.organizationId);
+    if (!createAbility(perms).can(PERMISSIONS.GRADES_CREATE)) {
+      throw new AuthorizationError();
+    }
+  }
+
+  async execute(): Promise<StudentAssessmentResult> {
+    const db = await getDb();
+    const { organizationId } = this.context;
+
+    const component = await findComponentById(this.input.assessmentComponentId, organizationId);
+    const maxGrade = component!.maxGrade;
+    const normalizedGrade = gradeCalculationService.normalizeGrade(this.input.grade, maxGrade);
+
+    const policy = await findAssessmentPolicyById(
+      component!.assessmentPolicyId,
+      organizationId
+    );
+
+    const levelSubjectId = policy?.levelSubjectId ?? "";
+
+    // Resolve subjectId from LevelSubject
+    const levelSubject = levelSubjectId
+      ? await db.levelSubject.findFirst({
+          where: { id: levelSubjectId },
+          select: { subjectId: true },
+        })
+      : null;
+
+    const gradeResult = await upsertStudentAssessmentResult({
+      organizationId,
+      enrollmentId: this.input.enrollmentId,
+      studentId: this.input.studentId,
+      levelSubjectId,
+      subjectId: levelSubject?.subjectId ?? "",
+      assessmentComponentId: this.input.assessmentComponentId,
+      sourceType: "CONTINUOUS",
+      grade: this.input.grade,
+      maxGrade,
+      normalizedGrade,
+      notes: this.input.notes ?? null,
+      status: "GRADED",
+      gradedBy: this.context.userId,
+      gradedAt: new Date(),
+    });
+
+    await auditService.log(this.context, {
+      entity: "StudentAssessmentResult",
+      entityId: gradeResult.id,
+      action: "grade.created",
+      newValues: {
+        studentId: gradeResult.studentId,
+        grade: gradeResult.grade,
+        normalizedGrade: gradeResult.normalizedGrade,
+        componentId: gradeResult.assessmentComponentId,
+        sourceType: gradeResult.sourceType,
+      },
+    });
+
+    return gradeResult;
+  }
+}
