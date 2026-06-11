@@ -30,7 +30,8 @@ export type NavIconName =
   | "SlidersHorizontal"
   | "Calendar"
   | "Users"
-  | "Activity";
+  | "Activity"
+  | "PenLine";
 
 export interface NavigationItem {
   href: string;
@@ -111,6 +112,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         label: "Avaliações",
         iconName: "ClipboardCheck",
         requiredPermission: "assessments.view",
+      },
+      {
+        href: "/grades",
+        label: "Notas",
+        iconName: "PenLine",
+        requiredPermission: "grades.view",
       },
       {
         href: "/student-progress",

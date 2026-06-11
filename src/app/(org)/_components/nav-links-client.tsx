@@ -29,6 +29,7 @@ import {
   Calendar,
   Users,
   Activity,
+  PenLine,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -62,6 +63,7 @@ const ICONS: Record<NavIconName, LucideIcon> = {
   Calendar,
   Users,
   Activity,
+  PenLine,
 };
 
 const STORAGE_KEY = "elearning-nav-collapsed";
