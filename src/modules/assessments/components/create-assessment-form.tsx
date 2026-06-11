@@ -38,7 +38,7 @@ interface LevelSubjectIds {
 interface Props {
   policies: AssessmentPolicy[];
   periods: AssessmentPeriod[];
-  classGroups: { id: string; name: string }[];
+  classGroups: { id: string; name: string; courseLevelId: string | null }[];
   teachers: { id: string; firstName: string; lastName: string }[];
   academicYears: { id: string; name: string }[];
   academicTerms: { id: string; name: string }[];
@@ -73,9 +73,16 @@ export function CreateAssessmentForm({
   const selectedPolicyId = form.watch("assessmentPolicyId");
   const components = selectedPolicyId ? (componentsByPolicy[selectedPolicyId] ?? []) : [];
 
+  const filteredClassGroups = selectedPolicyId
+    ? classGroups.filter(
+        (cg) => cg.courseLevelId === policyLevelSubjectMap[selectedPolicyId]?.courseLevelId
+      )
+    : classGroups;
+
   function onPolicyChange(policyId: string) {
     form.setValue("assessmentPolicyId", policyId);
     form.setValue("assessmentComponentId", "");
+    form.setValue("classGroupId", "");
     const ls = policyLevelSubjectMap[policyId];
     if (ls) {
       form.setValue("levelSubjectId", ls.levelSubjectId);
@@ -218,14 +225,26 @@ export function CreateAssessmentForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Turma</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value ?? ""}
+                  disabled={!selectedPolicyId}
+                >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecionar turma" />
+                      <SelectValue
+                        placeholder={
+                          selectedPolicyId
+                            ? filteredClassGroups.length === 0
+                              ? "Nenhuma turma para este nível"
+                              : "Selecionar turma"
+                            : "Selecione primeiro a política"
+                        }
+                      />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {classGroups.map((cg) => (
+                    {filteredClassGroups.map((cg) => (
                       <SelectItem key={cg.id} value={cg.id}>
                         {cg.name}
                       </SelectItem>
@@ -318,8 +337,8 @@ export function CreateAssessmentForm({
               <FormControl>
                 <Input
                   type="date"
-                  value={field.value ? new Date(field.value as any).toISOString().split("T")[0] : ""}
-                  onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                  value={field.value ?? ""}
+                  onChange={(e) => field.onChange(e.target.value)}
                 />
               </FormControl>
               <FormMessage />

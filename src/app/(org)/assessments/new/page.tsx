@@ -19,7 +19,7 @@ async function getFormDeps(organizationId: string) {
       findAssessmentPeriodsByOrganization(organizationId, { page: 1, pageSize: 200, status: "ACTIVE" }),
       db.classGroup.findMany({
         where: { organizationId, deletedAt: null, status: "ACTIVE" },
-        select: { id: true, name: true },
+        select: { id: true, name: true, courseLevelId: true },
         orderBy: { name: "asc" },
       }),
       db.teacher.findMany({
