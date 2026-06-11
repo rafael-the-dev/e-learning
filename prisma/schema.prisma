@@ -86,14 +86,16 @@ model Organization {
   attendanceSessions       AttendanceSession[]
   attendanceRecords        AttendanceRecord[]
   attendanceJustifications AttendanceJustification[]
-  assessmentPolicies       AssessmentPolicy[]
-  assessmentComponents     AssessmentComponent[]
-  assessmentPeriods        AssessmentPeriod[]
-  assessments              Assessment[]
-  assessmentResults        AssessmentResult[]
-  assessmentPublications   AssessmentPublication[]
-  studentSubjectProgress   StudentSubjectProgress[]
-  assessmentRetakes        AssessmentRetake[]
+  assessmentPolicies         AssessmentPolicy[]
+  assessmentComponents       AssessmentComponent[]
+  assessmentPeriods          AssessmentPeriod[]
+  assessments                Assessment[]
+  assessmentResults          AssessmentResult[]
+  assessmentPublications     AssessmentPublication[]
+  studentSubjectProgress     StudentSubjectProgress[]
+  assessmentRetakes          AssessmentRetake[]
+  studentAssessmentResults   StudentAssessmentResult[]
+  gradeChangeLogs            GradeChangeLog[]
 
   @@map("organizations")
 }
@@ -333,12 +335,13 @@ model Student {
   invoices                 Invoice[]
   payments                 Payment[]
   receipts                 Receipt[]
-  wallets                  StudentWallet[]
-  lessonProgress           StudentLessonProgress[]
-  timelineEvents           StudentTimelineEvent[]
-  assessmentResults        AssessmentResult[]
-  studentSubjectProgress   StudentSubjectProgress[]
-  assessmentRetakes        AssessmentRetake[]
+  wallets                    StudentWallet[]
+  lessonProgress             StudentLessonProgress[]
+  timelineEvents             StudentTimelineEvent[]
+  assessmentResults          AssessmentResult[]
+  studentSubjectProgress     StudentSubjectProgress[]
+  assessmentRetakes          AssessmentRetake[]
+  studentAssessmentResults   StudentAssessmentResult[]
 
   @@map("students")
 }
@@ -473,11 +476,12 @@ model Subject {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levelSubjects      LevelSubject[]
-  teacherSubjects    TeacherSubject[]
-  subjectLessons     SubjectLesson[]
-  attendanceSessions AttendanceSession[]
+  organization              Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubjects             LevelSubject[]
+  teacherSubjects           TeacherSubject[]
+  subjectLessons            SubjectLesson[]
+  attendanceSessions        AttendanceSession[]
+  studentAssessmentResults  StudentAssessmentResult[]
 
   @@unique([organizationId, code])
   @@map("subjects")
@@ -510,8 +514,9 @@ model LevelSubject {
   course                 Course                   @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   courseLevel            CourseLevel              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   subject                Subject                  @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assessmentPolicies     AssessmentPolicy[]
-  studentSubjectProgress StudentSubjectProgress[]
+  assessmentPolicies       AssessmentPolicy[]
+  studentSubjectProgress   StudentSubjectProgress[]
+  studentAssessmentResults StudentAssessmentResult[]
 
   @@unique([courseLevelId, subjectId])
   @@map("level_subjects")
@@ -850,12 +855,13 @@ model Enrollment {
   academicTerm   AcademicTerm?             @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   billingPolicy  EnrollmentBillingPolicy?  @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   invoices               Invoice[]
-  payments               Payment[]
-  statusHistory          EnrollmentStatusHistory[]
-  lessonProgress         StudentLessonProgress[]
-  assessmentResults      AssessmentResult[]
-  studentSubjectProgress StudentSubjectProgress[]
-  assessmentRetakes      AssessmentRetake[]
+  payments                 Payment[]
+  statusHistory            EnrollmentStatusHistory[]
+  lessonProgress           StudentLessonProgress[]
+  assessmentResults        AssessmentResult[]
+  studentSubjectProgress   StudentSubjectProgress[]
+  assessmentRetakes        AssessmentRetake[]
+  studentAssessmentResults StudentAssessmentResult[]
 
   @@unique([organizationId, enrollmentNumber])
   @@map("enrollments")
@@ -1847,6 +1853,7 @@ model AssessmentPolicy {
   minimumPassingGrade Decimal   @db.Decimal(5, 2)
   allowRetake         Boolean   @default(true)
   maxRetakes          Int       @default(1)
+  allowRecovery       Boolean   @default(false)
   // AssessmentPolicyStatus: ACTIVE | INACTIVE | ARCHIVED
   status              String    @default("ACTIVE")
   createdAt           DateTime  @default(now())
@@ -1867,9 +1874,10 @@ model AssessmentComponent {
   organizationId     String
   assessmentPolicyId String
   name               String
-  // ComponentType: TEST | QUIZ | EXAM | ASSIGNMENT | PROJECT | ORAL | PRACTICAL | PARTICIPATION | FINAL_EXAM | OTHER
+  // ComponentType: TEST | QUIZ | EXAM | ASSIGNMENT | PROJECT | ORAL | PRACTICAL | PARTICIPATION | FINAL_EXAM | RECOVERY | OTHER
   componentType      String    @default("TEST")
   weight             Decimal   @db.Decimal(5, 2)
+  maxGrade           Decimal   @db.Decimal(5, 2) @default(20)
   order              Int       @default(0)
   isRequired         Boolean   @default(true)
   // AssessmentComponentStatus: ACTIVE | INACTIVE | ARCHIVED
@@ -1881,6 +1889,7 @@ model AssessmentComponent {
   organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   assessmentPolicy AssessmentPolicy @relation(fields: [assessmentPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   assessments      Assessment[]
+  gradeResults     StudentAssessmentResult[]
 
   @@index([organizationId, assessmentPolicyId, status])
   @@map("assessment_components")
@@ -1945,9 +1954,10 @@ model Assessment {
   academicTerm        AcademicTerm?       @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   classGroup          ClassGroup          @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   teacher             Teacher?            @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  results             AssessmentResult[]
-  publication         AssessmentPublication?
-  retakes             AssessmentRetake[]
+  results              AssessmentResult[]
+  publication          AssessmentPublication?
+  retakes              AssessmentRetake[]
+  gradeResults         StudentAssessmentResult[]
 
   @@index([organizationId, classGroupId, status])
   @@index([organizationId, assessmentPeriodId])
@@ -2056,4 +2066,73 @@ model AssessmentRetake {
   @@index([organizationId, studentId])
   @@index([organizationId, assessmentId])
   @@map("assessment_retakes")
+}
+
+
+model StudentAssessmentResult {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  enrollmentId          String
+  studentId             String
+  levelSubjectId        String
+  subjectId             String
+  assessmentComponentId String
+  assessmentEventId     String?
+  // SourceType: CONTINUOUS | SCHEDULED_EVENT | RECOVERY
+  sourceType            String    @default("CONTINUOUS")
+  grade                 Decimal   @db.Decimal(5, 2)
+  maxGrade              Decimal   @db.Decimal(5, 2)
+  normalizedGrade       Decimal   @db.Decimal(5, 2)
+  notes                 String?   @db.NVarChar(Max)
+  // StudentResultStatus: DRAFT | SUBMITTED | GRADED | CANCELLED
+  status                String    @default("DRAFT")
+  gradedBy              String?
+  gradedAt              DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization        Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment          Enrollment          @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student             Student             @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject        LevelSubject        @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject             Subject             @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentComponent AssessmentComponent @relation(fields: [assessmentComponentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentEvent     Assessment?         @relation(fields: [assessmentEventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  changeLogs          GradeChangeLog[]
+
+  @@unique([enrollmentId, assessmentComponentId])
+  @@index([organizationId, studentId])
+  @@index([organizationId, levelSubjectId])
+  @@index([organizationId, subjectId])
+  @@index([organizationId, enrollmentId])
+  @@index([organizationId, enrollmentId, levelSubjectId])
+  @@map("student_assessment_results")
+}
+
+// =============================================================================
+// GRADE CHANGE LOG
+// Immutable history of every grade edit after initial submission.
+// Created whenever a StudentAssessmentResult grade or status changes.
+// =============================================================================
+
+model GradeChangeLog {
+  id                        String   @id @default(cuid())
+  organizationId            String
+  studentAssessmentResultId String
+  assessmentEventId         String?
+  oldGrade                  Decimal? @db.Decimal(5, 2)
+  newGrade                  Decimal  @db.Decimal(5, 2)
+  oldStatus                 String?
+  newStatus                 String
+  // Reason is required for all post-submission edits
+  reason                    String   @db.NVarChar(Max)
+  changedBy                 String
+  changedAt                 DateTime @default(now())
+
+  organization            Organization            @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  studentAssessmentResult StudentAssessmentResult @relation(fields: [studentAssessmentResultId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, studentAssessmentResultId])
+  @@index([organizationId, changedAt])
+  @@map("grade_change_logs")
 }
