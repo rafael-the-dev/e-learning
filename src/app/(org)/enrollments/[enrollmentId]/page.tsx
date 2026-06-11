@@ -23,8 +23,13 @@ import {
   CreditCard,
   Award,
   ArrowRight,
+  BarChart3,
 } from "lucide-react";
 import { ENROLLMENT_STATUS_LABELS } from "@/modules/enrollments/types";
+import { findStudentAssessmentResults } from "@/modules/grades/repositories/student-assessment-result.repository";
+import { Badge } from "@/shared/components/ui/badge";
+import { STUDENT_RESULT_STATUS_LABELS } from "@/modules/grades/types";
+import type { StudentAssessmentResult } from "@/modules/grades/types";
 import type { AuthContext } from "@/server/auth/context";
 
 export async function generateMetadata() {
@@ -62,6 +67,25 @@ export default async function EnrollmentDetailPage({
   }
 
   const history = await getEnrollmentHistory(enrollmentId, context.organizationId);
+
+  const canViewGrades = ability.can(PERMISSIONS.GRADES_VIEW);
+  const gradeResults = canViewGrades
+    ? await findStudentAssessmentResults(context.organizationId, {
+        enrollmentId,
+        pageSize: 100,
+      })
+    : null;
+
+  // Group grade results by subject
+  const gradesBySubject = new Map<string, { subjectName: string; results: StudentAssessmentResult[] }>();
+  if (gradeResults) {
+    for (const r of gradeResults.data) {
+      if (!gradesBySubject.has(r.subjectId)) {
+        gradesBySubject.set(r.subjectId, { subjectName: r.subjectName ?? r.subjectId, results: [] });
+      }
+      gradesBySubject.get(r.subjectId)!.results.push(r);
+    }
+  }
 
   const isEditable = !["COMPLETED", "CANCELLED"].includes(enrollment.status);
 
@@ -251,6 +275,62 @@ export default async function EnrollmentDetailPage({
             </div>
           </div>
         </div>
+
+        {/* Academic Progress */}
+        {canViewGrades && (
+          <div className="rounded-xl border p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Progresso Académico</h3>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/grades?studentId=${enrollment.studentId}`}>
+                  Ver notas
+                </Link>
+              </Button>
+            </div>
+
+            {gradesBySubject.size === 0 ? (
+              <p className="text-sm text-muted-foreground">Sem notas registadas para esta matrícula.</p>
+            ) : (
+              <div className="space-y-3">
+                {Array.from(gradesBySubject.entries()).map(([subjectId, { subjectName, results }]) => {
+                  const gradedResults = results.filter((r) => r.status === "GRADED");
+                  const avgNorm = gradedResults.length > 0
+                    ? gradedResults.reduce((s, r) => s + r.normalizedGrade, 0) / gradedResults.length
+                    : null;
+                  return (
+                    <div key={subjectId} className="rounded-md border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{subjectName}</span>
+                        {avgNorm != null && (
+                          <span className="text-sm font-mono font-semibold">
+                            {avgNorm.toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {results.map((r) => (
+                          <div
+                            key={r.id}
+                            className="text-xs border rounded px-2 py-1 flex items-center gap-1.5"
+                          >
+                            <span className="text-muted-foreground">{r.componentName}</span>
+                            <span className="font-mono font-medium">{r.grade}/{r.maxGrade}</span>
+                            <Badge variant={r.status === "GRADED" ? "default" : "secondary"} className="text-xs py-0">
+                              {STUDENT_RESULT_STATUS_LABELS[r.status] ?? r.status}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Placeholder: Attendance */}
         <div className="rounded-xl border border-dashed p-5 space-y-2">

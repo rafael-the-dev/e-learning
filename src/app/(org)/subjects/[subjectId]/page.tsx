@@ -12,6 +12,10 @@ import {
 } from "@/modules/lessons/services/lesson.service";
 import { SubjectLessonsPanel } from "@/modules/lessons/components/subject-lessons-panel";
 import { SUBJECT_STATUS_LABELS } from "@/modules/courses/types";
+import { findActivePolicyForLevelSubject } from "@/modules/assessments/repositories/assessment-policy.repository";
+import { findActiveComponentsByPolicy } from "@/modules/assessments/repositories/assessment-component.repository";
+import { SubjectPolicyPanel } from "@/modules/grades/components/subject-policy-panel";
+import { getDb } from "@/server/db";
 import type { AuthContext } from "@/server/auth/context";
 
 export async function generateMetadata({
@@ -28,7 +32,7 @@ export default async function SubjectDetailPage({
   searchParams,
 }: {
   params: Promise<{ subjectId: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; levelSubjectId?: string }>;
 }) {
   let context: AuthContext;
   try {
@@ -39,7 +43,8 @@ export default async function SubjectDetailPage({
 
   const { subjectId } = await params;
   const sp = await searchParams;
-  const activeTab = sp.tab === "lessons" ? "lessons" : "info";
+  const activeTab =
+    sp.tab === "lessons" ? "lessons" : sp.tab === "policy" ? "policy" : "info";
 
   const subject = await getSubjectById(subjectId, context.organizationId).catch(() => null);
   if (!subject) notFound();
@@ -48,6 +53,7 @@ export default async function SubjectDetailPage({
   const ability = createAbility(perms);
 
   const canViewLessons = ability.can(PERMISSIONS.SUBJECT_LESSONS_VIEW);
+  const canViewPolicy = ability.can(PERMISSIONS.GRADE_POLICIES_VIEW);
 
   const [subjectLessons, publishedLessons] = canViewLessons
     ? await Promise.all([
@@ -55,6 +61,30 @@ export default async function SubjectDetailPage({
         getPublishedLessons(context.organizationId),
       ])
     : [[], []];
+
+  // Load LevelSubjects for this subject — each one can have its own AssessmentPolicy
+  const db = await getDb();
+  const levelSubjects = canViewPolicy
+    ? await db.levelSubject.findMany({
+        where: { subjectId, organizationId: context.organizationId, deletedAt: null },
+        select: {
+          id: true,
+          courseLevel: { select: { name: true, course: { select: { name: true } } } },
+        },
+        orderBy: [{ courseLevel: { course: { name: "asc" } } }, { courseLevel: { name: "asc" } }],
+      })
+    : [];
+
+  // For each LevelSubject, load its active policy and components
+  const levelSubjectPolicies = await Promise.all(
+    levelSubjects.map(async (ls) => {
+      const policy = await findActivePolicyForLevelSubject(ls.id, context.organizationId);
+      const components = policy
+        ? await findActiveComponentsByPolicy(policy.id, context.organizationId)
+        : [];
+      return { levelSubject: ls, policy, components };
+    })
+  );
 
   const statusVariant =
     subject.status === "ACTIVE" ? "default" : subject.status === "INACTIVE" ? "secondary" : "outline";
@@ -83,6 +113,9 @@ export default async function SubjectDetailPage({
               <TabsTrigger value="lessons">
                 Lições ({subjectLessons.length})
               </TabsTrigger>
+            )}
+            {canViewPolicy && (
+              <TabsTrigger value="policy">Política de Avaliação</TabsTrigger>
             )}
           </TabsList>
 
@@ -116,6 +149,35 @@ export default async function SubjectDetailPage({
                 canRemove={ability.can(PERMISSIONS.SUBJECT_LESSONS_REMOVE)}
                 canReorder={ability.can(PERMISSIONS.SUBJECT_LESSONS_REORDER)}
               />
+            </TabsContent>
+          )}
+
+          {canViewPolicy && (
+            <TabsContent value="policy" className="mt-4">
+              {levelSubjectPolicies.length === 0 ? (
+                <div className="rounded-md border p-6 text-center text-sm text-muted-foreground">
+                  Esta disciplina ainda não está associada a nenhum nível de curso.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {levelSubjectPolicies.map(({ levelSubject, policy, components }) => (
+                    <div key={levelSubject.id} className="space-y-3">
+                      <div className="text-sm font-medium text-muted-foreground">
+                        {levelSubject.courseLevel.course.name} — {levelSubject.courseLevel.name}
+                      </div>
+                      <SubjectPolicyPanel
+                        levelSubjectId={levelSubject.id}
+                        policy={policy}
+                        components={components}
+                        canCreate={ability.can(PERMISSIONS.GRADE_POLICIES_CREATE)}
+                        canEdit={ability.can(PERMISSIONS.GRADE_POLICIES_UPDATE)}
+                        canArchive={ability.can(PERMISSIONS.GRADE_POLICIES_ARCHIVE)}
+                        canManageComponents={ability.can(PERMISSIONS.GRADE_COMPONENTS_CREATE)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </TabsContent>
           )}
         </Tabs>

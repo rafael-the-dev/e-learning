@@ -17,6 +17,8 @@ import { StudentTimelinePreview } from "@/modules/student-timeline/components/st
 import { getDb } from "@/server/db";
 import { calculateEnrollmentAttendanceSummary } from "@/modules/attendance/services/attendance-calculator.service";
 import type { StudentSubjectAttendance } from "@/modules/attendance/types";
+import { findStudentAssessmentResults } from "@/modules/grades/repositories/student-assessment-result.repository";
+import { StudentGradesPanel } from "@/modules/grades/components/student-grades-panel";
 import {
   Mail,
   Phone,
@@ -27,6 +29,7 @@ import {
   Pencil,
   GraduationCap,
   ClipboardList,
+  BookOpen,
 } from "lucide-react";
 import type { AuthContext } from "@/server/auth/context";
 
@@ -53,6 +56,7 @@ export default async function StudentDetailPage({
   }
 
   const canViewAttendance = context.ability.can(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
+  const canViewGrades = context.ability.can(PERMISSIONS.GRADES_VIEW);
 
   const [wallet, recentTimeline] = await Promise.all([
     getWalletByStudentId(studentId, context.organizationId),
@@ -97,6 +101,34 @@ export default async function StudentDetailPage({
           }))
       )
     ).filter((e) => e.subjects.length > 0);
+  }
+
+  // Build grade groups by subject
+  let gradeGroups: {
+    subjectId: string;
+    subjectName: string;
+    progress: null;
+    results: Awaited<ReturnType<typeof findStudentAssessmentResults>>["data"];
+  }[] = [];
+
+  if (canViewGrades) {
+    const gradeResults = await findStudentAssessmentResults(context.organizationId, {
+      studentId,
+      pageSize: 100,
+    });
+    const bySubject = new Map<string, typeof gradeGroups[0]>();
+    for (const r of gradeResults.data) {
+      if (!bySubject.has(r.subjectId)) {
+        bySubject.set(r.subjectId, {
+          subjectId: r.subjectId,
+          subjectName: r.subjectName ?? r.subjectId,
+          progress: null,
+          results: [],
+        });
+      }
+      bySubject.get(r.subjectId)!.results.push(r);
+    }
+    gradeGroups = Array.from(bySubject.values());
   }
 
   const breadcrumb = (
@@ -217,6 +249,24 @@ export default async function StudentDetailPage({
             </Button>
           </div>
         </div>
+
+        {/* Grades */}
+        {canViewGrades && (
+          <div className="rounded-xl border p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Notas</h3>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/grades?studentId=${studentId}`}>
+                  Ver todas
+                </Link>
+              </Button>
+            </div>
+            <StudentGradesPanel groups={gradeGroups} />
+          </div>
+        )}
 
         {/* Wallet */}
         <StudentWalletCard
