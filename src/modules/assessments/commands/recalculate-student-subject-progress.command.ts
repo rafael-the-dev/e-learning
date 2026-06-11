@@ -10,16 +10,14 @@ import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { getDb } from "@/server/db";
-import {
-  findResultsByEnrollmentAndLevelSubject,
-} from "@/modules/assessments/repositories/assessment-result.repository";
+import { findResultsByEnrollmentAndLevelSubject } from "@/modules/grades/repositories/student-assessment-result.repository";
 import { upsertStudentSubjectProgress } from "@/modules/assessments/repositories/student-subject-progress.repository";
 import { findActivePolicyForLevelSubject } from "@/modules/assessments/repositories/assessment-policy.repository";
 import { findActiveComponentsByPolicy } from "@/modules/assessments/repositories/assessment-component.repository";
 import {
-  gradeCalculatorService,
-  type ComponentScore,
-} from "@/modules/assessments/services/grade-calculator.service";
+  gradeCalculationService,
+  type GradeComponentScore,
+} from "@/modules/grades/services/grade-calculation.service";
 import {
   recalculateStudentSubjectProgressSchema,
   type RecalculateStudentSubjectProgressSchema,
@@ -75,10 +73,7 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
     const db = await getDb();
     const levelSubject = await db.levelSubject.findFirst({
       where: { id: levelSubjectId, organizationId },
-      select: {
-        minimumPassingGrade: true,
-        minimumAttendancePercentage: true,
-      },
+      select: { minimumPassingGrade: true, minimumAttendancePercentage: true },
     });
 
     const policy = await findActivePolicyForLevelSubject(levelSubjectId, organizationId);
@@ -86,30 +81,29 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
       ? await findActiveComponentsByPolicy(policy.id, organizationId)
       : [];
 
+    // Read from unified StudentAssessmentResult (single source of truth)
     const results = await findResultsByEnrollmentAndLevelSubject(
       enrollmentId,
       levelSubjectId,
       organizationId
     );
 
-    // Build component scores map
-    const componentScores: ComponentScore[] = components.map((comp) => {
-      const matchingResult = (results as any[]).find(
-        (r: any) => r.assessment?.assessmentComponentId === comp.id
-      );
+    const componentScores: GradeComponentScore[] = components.map((comp) => {
+      const matching = results.find((r) => r.assessmentComponentId === comp.id);
       return {
+        componentId: comp.id,
         weight: comp.weight,
-        normalizedScore: matchingResult?.normalizedScore ?? null,
+        maxGrade: comp.maxGrade,
+        grade: matching?.grade ?? null,
+        normalizedGrade: matching?.normalizedGrade ?? null,
         isRequired: comp.isRequired,
       };
     });
 
-    // Get attendance from existing progress or calculate
-    const attendancePercentage: number | null = null;
-
     const minPassingGrade =
-      policy?.minimumPassingGrade ??
-      (levelSubject?.minimumPassingGrade ? Number(levelSubject.minimumPassingGrade) : 50);
+      levelSubject?.minimumPassingGrade != null
+        ? Number(levelSubject.minimumPassingGrade)
+        : policy?.minimumPassingGrade ?? 50;
 
     const minAttendance = levelSubject?.minimumAttendancePercentage
       ? Number(levelSubject.minimumAttendancePercentage)
@@ -117,13 +111,13 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
 
     let calculationResult;
     if (policy && components.length > 0) {
-      calculationResult = gradeCalculatorService.calculateFinalGrade({
+      calculationResult = gradeCalculationService.calculateFinalGrade({
         calculationMethod: policy.calculationMethod,
         roundingMethod: policy.roundingMethod,
         minimumPassingGrade: minPassingGrade,
-        allowRetake: policy.allowRetake,
+        allowRecovery: policy.allowRecovery,
         components: componentScores,
-        attendancePercentage,
+        attendancePercentage: null,
         minimumAttendancePercentage: minAttendance,
       });
     } else {
@@ -137,9 +131,12 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
     const progressStatus =
       calculationResult.status === "PASSED" ? "PASSED" :
       calculationResult.status === "FAILED" ? "FAILED" :
+      calculationResult.status === "RECOVERY_REQUIRED" ? "FAILED" :
       calculationResult.status === "INCOMPLETE" ? "INCOMPLETE" :
       calculationResult.status === "BLOCKED" ? "BLOCKED" :
       "IN_PROGRESS";
+
+    const isTerminal = progressStatus === "PASSED" || progressStatus === "FAILED";
 
     const progress = await upsertStudentSubjectProgress({
       organizationId,
@@ -147,11 +144,10 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
       enrollmentId,
       levelSubjectId,
       finalGrade: calculationResult.finalGrade,
-      attendancePercentage,
+      attendancePercentage: null,
       status: progressStatus,
       progressReason: calculationResult.reason,
-      completedAt:
-        progressStatus === "PASSED" || progressStatus === "FAILED" ? new Date() : null,
+      completedAt: isTerminal ? new Date() : null,
     });
 
     await auditService.log(this.context, {
@@ -166,7 +162,6 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
       },
     });
 
-    // Emit domain events for terminal states
     if (progressStatus === "PASSED") {
       await eventPublisher.publish({
         organizationId,
@@ -174,13 +169,7 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
         aggregateType: DomainAggregateType.STUDENT,
         aggregateId: studentId,
         actorId: this.context.userId,
-        payload: {
-          studentId,
-          enrollmentId,
-          levelSubjectId,
-          finalGrade: progress.finalGrade,
-          progressId: progress.id,
-        },
+        payload: { studentId, enrollmentId, levelSubjectId, finalGrade: progress.finalGrade, progressId: progress.id },
       });
     } else if (progressStatus === "FAILED") {
       await eventPublisher.publish({
@@ -189,13 +178,7 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
         aggregateType: DomainAggregateType.STUDENT,
         aggregateId: studentId,
         actorId: this.context.userId,
-        payload: {
-          studentId,
-          enrollmentId,
-          levelSubjectId,
-          finalGrade: progress.finalGrade,
-          progressId: progress.id,
-        },
+        payload: { studentId, enrollmentId, levelSubjectId, finalGrade: progress.finalGrade, progressId: progress.id },
       });
     }
 

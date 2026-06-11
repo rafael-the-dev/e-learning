@@ -165,6 +165,8 @@ export const bulkGradeAssessmentSchema = z.object({
       status: z.enum(["GRADED", "MISSING", "EXCUSED"]).default("GRADED"),
     })
   ).min(1, "Pelo menos uma classificação é obrigatória"),
+  // Required when editing grades that were already submitted (assessment status = GRADED)
+  editReason: z.string().min(2, "O motivo da alteração deve ter pelo menos 2 caracteres").optional(),
 });
 export type BulkGradeAssessmentSchema = z.infer<typeof bulkGradeAssessmentSchema>;
 

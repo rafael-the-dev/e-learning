@@ -36,6 +36,7 @@ export interface AssessmentPolicy {
   minimumPassingGrade: number;
   allowRetake: boolean;
   maxRetakes: number;
+  allowRecovery: boolean;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -58,6 +59,7 @@ export const ASSESSMENT_COMPONENT_TYPE = {
   PRACTICAL: "PRACTICAL",
   PARTICIPATION: "PARTICIPATION",
   FINAL_EXAM: "FINAL_EXAM",
+  RECOVERY: "RECOVERY",
   OTHER: "OTHER",
 } as const;
 export type AssessmentComponentType = (typeof ASSESSMENT_COMPONENT_TYPE)[keyof typeof ASSESSMENT_COMPONENT_TYPE];
@@ -76,6 +78,7 @@ export interface AssessmentComponent {
   name: string;
   componentType: string;
   weight: number;
+  maxGrade: number;
   order: number;
   isRequired: boolean;
   status: string;
@@ -364,6 +367,7 @@ export const ASSESSMENT_COMPONENT_TYPE_LABELS: Record<string, string> = {
   PRACTICAL: "Prático",
   PARTICIPATION: "Participação",
   FINAL_EXAM: "Exame Final",
+  RECOVERY: "Recuperação",
   OTHER: "Outro",
 };
 

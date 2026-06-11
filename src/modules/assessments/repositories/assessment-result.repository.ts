@@ -122,35 +122,6 @@ export async function findResultByAssessmentAndStudent(
   return row ? mapToResult(row) : null;
 }
 
-export async function findResultsByEnrollmentAndLevelSubject(
-  enrollmentId: string,
-  levelSubjectId: string,
-  organizationId: string
-): Promise<AssessmentResult[]> {
-  const db = await getDb();
-  const rows = await db.assessmentResult.findMany({
-    where: {
-      enrollmentId,
-      organizationId,
-      deletedAt: null,
-      status: { notIn: ["INVALIDATED"] },
-      assessment: { levelSubjectId, deletedAt: null },
-    },
-    select: {
-      ...resultSelect,
-      assessment: {
-        select: {
-          id: true,
-          assessmentComponentId: true,
-          maxScore: true,
-          assessmentComponent: { select: { weight: true, isRequired: true } },
-        },
-      },
-    },
-  });
-  return rows.map(mapToResult);
-}
-
 export async function createAssessmentResult(data: {
   organizationId: string;
   assessmentId: string;
