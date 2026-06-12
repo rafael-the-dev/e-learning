@@ -15,6 +15,10 @@ export interface ListPaymentsParams extends PaginationParams {
   invoiceId?: string;
   studentId?: string;
   branchId?: string;
+  method?: string;
+  receiptStatus?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 const paymentSelect = {
@@ -48,6 +52,9 @@ const paymentSelect = {
     },
     orderBy: { amount: "desc" as const },
   },
+  receipt: {
+    select: { id: true, receiptNumber: true, status: true },
+  },
 } as const;
 
 type SplitRow = {
@@ -80,6 +87,7 @@ type PaymentRow = {
   invoice: { id: string; invoiceNumber: string } | null;
   branch: { id: string; name: string } | null;
   splits: SplitRow[];
+  receipt: { id: string; receiptNumber: string; status: string } | null;
 };
 
 function mapSplit(row: SplitRow, paymentId: string): PaymentSplit {
@@ -116,6 +124,9 @@ function mapToPayment(row: PaymentRow): Payment {
     invoiceNumber: row.invoice?.invoiceNumber ?? null,
     branchName: row.branch?.name ?? null,
     splits: row.splits.map((s) => mapSplit(s, row.id)),
+    receiptId: row.receipt?.id ?? null,
+    receiptStatus: row.receipt?.status ?? null,
+    receiptNumber: row.receipt?.receiptNumber ?? null,
   };
 }
 
@@ -132,6 +143,16 @@ export async function findPaymentsByOrganization(
     ...(params.invoiceId && { invoiceId: params.invoiceId }),
     ...(params.studentId && { studentId: params.studentId }),
     ...(params.branchId && { branchId: params.branchId }),
+    ...(params.method && { splits: { some: { method: params.method } } }),
+    ...(params.receiptStatus === "MISSING" && { receipt: null }),
+    ...(params.receiptStatus === "ISSUED" && { receipt: { status: "ISSUED" } }),
+    ...(params.receiptStatus === "CANCELLED" && { receipt: { status: "CANCELLED" } }),
+    ...((params.dateFrom || params.dateTo) && {
+      paymentDate: {
+        ...(params.dateFrom && { gte: new Date(params.dateFrom) }),
+        ...(params.dateTo && { lte: new Date(params.dateTo + "T23:59:59.999Z") }),
+      },
+    }),
     ...(params.search && {
       OR: [
         { paymentNumber: { contains: params.search } },

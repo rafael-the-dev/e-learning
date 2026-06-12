@@ -137,6 +137,9 @@ export interface Payment {
   invoiceNumber: string | null;
   branchName: string | null;
   splits: PaymentSplit[];
+  receiptId: string | null;
+  receiptStatus: string | null;
+  receiptNumber: string | null;
 }
 
 export interface Receipt {
@@ -239,4 +242,75 @@ export const ALLOCATION_TYPE_LABELS: Record<string, string> = {
   WALLET_CREDIT: "Crédito da Carteira",
   ADJUSTMENT: "Ajuste",
   REFUND_REVERSAL: "Reversão de Reembolso",
+};
+
+// =============================================================================
+// DASHBOARD TYPES
+// =============================================================================
+
+export interface PaymentDashboardKPIs {
+  receivedToday: number;
+  receivedThisMonth: number;
+  pendingCount: number;
+  pendingAmount: number;
+  confirmedCount: number;
+  confirmedAmount: number;
+  cancelledCount: number;
+  requireReceiptCount: number;
+  overpaymentCount: number;
+  walletCreditUsed: number;
+}
+
+export interface PaymentMethodDistribution {
+  method: string;
+  count: number;
+  totalAmount: number;
+}
+
+export interface PaymentStatusDistribution {
+  status: string;
+  count: number;
+  totalAmount: number;
+}
+
+export interface PaymentMonthlyTrend {
+  month: string;
+  count: number;
+  totalAmount: number;
+}
+
+export interface PaymentBranchDistribution {
+  branchId: string | null;
+  branchName: string;
+  count: number;
+  totalAmount: number;
+}
+
+export interface PaymentWatchlistItem {
+  paymentId: string;
+  paymentNumber: string;
+  studentId: string | null;
+  studentName: string | null;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  amount: number;
+  issue: string;
+  severity: "low" | "medium" | "high" | "critical";
+  recommendedAction: string;
+  paymentDate: Date;
+}
+
+export interface PaymentInsight {
+  id: string;
+  message: string;
+  severity: "info" | "warning" | "critical";
+  count?: number;
+  linkHref?: string;
+  linkLabel?: string;
+}
+
+export const RECEIPT_STATUS_FILTER_LABELS: Record<string, string> = {
+  MISSING: "Sem Recibo",
+  ISSUED: "Recibo Emitido",
+  CANCELLED: "Recibo Cancelado",
 };
