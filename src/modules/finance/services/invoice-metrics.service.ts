@@ -4,6 +4,7 @@ import {
   getInvoiceCourseDistribution,
   getInvoiceMonthlyTrend,
   getInvoiceAgingBuckets,
+  getInvoiceTopOutstandingBalances as _getTopOutstanding,
 } from "@/modules/finance/repositories/invoice-dashboard.repository";
 import type {
   InvoiceDashboardKPIs,
@@ -11,6 +12,7 @@ import type {
   InvoiceCourseDistribution,
   InvoiceMonthlyTrend,
   InvoiceAgingBucket,
+  InvoiceTopOutstandingBalance,
 } from "@/modules/finance/types";
 
 export async function getInvoiceKPIs(organizationId: string): Promise<InvoiceDashboardKPIs> {
@@ -40,4 +42,11 @@ export async function getInvoiceAging(
   organizationId: string
 ): Promise<InvoiceAgingBucket[]> {
   return getInvoiceAgingBuckets(organizationId);
+}
+
+export async function getInvoiceTopOutstandingBalances(
+  organizationId: string,
+  limit = 8
+): Promise<InvoiceTopOutstandingBalance[]> {
+  return _getTopOutstanding(organizationId, limit);
 }

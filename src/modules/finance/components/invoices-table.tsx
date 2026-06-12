@@ -388,14 +388,15 @@ export function InvoicesTable({
               <TableHead className="text-right hidden sm:table-cell min-w-[90px]">Pago</TableHead>
               <TableHead className="text-right min-w-[90px]">Saldo</TableHead>
               <TableHead className="hidden sm:table-cell min-w-[110px]">Vencimento</TableHead>
-              <TableHead className="min-w-[120px]">Estado</TableHead>
+              <TableHead className="hidden md:table-cell min-w-22.5">Dias Atraso</TableHead>
+              <TableHead className="min-w-30">Estado</TableHead>
               <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {result.data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-muted-foreground py-10">
+                <TableCell colSpan={10} className="text-center text-muted-foreground py-10">
                   Nenhuma fatura encontrada.
                 </TableCell>
               </TableRow>
@@ -459,6 +460,22 @@ export function InvoicesTable({
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
                       {invoice.dueDate ? invoice.dueDate.toLocaleDateString("pt-PT") : "—"}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {invoice.status === "OVERDUE" && invoice.dueDate ? (
+                        <span className={cn(
+                          "text-sm font-medium tabular-nums",
+                          Math.floor((Date.now() - invoice.dueDate.getTime()) / 86_400_000) > 30
+                            ? "text-destructive"
+                            : Math.floor((Date.now() - invoice.dueDate.getTime()) / 86_400_000) > 15
+                            ? "text-orange-600"
+                            : "text-amber-600"
+                        )}>
+                          {Math.floor((Date.now() - invoice.dueDate.getTime()) / 86_400_000)}d
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge

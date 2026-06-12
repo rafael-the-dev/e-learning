@@ -17,7 +17,6 @@ import {
   ExecutiveKpiGrid,
   DashboardSideCard,
   DashboardInsightRow,
-  QuickActionTile,
 } from "@/shared/components/layout/executive-dashboard";
 import { ApexDonutChart, ApexBarChart, ApexLineChart } from "@/shared/components/charts";
 import { requirePermission } from "@/server/auth/context";
@@ -31,6 +30,7 @@ import {
   getInvoiceCourseStats,
   getInvoiceTrend,
   getInvoiceAging,
+  getInvoiceTopOutstandingBalances,
 } from "@/modules/finance/services/invoice-metrics.service";
 import { generateInvoiceInsights } from "@/modules/finance/services/invoice-insights.service";
 import { getInvoiceWatchlist } from "@/modules/finance/services/invoice-watchlist.service";
@@ -38,7 +38,9 @@ import { InvoicesTable } from "@/modules/finance/components/invoices-table";
 import { InvoiceWatchlist } from "@/modules/finance/components/invoice-watchlist";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { INVOICE_STATUS_LABELS } from "@/modules/finance/types";
+import { cn } from "@/shared/lib/utils";
 import type { AuthContext } from "@/server/auth/context";
+import type { ReactNode } from "react";
 
 export const metadata = { title: "Faturas" };
 
@@ -62,6 +64,52 @@ async function getInvoiceFilterOptions(organizationId: string) {
   };
 }
 
+function calcTrend(current: number, previous: number) {
+  if (previous === 0) return undefined;
+  const pct = Math.round(((current - previous) / previous) * 100);
+  return {
+    value: Math.abs(pct),
+    label: "vs. mês anterior",
+    direction: pct >= 0 ? ("up" as const) : ("down" as const),
+  };
+}
+
+function ActionMetricTile({
+  href,
+  icon,
+  label,
+  count,
+  variant = "default",
+}: {
+  href: string;
+  icon: ReactNode;
+  label: string;
+  count?: number;
+  variant?: "default" | "warning" | "destructive" | "success";
+}) {
+  const config = {
+    default: { bg: "bg-muted/40 hover:bg-muted border-border", icon: "text-muted-foreground", count: "text-foreground" },
+    warning: { bg: "bg-amber-50 hover:bg-amber-100 border-amber-100", icon: "text-amber-600", count: "text-amber-700" },
+    destructive: { bg: "bg-red-50 hover:bg-red-100 border-red-100", icon: "text-red-600", count: "text-red-700" },
+    success: { bg: "bg-green-50 hover:bg-green-100 border-green-100", icon: "text-green-600", count: "text-green-700" },
+  }[variant];
+
+  return (
+    <Link
+      href={href}
+      className={cn("rounded-lg border p-3 flex flex-col items-center gap-1.5 transition-colors text-center", config.bg)}
+    >
+      <div className={cn(config.icon)}>{icon}</div>
+      {count !== undefined && (
+        <p className={cn("text-xl font-bold tabular-nums leading-none", config.count)}>
+          {count.toLocaleString("pt-PT")}
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground leading-tight">{label}</p>
+    </Link>
+  );
+}
+
 export default async function InvoicesPage({
   searchParams,
 }: {
@@ -83,30 +131,40 @@ export default async function InvoicesPage({
   const canCancel = ability.can(PERMISSIONS.INVOICES_CANCEL);
   const canRegisterPayment = ability.can(PERMISSIONS.PAYMENTS_CREATE);
 
-  const [kpis, watchlist, statusDistribution, courseDistribution, monthlyTrend, agingBuckets, result, filterOptions] =
-    await Promise.all([
-      getInvoiceKPIs(context.organizationId),
-      getInvoiceWatchlist(context.organizationId),
-      getInvoiceStatusStats(context.organizationId),
-      getInvoiceCourseStats(context.organizationId),
-      getInvoiceTrend(context.organizationId, 6),
-      getInvoiceAging(context.organizationId),
-      getInvoicesByOrganization(context.organizationId, {
-        ...pagination,
-        search: params.search,
-        status: params.status,
-        branchId: params.branchId,
-        courseId: params.courseId,
-        academicYearId: params.academicYearId,
-        paymentStatus: params.paymentStatus,
-        agingBucket: params.agingBucket,
-        dateFrom: params.dateFrom,
-        dateTo: params.dateTo,
-        dueDateFrom: params.dueDateFrom,
-        dueDateTo: params.dueDateTo,
-      }),
-      getInvoiceFilterOptions(context.organizationId),
-    ]);
+  const [
+    kpis,
+    watchlist,
+    statusDistribution,
+    courseDistribution,
+    monthlyTrend,
+    agingBuckets,
+    result,
+    filterOptions,
+    topOutstandingBalances,
+  ] = await Promise.all([
+    getInvoiceKPIs(context.organizationId),
+    getInvoiceWatchlist(context.organizationId),
+    getInvoiceStatusStats(context.organizationId),
+    getInvoiceCourseStats(context.organizationId),
+    getInvoiceTrend(context.organizationId, 6),
+    getInvoiceAging(context.organizationId),
+    getInvoicesByOrganization(context.organizationId, {
+      ...pagination,
+      search: params.search,
+      status: params.status,
+      branchId: params.branchId,
+      courseId: params.courseId,
+      academicYearId: params.academicYearId,
+      paymentStatus: params.paymentStatus,
+      agingBucket: params.agingBucket,
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
+      dueDateFrom: params.dueDateFrom,
+      dueDateTo: params.dueDateTo,
+    }),
+    getInvoiceFilterOptions(context.organizationId),
+    getInvoiceTopOutstandingBalances(context.organizationId),
+  ]);
 
   const insights = generateInvoiceInsights(kpis, courseDistribution);
 
@@ -125,17 +183,22 @@ export default async function InvoicesPage({
     colors: statusItems.map((d) => STATUS_COLORS_MAP[d.status] ?? "#6366f1"),
   };
 
-  const AGING_COLORS = ["#fde047", "#f97316", "#ef4444", "#b91c1c"];
   const agingBar = {
     categories: agingBuckets.map((b) => b.label),
     series: [{ name: "Faturas", data: agingBuckets.map((b) => b.count) }],
-    colors: [AGING_COLORS[0]],
+    colors: ["#f97316"],
   };
 
   const trendLine = {
     categories: monthlyTrend.map((m) => formatMonthKey(m.month)),
     series: [{ name: "Facturado (MT)", data: monthlyTrend.map((m) => m.totalAmount) }],
     colors: ["#6366f1"],
+  };
+
+  const coursesRevenueBar = {
+    categories: courseDistribution.slice(0, 8).map((c) => c.courseName),
+    series: [{ name: "Facturado (MT)", data: courseDistribution.slice(0, 8).map((c) => c.totalAmount) }],
+    colors: ["#22c55e"],
   };
 
   return (
@@ -181,15 +244,72 @@ export default async function InvoicesPage({
 
         {/* KPI Cards */}
         <ExecutiveKpiGrid>
-          <StatCard title="Facturado Hoje" value={kpis.invoicedToday.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} description="Emitido hoje (excl. canceladas)" icon={<ReceiptText className="size-4" />} />
-          <StatCard title="Facturado Este Mês" value={kpis.invoicedThisMonth.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} description="Emitido este mês" icon={<FileText className="size-4" />} />
-          <StatCard title="Pago Este Mês" value={kpis.paidThisMonth.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} description="Faturas liquidadas este mês" icon={<CheckCircle2 className="size-4" />} />
-          <StatCard title="Valor Pendente" value={kpis.pendingAmount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} description={`${kpis.pendingCount} fatura${kpis.pendingCount !== 1 ? "s" : ""} por cobrar`} icon={<Clock className="size-4" />} />
-          <StatCard title="Valor em Atraso" value={kpis.overdueAmount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} description={`${kpis.overdueCount} fatura${kpis.overdueCount !== 1 ? "s" : ""} vencida${kpis.overdueCount !== 1 ? "s" : ""}`} icon={<AlertTriangle className="size-4" />} />
-          <StatCard title="Parc. Pagas" value={kpis.partiallyPaidCount} description="Com pagamento parcial" icon={<Layers className="size-4" />} />
-          <StatCard title="Sem Pagamento" value={kpis.noPaymentCount} description="Sem nenhum pagamento" icon={<TrendingDown className="size-4" />} />
-          <StatCard title="Canceladas" value={kpis.cancelledCount} description="Faturas canceladas" icon={<Ban className="size-4" />} />
+          <StatCard
+            title="Facturado Hoje"
+            value={kpis.invoicedToday.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+            description="Emitido hoje (excl. canceladas)"
+            icon={<ReceiptText className="size-4" />}
+          />
+          <StatCard
+            title="Facturado Este Mês"
+            value={kpis.invoicedThisMonth.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+            description="Total emitido este mês"
+            icon={<FileText className="size-4" />}
+            trend={calcTrend(kpis.invoicedThisMonth, kpis.invoicedLastMonth)}
+          />
+          <StatCard
+            title="Pago Este Mês"
+            value={kpis.paidThisMonth.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+            description="Faturas liquidadas este mês"
+            icon={<CheckCircle2 className="size-4" />}
+            trend={calcTrend(kpis.paidThisMonth, kpis.paidLastMonth)}
+          />
+          <StatCard
+            title="Valor Pendente"
+            value={kpis.pendingAmount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+            description={`${kpis.pendingCount} fatura${kpis.pendingCount !== 1 ? "s" : ""} por cobrar`}
+            icon={<Clock className="size-4" />}
+          />
+          <StatCard
+            title="Valor em Atraso"
+            value={kpis.overdueAmount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+            description={`${kpis.overdueCount} fatura${kpis.overdueCount !== 1 ? "s" : ""} vencida${kpis.overdueCount !== 1 ? "s" : ""}`}
+            icon={<AlertTriangle className="size-4" />}
+          />
+          <StatCard
+            title="Parc. Pagas"
+            value={kpis.partiallyPaidCount}
+            description="Com pagamento parcial"
+            icon={<Layers className="size-4" />}
+          />
+          <StatCard
+            title="Sem Pagamento"
+            value={kpis.noPaymentCount}
+            description="Sem nenhum pagamento"
+            icon={<TrendingDown className="size-4" />}
+          />
+          <StatCard
+            title="Canceladas"
+            value={kpis.cancelledCount}
+            description="Faturas canceladas"
+            icon={<Ban className="size-4" />}
+          />
         </ExecutiveKpiGrid>
+
+        {/* Full-width Revenue Trend */}
+        {monthlyTrend.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium">Facturação Mensal</CardTitle>
+                <span className="text-xs text-muted-foreground">Últimos 6 meses</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ApexLineChart data={trendLine} height={200} currency />
+            </CardContent>
+          </Card>
+        )}
 
         {/* Two-column main content */}
         <ExecutiveMainGrid>
@@ -257,22 +377,55 @@ export default async function InvoicesPage({
             )}
 
             <DashboardSideCard title="Ações Rápidas">
-              <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
                 {canCreate && (
-                  <QuickActionTile href="/invoices/new" icon={<Plus className="size-4" />} label="Nova Fatura" description="Criar fatura manualmente" variant="success" />
+                  <ActionMetricTile
+                    href="/invoices/new"
+                    icon={<Plus className="size-5" />}
+                    label="Nova Fatura"
+                    variant="success"
+                  />
                 )}
                 {canRegisterPayment && (
-                  <QuickActionTile href="/payments/new" icon={<CreditCard className="size-4" />} label="Registar Pagamento" description="Associar pagamento a fatura" />
+                  <ActionMetricTile
+                    href="/payments/new"
+                    icon={<CreditCard className="size-5" />}
+                    label="Registar Pagamento"
+                  />
                 )}
-                <QuickActionTile href="/invoices?status=OVERDUE" icon={<AlertTriangle className="size-4" />} label="Ver Vencidas" description={`${kpis.overdueCount} fatura${kpis.overdueCount !== 1 ? "s" : ""} em atraso`} variant={kpis.overdueCount > 0 ? "destructive" : "default"} />
-                <QuickActionTile href="/invoices?agingBucket=due-soon" icon={<Clock className="size-4" />} label="A Vencer (3 dias)" description={`${kpis.dueSoonCount} fatura${kpis.dueSoonCount !== 1 ? "s" : ""}`} variant={kpis.dueSoonCount > 0 ? "warning" : "default"} />
-                <QuickActionTile href="/invoices?status=PARTIALLY_PAID" icon={<Layers className="size-4" />} label="Parc. Pagas" description={`${kpis.partiallyPaidCount} com saldo em aberto`} variant={kpis.partiallyPaidCount > 0 ? "warning" : "default"} />
-                <QuickActionTile href="/invoices?paymentStatus=NO_PAYMENT" icon={<XCircle className="size-4" />} label="Sem Pagamento" description={`${kpis.noPaymentCount} sem pagamento`} />
+                <ActionMetricTile
+                  href="/invoices?status=OVERDUE"
+                  icon={<AlertTriangle className="size-5" />}
+                  label="Vencidas"
+                  count={kpis.overdueCount}
+                  variant={kpis.overdueCount > 0 ? "destructive" : "default"}
+                />
+                <ActionMetricTile
+                  href="/invoices?agingBucket=due-soon"
+                  icon={<Clock className="size-5" />}
+                  label="A Vencer"
+                  count={kpis.dueSoonCount}
+                  variant={kpis.dueSoonCount > 0 ? "warning" : "default"}
+                />
+                <ActionMetricTile
+                  href="/invoices?status=PARTIALLY_PAID"
+                  icon={<Layers className="size-5" />}
+                  label="Parc. Pagas"
+                  count={kpis.partiallyPaidCount}
+                  variant={kpis.partiallyPaidCount > 0 ? "warning" : "default"}
+                />
+                <ActionMetricTile
+                  href="/invoices?paymentStatus=NO_PAYMENT"
+                  icon={<XCircle className="size-5" />}
+                  label="Sem Pagamento"
+                  count={kpis.noPaymentCount}
+                  variant={kpis.noPaymentCount > 0 ? "warning" : "default"}
+                />
               </div>
             </DashboardSideCard>
 
             <DashboardSideCard title="Distribuição por Estado">
-              <ApexDonutChart data={statusDonut} height={220} />
+              <ApexDonutChart data={statusDonut} height={200} />
             </DashboardSideCard>
 
             {agingBuckets.some((b) => b.count > 0) ? (
@@ -288,9 +441,40 @@ export default async function InvoicesPage({
               </DashboardSideCard>
             )}
 
-            {monthlyTrend.length > 0 && (
-              <DashboardSideCard title="Facturado por Mês" badge={<span className="text-xs text-muted-foreground">6 meses</span>}>
-                <ApexLineChart data={trendLine} height={180} currency />
+            {courseDistribution.length > 0 && (
+              <DashboardSideCard
+                title="Cursos por Facturação"
+                badge={<span className="text-xs text-muted-foreground">Este mês</span>}
+              >
+                <ApexBarChart data={coursesRevenueBar} height={220} horizontal currency />
+              </DashboardSideCard>
+            )}
+
+            {topOutstandingBalances.length > 0 && (
+              <DashboardSideCard title="Maiores Saldos em Aberto">
+                <div className="divide-y">
+                  {topOutstandingBalances.map((item, idx) => (
+                    <div key={item.studentId} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs text-muted-foreground tabular-nums w-4 shrink-0">{idx + 1}</span>
+                        <div className="min-w-0">
+                          <Link
+                            href={`/students/${item.studentId}`}
+                            className="text-sm font-medium hover:underline truncate block"
+                          >
+                            {item.studentName}
+                          </Link>
+                          <p className="text-xs text-muted-foreground">
+                            {item.invoiceCount} fatura{item.invoiceCount !== 1 ? "s" : ""} em aberto
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-semibold tabular-nums text-destructive shrink-0">
+                        {item.totalBalance.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} MT
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </DashboardSideCard>
             )}
 

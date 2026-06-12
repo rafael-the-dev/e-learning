@@ -322,11 +322,13 @@ export const RECEIPT_STATUS_FILTER_LABELS: Record<string, string> = {
 export interface InvoiceDashboardKPIs {
   invoicedToday: number;
   invoicedThisMonth: number;
+  invoicedLastMonth: number;
   pendingCount: number;
   pendingAmount: number;
   overdueCount: number;
   overdueAmount: number;
   paidThisMonth: number;
+  paidLastMonth: number;
   partiallyPaidCount: number;
   noPaymentCount: number;
   cancelledCount: number;
@@ -373,6 +375,13 @@ export interface InvoiceWatchlistItem {
   issue: string;
   severity: "low" | "medium" | "high" | "critical";
   recommendedAction: string;
+}
+
+export interface InvoiceTopOutstandingBalance {
+  studentId: string;
+  studentName: string;
+  invoiceCount: number;
+  totalBalance: number;
 }
 
 export interface InvoiceInsight {

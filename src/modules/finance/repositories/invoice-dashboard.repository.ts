@@ -6,6 +6,7 @@ import type {
   InvoiceMonthlyTrend,
   InvoiceAgingBucket,
   InvoiceWatchlistItem,
+  InvoiceTopOutstandingBalance,
 } from "@/modules/finance/types";
 
 type DecimalLike = { toNumber(): number };
@@ -20,14 +21,17 @@ export async function getInvoiceDashboardKPIs(organizationId: string): Promise<I
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrowStart = new Date(todayStart.getTime() + 86_400_000);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const threeDaysLater = new Date(now.getTime() + 3 * 86_400_000);
 
   const [
     invoicedTodayAgg,
     invoicedThisMonthAgg,
+    invoicedLastMonthAgg,
     pendingAgg,
     overdueAgg,
     paidThisMonthAgg,
+    paidLastMonthAgg,
     partiallyPaidCount,
     noPaymentCount,
     cancelledCount,
@@ -54,6 +58,16 @@ export async function getInvoiceDashboardKPIs(organizationId: string): Promise<I
       },
       _sum: { totalAmount: true },
     }),
+    // Total invoiced last month (non-cancelled)
+    db.invoice.aggregate({
+      where: {
+        organizationId,
+        deletedAt: null,
+        status: { not: "CANCELLED" },
+        issueDate: { gte: lastMonthStart, lt: monthStart },
+      },
+      _sum: { totalAmount: true },
+    }),
     // Pending amount + count
     db.invoice.aggregate({
       where: { organizationId, deletedAt: null, status: "PENDING" },
@@ -73,6 +87,16 @@ export async function getInvoiceDashboardKPIs(organizationId: string): Promise<I
         deletedAt: null,
         status: "PAID",
         updatedAt: { gte: monthStart },
+      },
+      _sum: { paidAmount: true },
+    }),
+    // Paid last month
+    db.invoice.aggregate({
+      where: {
+        organizationId,
+        deletedAt: null,
+        status: "PAID",
+        updatedAt: { gte: lastMonthStart, lt: monthStart },
       },
       _sum: { paidAmount: true },
     }),
@@ -121,11 +145,13 @@ export async function getInvoiceDashboardKPIs(organizationId: string): Promise<I
   return {
     invoicedToday: (invoicedTodayAgg._sum.totalAmount as DecimalLike | null)?.toNumber() ?? 0,
     invoicedThisMonth: (invoicedThisMonthAgg._sum.totalAmount as DecimalLike | null)?.toNumber() ?? 0,
+    invoicedLastMonth: (invoicedLastMonthAgg._sum.totalAmount as DecimalLike | null)?.toNumber() ?? 0,
     pendingCount: pendingAgg._count._all,
     pendingAmount: (pendingAgg._sum.balanceAmount as DecimalLike | null)?.toNumber() ?? 0,
     overdueCount: overdueAgg._count._all,
     overdueAmount: (overdueAgg._sum.balanceAmount as DecimalLike | null)?.toNumber() ?? 0,
     paidThisMonth: (paidThisMonthAgg._sum.paidAmount as DecimalLike | null)?.toNumber() ?? 0,
+    paidLastMonth: (paidLastMonthAgg._sum.paidAmount as DecimalLike | null)?.toNumber() ?? 0,
     partiallyPaidCount,
     noPaymentCount,
     cancelledCount,
@@ -481,4 +507,44 @@ export async function findInvoiceWatchlist(
   }
 
   return items;
+}
+
+export async function getInvoiceTopOutstandingBalances(
+  organizationId: string,
+  limit = 8
+): Promise<InvoiceTopOutstandingBalance[]> {
+  const db = await getDb();
+
+  const rows = await db.invoice.findMany({
+    where: {
+      organizationId,
+      deletedAt: null,
+      status: { in: ["PENDING", "OVERDUE", "PARTIALLY_PAID"] },
+      studentId: { not: null },
+    },
+    select: {
+      studentId: true,
+      balanceAmount: true,
+      student: { select: { firstName: true, lastName: true } },
+    },
+  });
+
+  const map = new Map<string, { studentName: string; invoiceCount: number; totalBalance: number }>();
+  for (const row of rows) {
+    if (!row.studentId) continue;
+    const name = row.student ? `${row.student.firstName} ${row.student.lastName}` : "Desconhecido";
+    const balance = (row.balanceAmount as DecimalLike).toNumber();
+    const existing = map.get(row.studentId);
+    if (existing) {
+      existing.invoiceCount++;
+      existing.totalBalance += balance;
+    } else {
+      map.set(row.studentId, { studentName: name, invoiceCount: 1, totalBalance: balance });
+    }
+  }
+
+  return Array.from(map.entries())
+    .map(([studentId, v]) => ({ studentId, ...v }))
+    .sort((a, b) => b.totalBalance - a.totalBalance)
+    .slice(0, limit);
 }
