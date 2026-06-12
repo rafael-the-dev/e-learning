@@ -23,6 +23,7 @@ import {
   type RecalculateStudentSubjectProgressSchema,
 } from "@/modules/assessments/schemas/assessment.schema";
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
+import { recalculateStudentLevelProgress } from "@/modules/prerequisites/services/recalculate-level-progress.service";
 
 export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
   RecalculateStudentSubjectProgressSchema,
@@ -73,7 +74,7 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
     const db = await getDb();
     const levelSubject = await db.levelSubject.findFirst({
       where: { id: levelSubjectId, organizationId },
-      select: { minimumPassingGrade: true, minimumAttendancePercentage: true },
+      select: { minimumPassingGrade: true, minimumAttendancePercentage: true, courseLevelId: true },
     });
 
     const policy = await findActivePolicyForLevelSubject(levelSubjectId, organizationId);
@@ -161,6 +162,11 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
         status: progress.status,
       },
     });
+
+    // Cascade: subject progress → level progress → course progress
+    if (levelSubject?.courseLevelId) {
+      await recalculateStudentLevelProgress(enrollmentId, levelSubject.courseLevelId, organizationId);
+    }
 
     if (progressStatus === "PASSED") {
       await eventPublisher.publish({

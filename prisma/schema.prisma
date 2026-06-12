@@ -96,6 +96,13 @@ model Organization {
   assessmentRetakes          AssessmentRetake[]
   studentAssessmentResults   StudentAssessmentResult[]
   gradeChangeLogs            GradeChangeLog[]
+  studentLevelProgress       StudentLevelProgress[]
+  studentCourseProgress      StudentCourseProgress[]
+  prerequisiteGroups         LevelSubjectPrerequisiteGroup[]
+  prerequisiteItems          LevelSubjectPrerequisiteItem[]
+  prerequisiteWaivers        PrerequisiteWaiver[]
+  levelProgressionPolicies   LevelProgressionPolicy[]
+  levelProgressionRequests   LevelProgressionRequest[]
 
   @@map("organizations")
 }
@@ -342,6 +349,10 @@ model Student {
   studentSubjectProgress     StudentSubjectProgress[]
   assessmentRetakes          AssessmentRetake[]
   studentAssessmentResults   StudentAssessmentResult[]
+  studentLevelProgress       StudentLevelProgress[]
+  studentCourseProgress      StudentCourseProgress[]
+  prerequisiteWaivers        PrerequisiteWaiver[]
+  levelProgressionRequests   LevelProgressionRequest[]
 
   @@map("students")
 }
@@ -437,6 +448,9 @@ model Course {
   levelSubjects LevelSubject[]
   classGroups   ClassGroup[]
   enrollments   Enrollment[]
+  studentCourseProgress    StudentCourseProgress[]
+  levelProgressionPolicies LevelProgressionPolicy[]
+  levelProgressionRequests LevelProgressionRequest[]
 
   @@map("courses")
 }
@@ -459,7 +473,14 @@ model CourseLevel {
   course        Course         @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   levelSubjects LevelSubject[]
   classGroups   ClassGroup[]
-  enrollments   Enrollment[]
+  enrollments              Enrollment[]             @relation("CourseLevelEnrollments")
+  initialEnrollments       Enrollment[]             @relation("InitialLevelEnrollments")
+  currentEnrollments       Enrollment[]             @relation("CurrentLevelEnrollments")
+  studentLevelProgress     StudentLevelProgress[]
+  fromProgressionPolicies  LevelProgressionPolicy[] @relation("FromLevel")
+  toProgressionPolicies    LevelProgressionPolicy[] @relation("ToLevel")
+  fromProgressionRequests  LevelProgressionRequest[] @relation("FromLevelRequests")
+  toProgressionRequests    LevelProgressionRequest[] @relation("ToLevelRequests")
 
   @@map("course_levels")
 }
@@ -504,6 +525,7 @@ model LevelSubject {
   allowRetakeExam             Boolean   @default(true)
   allowCompensation           Boolean   @default(false)
   certificateRequired         Boolean   @default(false)
+  credits                     Int?      @default(0)
   // LevelSubjectStatus: ACTIVE | INACTIVE | ARCHIVED
   status                      String    @default("ACTIVE")
   createdAt                   DateTime  @default(now())
@@ -514,9 +536,12 @@ model LevelSubject {
   course                 Course                   @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   courseLevel            CourseLevel              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   subject                Subject                  @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assessmentPolicies       AssessmentPolicy[]
-  studentSubjectProgress   StudentSubjectProgress[]
-  studentAssessmentResults StudentAssessmentResult[]
+  assessmentPolicies         AssessmentPolicy[]
+  studentSubjectProgress     StudentSubjectProgress[]
+  studentAssessmentResults   StudentAssessmentResult[]
+  prerequisiteGroups         LevelSubjectPrerequisiteGroup[]
+  prerequisiteItemsAsPrereq  LevelSubjectPrerequisiteItem[]  @relation("PrerequisiteSubject")
+  prerequisiteWaivers        PrerequisiteWaiver[]
 
   @@unique([courseLevelId, subjectId])
   @@map("level_subjects")
@@ -837,6 +862,8 @@ model Enrollment {
   enrollmentDate   DateTime  @default(now())
   startDate        DateTime?
   expectedEndDate  DateTime?
+  initialLevelId   String?
+  currentLevelId   String?
   // EnrollmentStatus: DRAFT | PENDING_PAYMENT | ACTIVE | COMPLETED | SUSPENDED | CANCELLED
   status           String    @default("DRAFT")
   notes            String?   @db.NVarChar(Max)
@@ -849,7 +876,9 @@ model Enrollment {
   branch         Branch?                   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   student        Student                   @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   course         Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courseLevel    CourseLevel?              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel    CourseLevel?              @relation("CourseLevelEnrollments", fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  initialLevel   CourseLevel?              @relation("InitialLevelEnrollments", fields: [initialLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  currentLevel   CourseLevel?              @relation("CurrentLevelEnrollments", fields: [currentLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   classGroup     ClassGroup?               @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   academicYear   AcademicYear              @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   academicTerm   AcademicTerm?             @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -862,6 +891,10 @@ model Enrollment {
   studentSubjectProgress   StudentSubjectProgress[]
   assessmentRetakes        AssessmentRetake[]
   studentAssessmentResults StudentAssessmentResult[]
+  studentLevelProgress     StudentLevelProgress[]
+  studentCourseProgress    StudentCourseProgress?
+  prerequisiteWaivers      PrerequisiteWaiver[]
+  levelProgressionRequests LevelProgressionRequest[]
 
   @@unique([organizationId, enrollmentNumber])
   @@map("enrollments")
@@ -2135,4 +2168,207 @@ model GradeChangeLog {
   @@index([organizationId, studentAssessmentResultId])
   @@index([organizationId, changedAt])
   @@map("grade_change_logs")
+}
+
+// =============================================================================
+// ACADEMIC PREREQUISITES & PROGRESSION
+// =============================================================================
+
+model StudentLevelProgress {
+  id             String    @id @default(cuid())
+  organizationId String
+  enrollmentId   String
+  studentId      String
+  courseId       String
+  courseLevelId  String
+  finalGrade     Decimal?  @db.Decimal(5, 2)
+  earnedCredits  Int?      @default(0)
+  // StudentLevelProgressStatus: NOT_STARTED | IN_PROGRESS | PASSED | FAILED | RECOVERY_REQUIRED |
+  //   ELIGIBLE_TO_PROGRESS | PROMOTED | PROMOTED_WITH_PENDING_SUBJECTS | BLOCKED | COMPLETED
+  status         String    @default("NOT_STARTED")
+  progressReason String?   @db.NVarChar(Max)
+  completedAt    DateTime?
+  calculatedAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel  CourseLevel  @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([enrollmentId, courseLevelId])
+  @@index([organizationId, studentId])
+  @@index([organizationId, courseLevelId])
+  @@map("student_level_progress")
+}
+
+model StudentCourseProgress {
+  id             String    @id @default(cuid())
+  organizationId String
+  enrollmentId   String    @unique
+  studentId      String
+  courseId       String
+  finalGrade     Decimal?  @db.Decimal(5, 2)
+  earnedCredits  Int?      @default(0)
+  // StudentCourseProgressStatus: NOT_STARTED | IN_PROGRESS | PASSED | FAILED | RECOVERY_REQUIRED | COMPLETED
+  status         String    @default("NOT_STARTED")
+  progressReason String?   @db.NVarChar(Max)
+  completedAt    DateTime?
+  calculatedAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course       Course       @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, studentId])
+  @@index([organizationId, courseId])
+  @@map("student_course_progress")
+}
+
+model LevelSubjectPrerequisiteGroup {
+  id             String    @id @default(cuid())
+  organizationId String
+  levelSubjectId String
+  name           String?
+  description    String?   @db.NVarChar(Max)
+  // PrerequisiteGroupLogicType: ALL | ANY
+  logicType      String    @default("ALL")
+  // PrerequisiteGroupStatus: ACTIVE | INACTIVE | ARCHIVED
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization                  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject LevelSubject                  @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  items        LevelSubjectPrerequisiteItem[]
+  waivers      PrerequisiteWaiver[]
+
+  @@index([organizationId, levelSubjectId, status])
+  @@map("level_subject_prerequisite_groups")
+}
+
+model LevelSubjectPrerequisiteItem {
+  id                         String    @id @default(cuid())
+  organizationId             String
+  prerequisiteGroupId        String
+  prerequisiteLevelSubjectId String
+  // PrerequisiteRequirementType: MUST_PASS | MUST_COMPLETE | MINIMUM_GRADE
+  requirementType            String    @default("MUST_PASS")
+  minimumRequiredGrade       Decimal?  @db.Decimal(5, 2)
+  // PrerequisiteItemStatus: ACTIVE | INACTIVE | ARCHIVED
+  status                     String    @default("ACTIVE")
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+  deletedAt                  DateTime?
+
+  organization             Organization                  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  prerequisiteGroup        LevelSubjectPrerequisiteGroup @relation(fields: [prerequisiteGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  prerequisiteLevelSubject LevelSubject                  @relation("PrerequisiteSubject", fields: [prerequisiteLevelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  waivers                  PrerequisiteWaiver[]
+
+  @@index([organizationId, prerequisiteGroupId])
+  @@index([organizationId, prerequisiteLevelSubjectId])
+  @@map("level_subject_prerequisite_items")
+}
+
+model PrerequisiteWaiver {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  studentId           String
+  enrollmentId        String
+  levelSubjectId      String
+  prerequisiteGroupId String?
+  prerequisiteItemId  String?
+  reason              String    @db.NVarChar(Max)
+  grantedBy           String
+  grantedAt           DateTime  @default(now())
+  // PrerequisiteWaiverStatus: ACTIVE | REVOKED
+  status              String    @default("ACTIVE")
+  revokedBy           String?
+  revokedAt           DateTime?
+  revokedReason       String?   @db.NVarChar(Max)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization      Organization                   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student           Student                        @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment        Enrollment                     @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject      LevelSubject                   @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  prerequisiteGroup LevelSubjectPrerequisiteGroup? @relation(fields: [prerequisiteGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  prerequisiteItem  LevelSubjectPrerequisiteItem?  @relation(fields: [prerequisiteItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, studentId])
+  @@index([organizationId, enrollmentId, levelSubjectId])
+  @@map("prerequisite_waivers")
+}
+
+model LevelProgressionPolicy {
+  id                        String    @id @default(cuid())
+  organizationId            String
+  courseId                  String
+  fromLevelId               String
+  toLevelId                 String
+  name                      String
+  description               String?   @db.NVarChar(Max)
+  // ProgressionMode: STRICT | CONDITIONAL | CREDIT_BASED | MANUAL_APPROVAL
+  progressionMode           String    @default("STRICT")
+  minimumLevelAverage       Decimal?  @db.Decimal(5, 2)
+  maxFailedRequiredSubjects Int?      @default(0)
+  maxPendingSubjects        Int?      @default(0)
+  requiredCredits           Int?
+  requireFinancialClearance Boolean   @default(false)
+  requireManualApproval     Boolean   @default(false)
+  // LevelProgressionPolicyStatus: ACTIVE | INACTIVE | ARCHIVED
+  status                    String    @default("ACTIVE")
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  deletedAt                 DateTime?
+
+  organization        Organization           @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course              Course                 @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fromLevel           CourseLevel            @relation("FromLevel", fields: [fromLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  toLevel             CourseLevel            @relation("ToLevel", fields: [toLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  progressionRequests LevelProgressionRequest[]
+
+  @@unique([courseId, fromLevelId, toLevelId])
+  @@index([organizationId, courseId, status])
+  @@map("level_progression_policies")
+}
+
+model LevelProgressionRequest {
+  id             String    @id @default(cuid())
+  organizationId String
+  enrollmentId   String
+  studentId      String
+  courseId       String
+  policyId       String?
+  fromLevelId    String
+  toLevelId      String
+  // ProgressionRequestDecision: PENDING | APPROVED | REJECTED
+  decision       String    @default("PENDING")
+  reason         String?   @db.NVarChar(Max)
+  reviewNotes    String?   @db.NVarChar(Max)
+  requestedAt    DateTime  @default(now())
+  reviewedAt     DateTime?
+  reviewedBy     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment              @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student                 @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course       Course                  @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  policy       LevelProgressionPolicy? @relation(fields: [policyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fromLevel    CourseLevel             @relation("FromLevelRequests", fields: [fromLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  toLevel      CourseLevel             @relation("ToLevelRequests", fields: [toLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, enrollmentId])
+  @@index([organizationId, studentId])
+  @@index([organizationId, decision])
+  @@map("level_progression_requests")
 }
