@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   FileText, Plus, Zap, Download, CreditCard,
-  AlertTriangle, Clock, CheckCircle2, XCircle,
+  AlertTriangle, Clock, CheckCircle2,
   Ban, ReceiptText, TrendingDown, Layers, AlertCircle,
 } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
@@ -19,6 +19,7 @@ import {
   DashboardInsightRow,
 } from "@/shared/components/layout/executive-dashboard";
 import { ApexDonutChart, ApexBarChart, ApexLineChart } from "@/shared/components/charts";
+import { InvoiceActionFilterBar } from "@/modules/finance/components/invoice-action-filter-bar";
 import { requirePermission } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -38,9 +39,7 @@ import { InvoicesTable } from "@/modules/finance/components/invoices-table";
 import { InvoiceWatchlist } from "@/modules/finance/components/invoice-watchlist";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { INVOICE_STATUS_LABELS } from "@/modules/finance/types";
-import { cn } from "@/shared/lib/utils";
 import type { AuthContext } from "@/server/auth/context";
-import type { ReactNode } from "react";
 
 export const metadata = { title: "Faturas" };
 
@@ -72,42 +71,6 @@ function calcTrend(current: number, previous: number) {
     label: "vs. mês anterior",
     direction: pct >= 0 ? ("up" as const) : ("down" as const),
   };
-}
-
-function ActionMetricTile({
-  href,
-  icon,
-  label,
-  count,
-  variant = "default",
-}: {
-  href: string;
-  icon: ReactNode;
-  label: string;
-  count?: number;
-  variant?: "default" | "warning" | "destructive" | "success";
-}) {
-  const config = {
-    default: { bg: "bg-muted/40 hover:bg-muted border-border", icon: "text-muted-foreground", count: "text-foreground" },
-    warning: { bg: "bg-amber-50 hover:bg-amber-100 border-amber-100", icon: "text-amber-600", count: "text-amber-700" },
-    destructive: { bg: "bg-red-50 hover:bg-red-100 border-red-100", icon: "text-red-600", count: "text-red-700" },
-    success: { bg: "bg-green-50 hover:bg-green-100 border-green-100", icon: "text-green-600", count: "text-green-700" },
-  }[variant];
-
-  return (
-    <Link
-      href={href}
-      className={cn("rounded-lg border p-3 flex flex-col items-center gap-1.5 transition-colors text-center", config.bg)}
-    >
-      <div className={cn(config.icon)}>{icon}</div>
-      {count !== undefined && (
-        <p className={cn("text-xl font-bold tabular-nums leading-none", config.count)}>
-          {count.toLocaleString("pt-PT")}
-        </p>
-      )}
-      <p className="text-xs text-muted-foreground leading-tight">{label}</p>
-    </Link>
-  );
 }
 
 export default async function InvoicesPage({
@@ -240,6 +203,28 @@ export default async function InvoicesPage({
         }
       />
 
+      {/* Sticky action + filter bar */}
+      <InvoiceActionFilterBar
+        overdueCount={kpis.overdueCount}
+        dueSoonCount={kpis.dueSoonCount}
+        partiallyPaidCount={kpis.partiallyPaidCount}
+        noPaymentCount={kpis.noPaymentCount}
+        branches={filterOptions.branches}
+        courses={filterOptions.courses}
+        academicYears={filterOptions.academicYears}
+        defaultSearch={params.search}
+        defaultStatus={params.status}
+        defaultBranchId={params.branchId}
+        defaultCourseId={params.courseId}
+        defaultAcademicYearId={params.academicYearId}
+        defaultPaymentStatus={params.paymentStatus}
+        defaultAgingBucket={params.agingBucket}
+        defaultDateFrom={params.dateFrom}
+        defaultDateTo={params.dateTo}
+        defaultDueDateFrom={params.dueDateFrom}
+        defaultDueDateTo={params.dueDateTo}
+      />
+
       <div className="p-4 sm:p-8 space-y-6">
 
         {/* KPI Cards */}
@@ -340,20 +325,6 @@ export default async function InvoicesPage({
               <CardContent className="p-0 sm:px-4 sm:pb-4">
                 <InvoicesTable
                   result={result}
-                  defaultSearch={params.search}
-                  defaultStatus={params.status}
-                  defaultBranchId={params.branchId}
-                  defaultCourseId={params.courseId}
-                  defaultAcademicYearId={params.academicYearId}
-                  defaultPaymentStatus={params.paymentStatus}
-                  defaultAgingBucket={params.agingBucket}
-                  defaultDateFrom={params.dateFrom}
-                  defaultDateTo={params.dateTo}
-                  defaultDueDateFrom={params.dueDateFrom}
-                  defaultDueDateTo={params.dueDateTo}
-                  branches={filterOptions.branches}
-                  courses={filterOptions.courses}
-                  academicYears={filterOptions.academicYears}
                   canCancel={canCancel}
                   canCreate={canRegisterPayment}
                 />
@@ -361,7 +332,7 @@ export default async function InvoicesPage({
             </Card>
           </ExecutiveLeftColumn>
 
-          {/* RIGHT: Insights + Quick Actions + Charts */}
+          {/* RIGHT: Insights + Charts */}
           <ExecutiveRightColumn>
 
             {insights.length > 0 && (
@@ -375,54 +346,6 @@ export default async function InvoicesPage({
                 </div>
               </DashboardSideCard>
             )}
-
-            <DashboardSideCard title="Ações Rápidas">
-              <div className="grid grid-cols-2 gap-2">
-                {canCreate && (
-                  <ActionMetricTile
-                    href="/invoices/new"
-                    icon={<Plus className="size-5" />}
-                    label="Nova Fatura"
-                    variant="success"
-                  />
-                )}
-                {canRegisterPayment && (
-                  <ActionMetricTile
-                    href="/payments/new"
-                    icon={<CreditCard className="size-5" />}
-                    label="Registar Pagamento"
-                  />
-                )}
-                <ActionMetricTile
-                  href="/invoices?status=OVERDUE"
-                  icon={<AlertTriangle className="size-5" />}
-                  label="Vencidas"
-                  count={kpis.overdueCount}
-                  variant={kpis.overdueCount > 0 ? "destructive" : "default"}
-                />
-                <ActionMetricTile
-                  href="/invoices?agingBucket=due-soon"
-                  icon={<Clock className="size-5" />}
-                  label="A Vencer"
-                  count={kpis.dueSoonCount}
-                  variant={kpis.dueSoonCount > 0 ? "warning" : "default"}
-                />
-                <ActionMetricTile
-                  href="/invoices?status=PARTIALLY_PAID"
-                  icon={<Layers className="size-5" />}
-                  label="Parc. Pagas"
-                  count={kpis.partiallyPaidCount}
-                  variant={kpis.partiallyPaidCount > 0 ? "warning" : "default"}
-                />
-                <ActionMetricTile
-                  href="/invoices?paymentStatus=NO_PAYMENT"
-                  icon={<XCircle className="size-5" />}
-                  label="Sem Pagamento"
-                  count={kpis.noPaymentCount}
-                  variant={kpis.noPaymentCount > 0 ? "warning" : "default"}
-                />
-              </div>
-            </DashboardSideCard>
 
             <DashboardSideCard title="Distribuição por Estado">
               <ApexDonutChart data={statusDonut} height={200} />

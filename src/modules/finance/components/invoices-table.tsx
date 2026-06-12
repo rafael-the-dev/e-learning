@@ -9,7 +9,6 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
-  SlidersHorizontal,
   CreditCard,
   User,
   GraduationCap,
@@ -17,22 +16,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
-import { Input } from "@/shared/components/ui/input";
-import { Label } from "@/shared/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/shared/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -61,50 +44,13 @@ const STATUS_BADGE: Record<string, { variant: "default" | "secondary" | "destruc
   CANCELLED: { variant: "outline", className: "text-muted-foreground" },
 };
 
-interface FilterOption {
-  value: string;
-  label: string;
-}
-
 interface Props {
   result: PaginatedResult<Invoice>;
-  defaultSearch?: string;
-  defaultStatus?: string;
-  defaultBranchId?: string;
-  defaultCourseId?: string;
-  defaultAcademicYearId?: string;
-  defaultPaymentStatus?: string;
-  defaultAgingBucket?: string;
-  defaultDateFrom?: string;
-  defaultDateTo?: string;
-  defaultDueDateFrom?: string;
-  defaultDueDateTo?: string;
-  branches: FilterOption[];
-  courses: FilterOption[];
-  academicYears: FilterOption[];
   canCancel: boolean;
   canCreate: boolean;
 }
 
-export function InvoicesTable({
-  result,
-  defaultSearch,
-  defaultStatus,
-  defaultBranchId,
-  defaultCourseId,
-  defaultAcademicYearId,
-  defaultPaymentStatus,
-  defaultAgingBucket,
-  defaultDateFrom,
-  defaultDateTo,
-  defaultDueDateFrom,
-  defaultDueDateTo,
-  branches,
-  courses,
-  academicYears,
-  canCancel,
-  canCreate,
-}: Props) {
+export function InvoicesTable({ result, canCancel, canCreate }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -112,282 +58,29 @@ export function InvoicesTable({
   const updateParam = useCallback(
     (key: string, value: string | undefined) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (value && value !== "ALL") {
+      if (value) {
         params.set(key, value);
       } else {
         params.delete(key);
       }
-      params.delete("page");
       router.push(`${pathname}?${params.toString()}`);
     },
     [pathname, router, searchParams]
   );
 
-  const AGING_BUCKET_OPTIONS = [
-    { value: "1-7", label: "1–7 dias em atraso" },
-    { value: "8-15", label: "8–15 dias em atraso" },
-    { value: "16-30", label: "16–30 dias em atraso" },
-    { value: "31+", label: "31+ dias em atraso" },
-    { value: "due-soon", label: "A vencer (3 dias)" },
-  ];
-
-  const PAYMENT_STATUS_OPTIONS = [
-    { value: "NO_PAYMENT", label: "Sem pagamento" },
-  ];
-
-  const FilterControls = () => (
-    <div className="space-y-4">
-      {/* Status */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">Estado</Label>
-        <Select defaultValue={defaultStatus ?? "ALL"} onValueChange={(v) => updateParam("status", v)}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Todos os estados" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Todos os estados</SelectItem>
-            {Object.entries(INVOICE_STATUS_LABELS).map(([val, label]) => (
-              <SelectItem key={val} value={val}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Payment status */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">Estado de Pagamento</Label>
-        <Select defaultValue={defaultPaymentStatus ?? "ALL"} onValueChange={(v) => updateParam("paymentStatus", v)}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Todos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Todos</SelectItem>
-            {PAYMENT_STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Aging bucket */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">Aging / Vencimento</Label>
-        <Select defaultValue={defaultAgingBucket ?? "ALL"} onValueChange={(v) => updateParam("agingBucket", v)}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Todos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Todos</SelectItem>
-            {AGING_BUCKET_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Branch */}
-      {branches.length > 0 && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Filial</Label>
-          <Select defaultValue={defaultBranchId ?? "ALL"} onValueChange={(v) => updateParam("branchId", v)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Todas as filiais" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todas as filiais</SelectItem>
-              {branches.map((b) => (
-                <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Course */}
-      {courses.length > 0 && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Curso</Label>
-          <Select defaultValue={defaultCourseId ?? "ALL"} onValueChange={(v) => updateParam("courseId", v)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Todos os cursos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todos os cursos</SelectItem>
-              {courses.map((c) => (
-                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Academic Year */}
-      {academicYears.length > 0 && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Ano Lectivo</Label>
-          <Select defaultValue={defaultAcademicYearId ?? "ALL"} onValueChange={(v) => updateParam("academicYearId", v)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Todos os anos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todos os anos</SelectItem>
-              {academicYears.map((y) => (
-                <SelectItem key={y.value} value={y.value}>{y.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Issue date range */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">Data de Emissão (de)</Label>
-        <Input
-          type="date"
-          defaultValue={defaultDateFrom}
-          onChange={(e) => updateParam("dateFrom", e.target.value || undefined)}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs">Data de Emissão (até)</Label>
-        <Input
-          type="date"
-          defaultValue={defaultDateTo}
-          onChange={(e) => updateParam("dateTo", e.target.value || undefined)}
-        />
-      </div>
-
-      {/* Due date range */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">Vencimento (de)</Label>
-        <Input
-          type="date"
-          defaultValue={defaultDueDateFrom}
-          onChange={(e) => updateParam("dueDateFrom", e.target.value || undefined)}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs">Vencimento (até)</Label>
-        <Input
-          type="date"
-          defaultValue={defaultDueDateTo}
-          onChange={(e) => updateParam("dueDateTo", e.target.value || undefined)}
-        />
-      </div>
-    </div>
-  );
-
   return (
     <div className="space-y-4">
-      {/* Search + desktop filters */}
-      <div className="flex flex-wrap gap-3 items-end">
-        <Input
-          placeholder="Pesquisar fatura ou aluno..."
-          defaultValue={defaultSearch}
-          className="max-w-xs"
-          onChange={(e) => {
-            const v = e.target.value;
-            const t = setTimeout(() => updateParam("search", v || undefined), 400);
-            return () => clearTimeout(t);
-          }}
-        />
-
-        {/* Desktop inline filters */}
-        <div className="hidden lg:flex flex-wrap gap-2 items-center">
-          <Select defaultValue={defaultStatus ?? "ALL"} onValueChange={(v) => updateParam("status", v)}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todos os estados</SelectItem>
-              {Object.entries(INVOICE_STATUS_LABELS).map(([val, label]) => (
-                <SelectItem key={val} value={val}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select defaultValue={defaultPaymentStatus ?? "ALL"} onValueChange={(v) => updateParam("paymentStatus", v)}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Pagamento" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todos</SelectItem>
-              <SelectItem value="NO_PAYMENT">Sem pagamento</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select defaultValue={defaultAgingBucket ?? "ALL"} onValueChange={(v) => updateParam("agingBucket", v)}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Aging" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todos</SelectItem>
-              <SelectItem value="1-7">1–7 dias em atraso</SelectItem>
-              <SelectItem value="8-15">8–15 dias em atraso</SelectItem>
-              <SelectItem value="16-30">16–30 dias em atraso</SelectItem>
-              <SelectItem value="31+">31+ dias em atraso</SelectItem>
-              <SelectItem value="due-soon">A vencer (3 dias)</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {branches.length > 0 && (
-            <Select defaultValue={defaultBranchId ?? "ALL"} onValueChange={(v) => updateParam("branchId", v)}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Filial" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Todas as filiais</SelectItem>
-                {branches.map((b) => (
-                  <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          {courses.length > 0 && (
-            <Select defaultValue={defaultCourseId ?? "ALL"} onValueChange={(v) => updateParam("courseId", v)}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Curso" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Todos os cursos</SelectItem>
-                {courses.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        {/* Mobile Sheet trigger */}
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button variant="outline" size="sm" className="lg:hidden gap-1.5">
-              <SlidersHorizontal className="size-3.5" />
-              Filtros
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-lg">
-            <SheetHeader className="mb-4">
-              <SheetTitle>Filtros</SheetTitle>
-            </SheetHeader>
-            <FilterControls />
-          </SheetContent>
-        </Sheet>
-      </div>
-
-      {/* Table */}
       <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="min-w-[130px]">Nº Fatura</TableHead>
-              <TableHead className="min-w-[160px]">Aluno</TableHead>
-              <TableHead className="hidden md:table-cell min-w-[130px]">Matrícula</TableHead>
-              <TableHead className="text-right min-w-[100px]">Total</TableHead>
-              <TableHead className="text-right hidden sm:table-cell min-w-[90px]">Pago</TableHead>
-              <TableHead className="text-right min-w-[90px]">Saldo</TableHead>
-              <TableHead className="hidden sm:table-cell min-w-[110px]">Vencimento</TableHead>
+              <TableHead className="min-w-32">Nº Fatura</TableHead>
+              <TableHead className="min-w-40">Aluno</TableHead>
+              <TableHead className="hidden md:table-cell min-w-32">Matrícula</TableHead>
+              <TableHead className="text-right min-w-24">Total</TableHead>
+              <TableHead className="text-right hidden sm:table-cell min-w-20">Pago</TableHead>
+              <TableHead className="text-right min-w-20">Saldo</TableHead>
+              <TableHead className="hidden sm:table-cell min-w-28">Vencimento</TableHead>
               <TableHead className="hidden md:table-cell min-w-22.5">Dias Atraso</TableHead>
               <TableHead className="min-w-30">Estado</TableHead>
               <TableHead className="w-12" />
