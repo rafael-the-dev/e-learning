@@ -38,6 +38,7 @@ interface Props {
   assessmentPolicyId: string;
   component?: SubjectAssessmentComponent;
   remainingWeight?: number;
+  onMutate?: () => void;
 }
 
 export function GradeComponentDrawer({
@@ -46,6 +47,7 @@ export function GradeComponentDrawer({
   assessmentPolicyId,
   component,
   remainingWeight = 100,
+  onMutate,
 }: Props) {
   const router = useRouter();
   const isEdit = !!component;
@@ -91,7 +93,7 @@ export function GradeComponentDrawer({
       if (res.success) {
         toast.success("Componente atualizado.");
         onClose();
-        router.refresh();
+        onMutate ? onMutate() : router.refresh();
       } else {
         toast.error(res.error ?? "Erro ao atualizar componente.");
       }
@@ -100,7 +102,7 @@ export function GradeComponentDrawer({
       if (res.success) {
         toast.success("Componente criado.");
         onClose();
-        router.refresh();
+        onMutate ? onMutate() : router.refresh();
       } else {
         toast.error(res.error ?? "Erro ao criar componente.");
       }

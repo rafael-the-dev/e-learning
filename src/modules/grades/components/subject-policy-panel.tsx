@@ -30,6 +30,7 @@ interface Props {
   canEdit: boolean;
   canArchive: boolean;
   canManageComponents: boolean;
+  onMutate?: () => void;
 }
 
 export function SubjectPolicyPanel({
@@ -40,6 +41,7 @@ export function SubjectPolicyPanel({
   canEdit,
   canArchive,
   canManageComponents,
+  onMutate,
 }: Props) {
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -51,7 +53,7 @@ export function SubjectPolicyPanel({
     const res = await archiveAssessmentPolicyAction({ policyId: policy.id });
     if (res.success) {
       toast.success("Política arquivada.");
-      router.refresh();
+      onMutate ? onMutate() : router.refresh();
     } else {
       toast.error(res.error ?? "Erro ao arquivar política.");
     }
@@ -63,7 +65,7 @@ export function SubjectPolicyPanel({
     const res = await activateAssessmentPolicyAction({ policyId: policy.id });
     if (res.success) {
       toast.success("Política ativada.");
-      router.refresh();
+      onMutate ? onMutate() : router.refresh();
     } else {
       toast.error(res.error ?? "Erro ao ativar política.");
     }
@@ -89,6 +91,7 @@ export function SubjectPolicyPanel({
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
           levelSubjectId={levelSubjectId}
+          onMutate={onMutate}
         />
       </div>
     );
@@ -176,6 +179,7 @@ export function SubjectPolicyPanel({
         policy={policy}
         components={components}
         canManage={canManageComponents}
+        onMutate={onMutate}
       />
 
       <GradePolicyDrawer
@@ -183,6 +187,7 @@ export function SubjectPolicyPanel({
         onClose={() => setDrawerOpen(false)}
         levelSubjectId={levelSubjectId}
         policy={policy}
+        onMutate={onMutate}
       />
 
       <ConfirmDialog

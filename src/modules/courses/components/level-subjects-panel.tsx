@@ -42,7 +42,11 @@ import {
   Plus,
   Award,
   CheckCircle2,
+  Shield,
+  ClipboardCheck,
 } from "lucide-react";
+import { PrerequisitesDrawer } from "@/modules/prerequisites/components/prerequisites-drawer";
+import { LevelSubjectPolicyDrawer } from "@/modules/grades/components/level-subject-policy-drawer";
 import type { LevelSubject, Subject } from "@/modules/courses/types";
 
 interface LevelSubjectsPanelProps {
@@ -51,6 +55,12 @@ interface LevelSubjectsPanelProps {
   levelSubjects: LevelSubject[];
   availableSubjects: Subject[];
   canManage: boolean;
+  canManagePrerequisites?: boolean;
+  canViewPolicy?: boolean;
+  canCreatePolicy?: boolean;
+  canEditPolicy?: boolean;
+  canArchivePolicy?: boolean;
+  canManagePolicyComponents?: boolean;
 }
 
 export function LevelSubjectsPanel({
@@ -59,12 +69,20 @@ export function LevelSubjectsPanel({
   levelSubjects,
   availableSubjects,
   canManage,
+  canManagePrerequisites = false,
+  canViewPolicy = false,
+  canCreatePolicy = false,
+  canEditPolicy = false,
+  canArchivePolicy = false,
+  canManagePolicyComponents = false,
 }: LevelSubjectsPanelProps) {
   const router = useRouter();
   const [showAssign, setShowAssign] = React.useState(false);
   const [editTarget, setEditTarget] = React.useState<LevelSubject | null>(null);
   const [removeTarget, setRemoveTarget] = React.useState<LevelSubject | null>(null);
   const [isProcessing, setIsProcessing] = React.useState(false);
+  const [prerequisitesTarget, setPrerequisitesTarget] = React.useState<LevelSubject | null>(null);
+  const [policyTarget, setPolicyTarget] = React.useState<LevelSubject | null>(null);
 
   const assignedSubjectIds = new Set(levelSubjects.map((ls) => ls.subjectId));
   const unassignedSubjects = availableSubjects.filter(
@@ -239,6 +257,16 @@ export function LevelSubjectsPanel({
                               <Pencil className="size-4" />
                               Editar
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setPrerequisitesTarget(ls)}>
+                              <Shield className="size-4" />
+                              Pré-requisitos
+                            </DropdownMenuItem>
+                            {canViewPolicy && (
+                              <DropdownMenuItem onClick={() => setPolicyTarget(ls)}>
+                                <ClipboardCheck className="size-4" />
+                                Política de Avaliação
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => setRemoveTarget(ls)}
@@ -290,6 +318,29 @@ export function LevelSubjectsPanel({
           loading={isProcessing}
           onConfirm={handleRemove}
         />
+
+        {prerequisitesTarget && (
+          <PrerequisitesDrawer
+            open={!!prerequisitesTarget}
+            onOpenChange={(open) => !open && setPrerequisitesTarget(null)}
+            levelSubjectId={prerequisitesTarget.id}
+            subjectName={prerequisitesTarget.subjectName ?? ""}
+            canManage={canManagePrerequisites}
+          />
+        )}
+
+        {policyTarget && (
+          <LevelSubjectPolicyDrawer
+            open={!!policyTarget}
+            onOpenChange={(open) => !open && setPolicyTarget(null)}
+            levelSubjectId={policyTarget.id}
+            subjectName={policyTarget.subjectName ?? ""}
+            canCreate={canCreatePolicy}
+            canEdit={canEditPolicy}
+            canArchive={canArchivePolicy}
+            canManageComponents={canManagePolicyComponents}
+          />
+        )}
       </div>
     </TooltipProvider>
   );

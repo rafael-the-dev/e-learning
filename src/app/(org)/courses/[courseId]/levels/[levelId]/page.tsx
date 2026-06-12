@@ -41,6 +41,12 @@ export default async function CourseLevelDetailPage({
   const perms = await getUserPermissions(context.userId, context.organizationId);
   const ability = createAbility(perms);
   const canManageSubjects = ability.can(PERMISSIONS.LEVEL_SUBJECTS_ASSIGN);
+  const canManagePrerequisites = ability.can(PERMISSIONS.PREREQUISITES_MANAGE);
+  const canViewPolicy = ability.can(PERMISSIONS.GRADE_POLICIES_VIEW);
+  const canCreatePolicy = ability.can(PERMISSIONS.GRADE_POLICIES_CREATE);
+  const canEditPolicy = ability.can(PERMISSIONS.GRADE_POLICIES_UPDATE);
+  const canArchivePolicy = ability.can(PERMISSIONS.GRADE_POLICIES_ARCHIVE);
+  const canManagePolicyComponents = ability.can(PERMISSIONS.GRADE_COMPONENTS_CREATE);
 
   let course;
   let level;
@@ -92,62 +98,75 @@ export default async function CourseLevelDetailPage({
         breadcrumb={breadcrumb}
       />
 
-      <div className="p-8 max-w-3xl space-y-6">
-        {/* Level meta */}
-        <div className="flex flex-wrap items-center gap-3">
-          <StatusBadge status={level.status} />
-          {level.code && (
-            <span className="text-sm border rounded-full px-2.5 py-0.5 font-mono">
-              {level.code}
-            </span>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <MetaCard
-            icon={<Layers className="size-4 text-muted-foreground" />}
-            label="Ordem"
-            value={`Nível ${level.order + 1}`}
-          />
-          <MetaCard
-            icon={<Clock className="size-4 text-muted-foreground" />}
-            label="Carga Horária"
-            value={level.totalHours ? `${level.totalHours}h` : "—"}
-          />
-          <MetaCard
-            icon={<BookOpen className="size-4 text-muted-foreground" />}
-            label="Disciplinas"
-            value={String(levelSubjects.length)}
-          />
-        </div>
-
-        {/* Level Subjects */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <BookOpen className="size-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold">Disciplinas do Nível</h3>
+      <div className="flex gap-6 p-6 items-start">
+        {/* Main content */}
+        <div className="flex-1 min-w-0 space-y-6">
+          {/* Level meta badges */}
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusBadge status={level.status} />
+            {level.code && (
+              <span className="text-sm border rounded-full px-2.5 py-0.5 font-mono">
+                {level.code}
+              </span>
+            )}
           </div>
-          <LevelSubjectsPanel
-            courseId={courseId}
-            courseLevelId={levelId}
-            levelSubjects={levelSubjects}
-            availableSubjects={availableSubjects}
-            canManage={canManageSubjects}
-          />
+
+          {/* Stat cards */}
+          <div className="grid grid-cols-3 gap-4">
+            <MetaCard
+              icon={<Layers className="size-4 text-muted-foreground" />}
+              label="Ordem"
+              value={`Nível ${level.order + 1}`}
+            />
+            <MetaCard
+              icon={<Clock className="size-4 text-muted-foreground" />}
+              label="Carga Horária"
+              value={level.totalHours ? `${level.totalHours}h` : "—"}
+            />
+            <MetaCard
+              icon={<BookOpen className="size-4 text-muted-foreground" />}
+              label="Disciplinas"
+              value={String(levelSubjects.length)}
+            />
+          </div>
+
+          {/* Level Subjects — full width */}
+          <div className="rounded-xl border p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <BookOpen className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Disciplinas do Nível</h3>
+            </div>
+            <LevelSubjectsPanel
+              courseId={courseId}
+              courseLevelId={levelId}
+              levelSubjects={levelSubjects}
+              availableSubjects={availableSubjects}
+              canManage={canManageSubjects}
+              canManagePrerequisites={canManagePrerequisites}
+              canViewPolicy={canViewPolicy}
+              canCreatePolicy={canCreatePolicy}
+              canEditPolicy={canEditPolicy}
+              canArchivePolicy={canArchivePolicy}
+              canManagePolicyComponents={canManagePolicyComponents}
+            />
+          </div>
         </div>
 
-        <div className="rounded-xl border p-5 space-y-2">
-          <h3 className="text-sm font-semibold">Registo</h3>
-          <dl className="space-y-2 text-sm">
-            <DetailRow
-              label="Criado a"
-              value={new Date(level.createdAt).toLocaleDateString("pt-PT")}
-            />
-            <DetailRow
-              label="Atualizado a"
-              value={new Date(level.updatedAt).toLocaleDateString("pt-PT")}
-            />
-          </dl>
+        {/* Sidebar */}
+        <div className="w-64 shrink-0">
+          <div className="rounded-xl border p-5 space-y-3">
+            <h3 className="text-sm font-semibold">Registo</h3>
+            <dl className="space-y-3 text-sm">
+              <DetailRow
+                label="Criado a"
+                value={new Date(level.createdAt).toLocaleDateString("pt-PT")}
+              />
+              <DetailRow
+                label="Atualizado a"
+                value={new Date(level.updatedAt).toLocaleDateString("pt-PT")}
+              />
+            </dl>
+          </div>
         </div>
       </div>
     </>

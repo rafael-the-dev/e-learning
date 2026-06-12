@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { runAction } from "@/shared/lib/action";
 import { requireOrganization } from "@/server/auth/context";
+import { findActivePolicyForLevelSubject } from "@/modules/assessments/repositories/assessment-policy.repository";
+import { findActiveComponentsByPolicy } from "@/modules/assessments/repositories/assessment-component.repository";
 
 import { CreateAssessmentPolicyCommand } from "@/modules/grades/commands/create-assessment-policy.command";
 import { UpdateAssessmentPolicyCommand } from "@/modules/grades/commands/update-assessment-policy.command";
@@ -177,4 +179,26 @@ export async function recalculateSubjectGradesAction(
     revalidatePath("/student-progress");
     return count;
   });
+}
+
+// ─── Fetch policy data for level subject drawer ───────────────────────────────
+
+export type LevelSubjectPolicyData = {
+  policy: AssessmentPolicy | null;
+  components: AssessmentComponent[];
+};
+
+export async function fetchLevelSubjectPolicyAction(
+  levelSubjectId: string
+): Promise<ActionResult<LevelSubjectPolicyData>> {
+  try {
+    const context = await requireOrganization();
+    const policy = await findActivePolicyForLevelSubject(levelSubjectId, context.organizationId);
+    const components = policy
+      ? await findActiveComponentsByPolicy(policy.id, context.organizationId)
+      : [];
+    return { success: true, data: { policy: policy ?? null, components } };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : "Erro desconhecido" };
+  }
 }

@@ -40,9 +40,10 @@ interface Props {
   onClose: () => void;
   levelSubjectId: string;
   policy?: SubjectAssessmentPolicy;
+  onMutate?: () => void;
 }
 
-export function GradePolicyDrawer({ open, onClose, levelSubjectId, policy }: Props) {
+export function GradePolicyDrawer({ open, onClose, levelSubjectId, policy, onMutate }: Props) {
   const router = useRouter();
   const isEdit = !!policy;
 
@@ -87,7 +88,7 @@ export function GradePolicyDrawer({ open, onClose, levelSubjectId, policy }: Pro
       if (res.success) {
         toast.success("Política atualizada.");
         onClose();
-        router.refresh();
+        onMutate ? onMutate() : router.refresh();
       } else {
         toast.error(res.error ?? "Erro ao atualizar política.");
       }
@@ -96,7 +97,7 @@ export function GradePolicyDrawer({ open, onClose, levelSubjectId, policy }: Pro
       if (res.success) {
         toast.success("Política de avaliação criada.");
         onClose();
-        router.refresh();
+        onMutate ? onMutate() : router.refresh();
       } else {
         toast.error(res.error ?? "Erro ao criar política.");
       }

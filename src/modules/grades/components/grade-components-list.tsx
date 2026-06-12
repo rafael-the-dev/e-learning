@@ -20,9 +20,10 @@ interface Props {
   policy: SubjectAssessmentPolicy;
   components: SubjectAssessmentComponent[];
   canManage: boolean;
+  onMutate?: () => void;
 }
 
-export function GradeComponentsList({ policy, components, canManage }: Props) {
+export function GradeComponentsList({ policy, components, canManage, onMutate }: Props) {
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingComponent, setEditingComponent] = useState<SubjectAssessmentComponent | undefined>();
@@ -47,7 +48,7 @@ export function GradeComponentsList({ policy, components, canManage }: Props) {
     const res = await deleteAssessmentComponentAction({ componentId: id });
     if (res.success) {
       toast.success("Componente removido.");
-      router.refresh();
+      onMutate ? onMutate() : router.refresh();
     } else {
       toast.error(res.error ?? "Erro ao remover componente.");
     }
@@ -149,6 +150,7 @@ export function GradeComponentsList({ policy, components, canManage }: Props) {
             ? remainingWeight + editingComponent.weight
             : remainingWeight
         }
+        onMutate={onMutate}
       />
 
       <ConfirmDialog
