@@ -12,11 +12,7 @@ import { LevelsTable } from "@/modules/courses/components/levels-table";
 import { NotFoundError } from "@/shared/lib/command";
 import type { AuthContext } from "@/server/auth/context";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ courseId: string }>;
-}) {
+export async function generateMetadata() {
   return { title: "Níveis do Curso" };
 }
 
@@ -75,7 +71,7 @@ export default async function CourseLevelsPage({
         breadcrumb={breadcrumb}
       />
 
-      <div className="p-8 max-w-3xl">
+      <div className="p-8">
         <LevelsTable courseId={course.id} levels={levels} canManage={canManage} />
       </div>
     </>
