@@ -1,7 +1,7 @@
 import { getDb } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult, PaginationParams } from "@/shared/types/common";
-import type { Student, StudentBranch } from "@/modules/students/types";
+import type { Student, StudentBranch, RiskStudent, TopCourseEnrollment, TopClassGroup } from "@/modules/students/types";
 
 // =============================================================================
 // STUDENTS REPOSITORY
@@ -227,4 +227,203 @@ export async function listActiveBranches(organizationId: string): Promise<Studen
     select: { id: true, name: true, code: true },
     orderBy: [{ isDefault: "desc" }, { name: "asc" }],
   });
+}
+
+// =============================================================================
+// DASHBOARD QUERIES
+// =============================================================================
+
+export async function countNewStudentsThisMonth(organizationId: string): Promise<number> {
+  const db = await getDb();
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  return db.student.count({
+    where: { organizationId, deletedAt: null, createdAt: { gte: startOfMonth } },
+  });
+}
+
+export async function countStudentsWithPendingInvoices(organizationId: string): Promise<number> {
+  const db = await getDb();
+  const rows = await db.invoice.findMany({
+    where: {
+      organizationId,
+      status: { in: ["PENDING", "OVERDUE", "PARTIALLY_PAID"] },
+      studentId: { not: null },
+    },
+    select: { studentId: true },
+    distinct: ["studentId"],
+  });
+  return rows.length;
+}
+
+export async function countStudentsAtAcademicRisk(organizationId: string): Promise<number> {
+  const db = await getDb();
+  const rows = await db.studentSubjectProgress.findMany({
+    where: { organizationId, status: "FAILED" },
+    select: { studentId: true },
+    distinct: ["studentId"],
+  });
+  return rows.length;
+}
+
+export async function countStudentsWithLowAttendance(
+  organizationId: string,
+  threshold = 75
+): Promise<number> {
+  const db = await getDb();
+  const rows = await db.studentSubjectProgress.findMany({
+    where: {
+      organizationId,
+      attendancePercentage: { lt: threshold, not: null },
+    },
+    select: { studentId: true },
+    distinct: ["studentId"],
+  });
+  return rows.length;
+}
+
+export async function findTopCoursesByEnrollment(
+  organizationId: string,
+  limit = 5
+): Promise<TopCourseEnrollment[]> {
+  const db = await getDb();
+  const rows = await db.enrollment.groupBy({
+    by: ["courseId"],
+    where: { organizationId, status: "ACTIVE", deletedAt: null },
+    _count: { _all: true },
+  });
+  if (rows.length === 0) return [];
+  const sorted = [...rows].sort((a, b) => b._count._all - a._count._all).slice(0, limit);
+  const courseIds = sorted.map((r) => r.courseId);
+  const courses = await db.course.findMany({
+    where: { id: { in: courseIds } },
+    select: { id: true, name: true },
+  });
+  const nameMap = Object.fromEntries(courses.map((c) => [c.id, c.name]));
+  return sorted.map((r) => ({
+    courseId: r.courseId,
+    courseName: nameMap[r.courseId] ?? r.courseId,
+    activeCount: r._count._all,
+  }));
+}
+
+export async function findTopClassGroupsByOccupancy(
+  organizationId: string,
+  limit = 5
+): Promise<TopClassGroup[]> {
+  const db = await getDb();
+  const rows = await db.classGroup.findMany({
+    where: { organizationId, status: { in: ["FORMING", "ACTIVE"] }, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      capacity: true,
+      currentCount: true,
+      course: { select: { name: true } },
+    },
+  });
+  return rows
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      capacity: r.capacity,
+      currentCount: r.currentCount,
+      occupancyPct: r.capacity > 0 ? Math.round((r.currentCount / r.capacity) * 100) : 0,
+      courseName: r.course.name,
+    }))
+    .sort((a, b) => b.occupancyPct - a.occupancyPct)
+    .slice(0, limit);
+}
+
+export async function findRiskWatchlistStudents(
+  organizationId: string,
+  limit = 10
+): Promise<RiskStudent[]> {
+  const db = await getDb();
+
+  const [suspended, failedProgress] = await Promise.all([
+    db.student.findMany({
+      where: { organizationId, status: "SUSPENDED", deletedAt: null },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        status: true,
+        enrollments: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            course: { select: { name: true } },
+            courseLevel: { select: { name: true } },
+          },
+        },
+      },
+      take: Math.ceil(limit / 2),
+    }),
+    db.studentSubjectProgress.findMany({
+      where: { organizationId, status: "FAILED" },
+      select: {
+        studentId: true,
+        student: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            status: true,
+          },
+        },
+        enrollment: {
+          select: {
+            course: { select: { name: true } },
+            courseLevel: { select: { name: true } },
+          },
+        },
+      },
+      distinct: ["studentId"],
+      take: Math.ceil(limit / 2),
+    }),
+  ]);
+
+  const results: RiskStudent[] = [];
+  const seenIds = new Set<string>();
+
+  for (const s of suspended) {
+    seenIds.add(s.id);
+    results.push({
+      id: s.id,
+      fullName: `${s.firstName} ${s.lastName}`,
+      email: s.email,
+      phone: s.phone,
+      courseName: s.enrollments[0]?.course?.name ?? null,
+      courseLevelName: s.enrollments[0]?.courseLevel?.name ?? null,
+      issue: "Suspenso",
+      severity: "high",
+      studentStatus: s.status,
+    });
+  }
+
+  for (const r of failedProgress) {
+    if (!seenIds.has(r.student.id)) {
+      seenIds.add(r.student.id);
+      results.push({
+        id: r.student.id,
+        fullName: `${r.student.firstName} ${r.student.lastName}`,
+        email: r.student.email,
+        phone: r.student.phone,
+        courseName: r.enrollment.course?.name ?? null,
+        courseLevelName: r.enrollment.courseLevel?.name ?? null,
+        issue: "Risco Académico",
+        severity: "medium",
+        studentStatus: r.student.status,
+      });
+    }
+  }
+
+  return results.slice(0, limit);
 }

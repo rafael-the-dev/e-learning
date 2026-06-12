@@ -47,3 +47,34 @@ export const ID_TYPE_LABELS: Record<string, string> = {
   NUIT: "NUIT",
   OTHER: "Outro",
 };
+
+// =============================================================================
+// DASHBOARD TYPES
+// =============================================================================
+
+export interface RiskStudent {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  courseName: string | null;
+  courseLevelName: string | null;
+  issue: string;
+  severity: "low" | "medium" | "high";
+  studentStatus: string;
+}
+
+export interface TopCourseEnrollment {
+  courseId: string;
+  courseName: string;
+  activeCount: number;
+}
+
+export interface TopClassGroup {
+  id: string;
+  name: string;
+  capacity: number;
+  currentCount: number;
+  occupancyPct: number;
+  courseName: string;
+}

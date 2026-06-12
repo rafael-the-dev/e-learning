@@ -3,9 +3,18 @@ import {
   findByIdInOrganization,
   countByStatus,
   listActiveBranches,
+  countNewStudentsThisMonth,
+  countStudentsWithPendingInvoices,
+  countStudentsAtAcademicRisk,
+  countStudentsWithLowAttendance,
+  findTopCoursesByEnrollment,
+  findTopClassGroupsByOccupancy,
+  findRiskWatchlistStudents,
   type ListStudentsParams,
 } from "@/modules/students/repositories/student.repository";
+import { countEnrollmentsByStatus } from "@/modules/enrollments/repositories/enrollment.repository";
 import { NotFoundError } from "@/shared/lib/command";
+import type { RiskStudent, TopCourseEnrollment, TopClassGroup } from "@/modules/students/types";
 
 // =============================================================================
 // STUDENTS SERVICE
@@ -32,4 +41,41 @@ export async function getStudentStats(organizationId: string) {
 
 export async function getActiveBranches(organizationId: string) {
   return listActiveBranches(organizationId);
+}
+
+// =============================================================================
+// DASHBOARD SERVICES
+// =============================================================================
+
+export async function countNewStudents(organizationId: string): Promise<number> {
+  return countNewStudentsThisMonth(organizationId);
+}
+
+export async function getStudentsWithPendingPayments(organizationId: string): Promise<number> {
+  return countStudentsWithPendingInvoices(organizationId);
+}
+
+export async function getStudentsAtAcademicRisk(organizationId: string): Promise<number> {
+  return countStudentsAtAcademicRisk(organizationId);
+}
+
+export async function getStudentsWithLowAttendance(organizationId: string): Promise<number> {
+  return countStudentsWithLowAttendance(organizationId);
+}
+
+export async function getTopCoursesByStudents(organizationId: string): Promise<TopCourseEnrollment[]> {
+  return findTopCoursesByEnrollment(organizationId);
+}
+
+export async function getTopClassGroupsByOccupancy(organizationId: string): Promise<TopClassGroup[]> {
+  return findTopClassGroupsByOccupancy(organizationId);
+}
+
+export async function getRiskWatchlist(organizationId: string): Promise<RiskStudent[]> {
+  return findRiskWatchlistStudents(organizationId);
+}
+
+export async function getPendingEnrollmentsCount(organizationId: string): Promise<number> {
+  const counts = await countEnrollmentsByStatus(organizationId);
+  return counts["PENDING"] ?? 0;
 }
