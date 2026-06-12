@@ -10,6 +10,7 @@ import { Button } from "@/shared/components/ui/button";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/components/ui/tabs";
 import {
   ExecutiveMainGrid,
   ExecutiveLeftColumn,
@@ -20,6 +21,7 @@ import {
 } from "@/shared/components/layout/executive-dashboard";
 import { ApexDonutChart, ApexBarChart, ApexLineChart } from "@/shared/components/charts";
 import { InvoiceActionFilterBar } from "@/modules/finance/components/invoice-action-filter-bar";
+import { InvoiceTableFilters } from "@/modules/finance/components/invoice-table-filters";
 import { requirePermission } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -164,6 +166,8 @@ export default async function InvoicesPage({
     colors: ["#22c55e"],
   };
 
+  const watchlistPreview = watchlist.slice(0, 5);
+
   return (
     <>
       <PageHeader
@@ -203,26 +207,12 @@ export default async function InvoicesPage({
         }
       />
 
-      {/* Sticky action + filter bar */}
+      {/* Single-row sticky quick-access chips */}
       <InvoiceActionFilterBar
         overdueCount={kpis.overdueCount}
         dueSoonCount={kpis.dueSoonCount}
         partiallyPaidCount={kpis.partiallyPaidCount}
         noPaymentCount={kpis.noPaymentCount}
-        branches={filterOptions.branches}
-        courses={filterOptions.courses}
-        academicYears={filterOptions.academicYears}
-        defaultSearch={params.search}
-        defaultStatus={params.status}
-        defaultBranchId={params.branchId}
-        defaultCourseId={params.courseId}
-        defaultAcademicYearId={params.academicYearId}
-        defaultPaymentStatus={params.paymentStatus}
-        defaultAgingBucket={params.agingBucket}
-        defaultDateFrom={params.dateFrom}
-        defaultDateTo={params.dateTo}
-        defaultDueDateFrom={params.dueDateFrom}
-        defaultDueDateTo={params.dueDateTo}
       />
 
       <div className="p-4 sm:p-8 space-y-6">
@@ -306,21 +296,48 @@ export default async function InvoicesPage({
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-medium">Requer Atenção</CardTitle>
-                    <Badge variant="secondary" className="text-xs">{watchlist.length}</Badge>
+                    <div className="flex items-center gap-2">
+                      {watchlist.length > 5 && (
+                        <Link
+                          href="/invoices?status=OVERDUE"
+                          className="text-xs text-muted-foreground hover:underline"
+                        >
+                          Ver todos ({watchlist.length})
+                        </Link>
+                      )}
+                      <Badge variant="secondary" className="text-xs">{watchlist.length}</Badge>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0 pb-2">
-                  <InvoiceWatchlist items={watchlist} canCreate={canRegisterPayment} />
+                  <InvoiceWatchlist items={watchlistPreview} canCreate={canRegisterPayment} />
                 </CardContent>
               </Card>
             )}
 
+            {/* Table card with inline filters */}
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-medium">Faturas</CardTitle>
                   <Badge variant="secondary" className="text-xs">{result.total}</Badge>
                 </div>
+                <InvoiceTableFilters
+                  branches={filterOptions.branches}
+                  courses={filterOptions.courses}
+                  academicYears={filterOptions.academicYears}
+                  defaultSearch={params.search}
+                  defaultStatus={params.status}
+                  defaultBranchId={params.branchId}
+                  defaultCourseId={params.courseId}
+                  defaultAcademicYearId={params.academicYearId}
+                  defaultPaymentStatus={params.paymentStatus}
+                  defaultAgingBucket={params.agingBucket}
+                  defaultDateFrom={params.dateFrom}
+                  defaultDateTo={params.dateTo}
+                  defaultDueDateFrom={params.dueDateFrom}
+                  defaultDueDateTo={params.dueDateTo}
+                />
               </CardHeader>
               <CardContent className="p-0 sm:px-4 sm:pb-4">
                 <InvoicesTable
@@ -332,7 +349,7 @@ export default async function InvoicesPage({
             </Card>
           </ExecutiveLeftColumn>
 
-          {/* RIGHT: Insights + Charts */}
+          {/* RIGHT: Insights + Tabbed charts */}
           <ExecutiveRightColumn>
 
             {insights.length > 0 && (
@@ -347,59 +364,81 @@ export default async function InvoicesPage({
               </DashboardSideCard>
             )}
 
-            <DashboardSideCard title="Distribuição por Estado">
-              <ApexDonutChart data={statusDonut} height={200} />
-            </DashboardSideCard>
+            {/* All charts in one tabbed card */}
+            <Card>
+              <Tabs defaultValue="status">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Análise</CardTitle>
+                  <TabsList className="w-full mt-2 grid grid-cols-4 h-8">
+                    <TabsTrigger value="status" className="text-xs">Estado</TabsTrigger>
+                    <TabsTrigger value="aging" className="text-xs">Aging</TabsTrigger>
+                    <TabsTrigger value="courses" className="text-xs">Cursos</TabsTrigger>
+                    <TabsTrigger value="balances" className="text-xs">Saldos</TabsTrigger>
+                  </TabsList>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <TabsContent value="status" className="mt-0">
+                    {statusItems.length > 0 ? (
+                      <ApexDonutChart data={statusDonut} height={200} />
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-4 text-center">Sem faturas.</p>
+                    )}
+                  </TabsContent>
 
-            {agingBuckets.some((b) => b.count > 0) ? (
-              <DashboardSideCard title="Aging em Atraso">
-                <ApexBarChart data={agingBar} height={180} />
-              </DashboardSideCard>
-            ) : (
-              <DashboardSideCard title="Aging em Atraso">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                  <CheckCircle2 className="size-4 text-green-500 shrink-0" />
-                  Nenhuma fatura em atraso.
-                </div>
-              </DashboardSideCard>
-            )}
-
-            {courseDistribution.length > 0 && (
-              <DashboardSideCard
-                title="Cursos por Facturação"
-                badge={<span className="text-xs text-muted-foreground">Este mês</span>}
-              >
-                <ApexBarChart data={coursesRevenueBar} height={220} horizontal currency />
-              </DashboardSideCard>
-            )}
-
-            {topOutstandingBalances.length > 0 && (
-              <DashboardSideCard title="Maiores Saldos em Aberto">
-                <div className="divide-y">
-                  {topOutstandingBalances.map((item, idx) => (
-                    <div key={item.studentId} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs text-muted-foreground tabular-nums w-4 shrink-0">{idx + 1}</span>
-                        <div className="min-w-0">
-                          <Link
-                            href={`/students/${item.studentId}`}
-                            className="text-sm font-medium hover:underline truncate block"
-                          >
-                            {item.studentName}
-                          </Link>
-                          <p className="text-xs text-muted-foreground">
-                            {item.invoiceCount} fatura{item.invoiceCount !== 1 ? "s" : ""} em aberto
-                          </p>
-                        </div>
+                  <TabsContent value="aging" className="mt-0">
+                    {agingBuckets.some((b) => b.count > 0) ? (
+                      <ApexBarChart data={agingBar} height={180} />
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                        <CheckCircle2 className="size-4 text-green-500 shrink-0" />
+                        Nenhuma fatura em atraso.
                       </div>
-                      <span className="text-sm font-semibold tabular-nums text-destructive shrink-0">
-                        {item.totalBalance.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} MT
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </DashboardSideCard>
-            )}
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="courses" className="mt-0">
+                    {courseDistribution.length > 0 ? (
+                      <ApexBarChart data={coursesRevenueBar} height={220} horizontal currency />
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-4 text-center">Sem dados de cursos.</p>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="balances" className="mt-0">
+                    {topOutstandingBalances.length > 0 ? (
+                      <div className="divide-y">
+                        {topOutstandingBalances.map((item, idx) => (
+                          <div key={item.studentId} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-xs text-muted-foreground tabular-nums w-4 shrink-0">{idx + 1}</span>
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/students/${item.studentId}`}
+                                  className="text-sm font-medium hover:underline truncate block"
+                                >
+                                  {item.studentName}
+                                </Link>
+                                <p className="text-xs text-muted-foreground">
+                                  {item.invoiceCount} fatura{item.invoiceCount !== 1 ? "s" : ""} em aberto
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-sm font-semibold tabular-nums text-destructive shrink-0">
+                              {item.totalBalance.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} MT
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                        <CheckCircle2 className="size-4 text-green-500 shrink-0" />
+                        Sem saldos em aberto.
+                      </div>
+                    )}
+                  </TabsContent>
+                </CardContent>
+              </Tabs>
+            </Card>
 
           </ExecutiveRightColumn>
         </ExecutiveMainGrid>
