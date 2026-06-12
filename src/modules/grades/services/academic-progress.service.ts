@@ -2,7 +2,6 @@ import { findProgressByEnrollment } from "@/modules/assessments/repositories/stu
 import { findActivePolicyForLevelSubject } from "@/modules/assessments/repositories/assessment-policy.repository";
 import { findActiveComponentsByPolicy } from "@/modules/assessments/repositories/assessment-component.repository";
 import { findStudentAssessmentResults } from "@/modules/grades/repositories/student-assessment-result.repository";
-import type { StudentSubjectProgress } from "@/modules/assessments/types";
 import type { StudentAssessmentResult } from "@/modules/grades/types";
 import { getDb } from "@/server/db";
 
@@ -47,7 +46,7 @@ export interface TranscriptEnrollment {
   enrollmentDate: Date;
   startDate: Date | null;
   completedAt: Date | null;
-  subjects: StudentSubjectProgress[];
+  subjects: SubjectProgressSummary[];
 }
 
 export async function getEnrollmentAcademicProgress(
@@ -194,7 +193,7 @@ export async function getStudentTranscript(
       enrollmentDate: enr.enrollmentDate,
       startDate: enr.startDate ?? null,
       completedAt: enr.expectedEndDate ?? null,
-      subjects: await findProgressByEnrollment(enr.id, organizationId),
+      subjects: await getEnrollmentAcademicProgress(enr.id, organizationId),
     }))
   );
 
