@@ -16,6 +16,15 @@ export interface ListInvoicesParams extends PaginationParams {
   studentId?: string;
   branchId?: string;
   enrollmentId?: string;
+  courseId?: string;
+  academicYearId?: string;
+  academicTermId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  dueDateFrom?: string;
+  dueDateTo?: string;
+  paymentStatus?: string;
+  agingBucket?: string;
 }
 
 const invoiceSelect = {
@@ -171,13 +180,69 @@ export async function findInvoicesByOrganization(
   const db = await getDb();
   const { skip, take } = buildSkipTake(params);
 
+  const now = new Date();
+  const d7 = new Date(now.getTime() - 7 * 86_400_000);
+  const d15 = new Date(now.getTime() - 15 * 86_400_000);
+  const d30 = new Date(now.getTime() - 30 * 86_400_000);
+  const threeDaysLater = new Date(now.getTime() + 3 * 86_400_000);
+
+  const agingDueDate =
+    params.agingBucket === "1-7"
+      ? { gte: d7, lt: now }
+      : params.agingBucket === "8-15"
+      ? { gte: d15, lt: d7 }
+      : params.agingBucket === "16-30"
+      ? { gte: d30, lt: d15 }
+      : params.agingBucket === "31+"
+      ? { lt: d30 }
+      : params.agingBucket === "due-soon"
+      ? { gte: now, lte: threeDaysLater }
+      : undefined;
+
+  // Status filter: explicit > paymentStatus > agingBucket
+  const statusFilter = params.status
+    ? { status: params.status }
+    : params.paymentStatus === "NO_PAYMENT"
+    ? { status: { notIn: ["CANCELLED", "PAID"] as string[] } }
+    : agingDueDate
+    ? { status: { notIn: ["CANCELLED", "PAID"] as string[] } }
+    : {};
+
+  // dueDate filter: explicit range > agingBucket
+  const dueDateFilter =
+    params.dueDateFrom || params.dueDateTo
+      ? {
+          dueDate: {
+            ...(params.dueDateFrom && { gte: new Date(params.dueDateFrom) }),
+            ...(params.dueDateTo && {
+              lte: new Date(params.dueDateTo + "T23:59:59.999Z"),
+            }),
+          },
+        }
+      : agingDueDate
+      ? { dueDate: agingDueDate }
+      : {};
+
   const where = {
     organizationId,
     deletedAt: null,
-    ...(params.status && { status: params.status }),
+    ...statusFilter,
+    ...(params.paymentStatus === "NO_PAYMENT" && !params.status && {
+      paidAmount: { equals: 0 },
+    }),
     ...(params.studentId && { studentId: params.studentId }),
     ...(params.branchId && { branchId: params.branchId }),
     ...(params.enrollmentId && { enrollmentId: params.enrollmentId }),
+    ...(params.courseId && { enrollment: { courseId: params.courseId } }),
+    ...(params.academicYearId && { enrollment: { academicYearId: params.academicYearId } }),
+    ...(params.academicTermId && { enrollment: { academicTermId: params.academicTermId } }),
+    ...((params.dateFrom || params.dateTo) && {
+      issueDate: {
+        ...(params.dateFrom && { gte: new Date(params.dateFrom) }),
+        ...(params.dateTo && { lte: new Date(params.dateTo + "T23:59:59.999Z") }),
+      },
+    }),
+    ...dueDateFilter,
     ...(params.search && {
       OR: [
         { invoiceNumber: { contains: params.search } },

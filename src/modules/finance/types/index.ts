@@ -314,3 +314,72 @@ export const RECEIPT_STATUS_FILTER_LABELS: Record<string, string> = {
   ISSUED: "Recibo Emitido",
   CANCELLED: "Recibo Cancelado",
 };
+
+// =============================================================================
+// INVOICE DASHBOARD TYPES
+// =============================================================================
+
+export interface InvoiceDashboardKPIs {
+  invoicedToday: number;
+  invoicedThisMonth: number;
+  pendingCount: number;
+  pendingAmount: number;
+  overdueCount: number;
+  overdueAmount: number;
+  paidThisMonth: number;
+  partiallyPaidCount: number;
+  noPaymentCount: number;
+  cancelledCount: number;
+  dueSoonCount: number;
+  studentsWithMultiplePendingCount: number;
+}
+
+export interface InvoiceStatusDistribution {
+  status: string;
+  count: number;
+  totalAmount: number;
+}
+
+export interface InvoiceCourseDistribution {
+  courseId: string | null;
+  courseName: string;
+  count: number;
+  totalAmount: number;
+}
+
+export interface InvoiceMonthlyTrend {
+  month: string;
+  count: number;
+  totalAmount: number;
+}
+
+export interface InvoiceAgingBucket {
+  bucket: "1-7" | "8-15" | "16-30" | "31+";
+  label: string;
+  count: number;
+  totalAmount: number;
+}
+
+export interface InvoiceWatchlistItem {
+  invoiceId: string;
+  invoiceNumber: string;
+  studentId: string | null;
+  studentName: string | null;
+  enrollmentId: string | null;
+  enrollmentNumber: string | null;
+  totalAmount: number;
+  balanceAmount: number;
+  dueDate: Date | null;
+  issue: string;
+  severity: "low" | "medium" | "high" | "critical";
+  recommendedAction: string;
+}
+
+export interface InvoiceInsight {
+  id: string;
+  message: string;
+  severity: "info" | "warning" | "critical";
+  count?: number;
+  linkHref?: string;
+  linkLabel?: string;
+}
