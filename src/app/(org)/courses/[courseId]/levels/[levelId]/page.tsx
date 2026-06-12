@@ -16,11 +16,7 @@ import { NotFoundError } from "@/shared/lib/command";
 import { BookOpen, Clock, Layers } from "lucide-react";
 import type { AuthContext } from "@/server/auth/context";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ courseId: string; levelId: string }>;
-}) {
+export async function generateMetadata() {
   return { title: "Detalhes do Nível" };
 }
 
