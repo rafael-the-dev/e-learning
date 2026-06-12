@@ -35,7 +35,7 @@ import {
 } from "@/modules/enrollments/actions/enrollment.actions";
 import { toast } from "@/shared/hooks/use-toast";
 import { ClipboardList } from "lucide-react";
-import { ENROLLMENT_STATUS_LABELS } from "@/modules/enrollments/types";
+import { ENROLLMENT_STATUS_LABELS, FINANCIAL_STATUS_LABELS } from "@/modules/enrollments/types";
 import type { Enrollment } from "@/modules/enrollments/types";
 import type { PaginatedResult } from "@/shared/types/common";
 
@@ -56,6 +56,7 @@ interface EnrollmentsTableProps {
   defaultBranchId?: string;
   defaultClassGroupId?: string;
   defaultAcademicYearId?: string;
+  defaultFinancialStatus?: string;
   canEdit: boolean;
   canActivate: boolean;
   canSuspend: boolean;
@@ -116,6 +117,7 @@ export function EnrollmentsTable({
   defaultBranchId = "",
   defaultClassGroupId = "",
   defaultAcademicYearId = "",
+  defaultFinancialStatus = "",
   canEdit,
   canActivate,
   canSuspend,
@@ -313,6 +315,22 @@ export function EnrollmentsTable({
             {academicYears.map((y) => (
               <SelectItem key={y.id} value={y.id}>
                 {y.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={defaultFinancialStatus || "all"}
+          onValueChange={(v) => updateParams({ financialStatus: v === "all" ? "" : v })}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Est. Financeiro" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os estados</SelectItem>
+            {Object.entries(FINANCIAL_STATUS_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
               </SelectItem>
             ))}
           </SelectContent>

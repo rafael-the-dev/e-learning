@@ -22,7 +22,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
+import { cn } from "@/shared/lib/utils";
 import type { Enrollment } from "@/modules/enrollments/types";
+
+const FINANCIAL_STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  NO_INVOICE: { label: "Sem Fatura", className: "bg-slate-100 text-slate-600 border-slate-200" },
+  PENDING: { label: "Pendente", className: "bg-amber-50 text-amber-700 border-amber-200" },
+  PARTIALLY_PAID: { label: "Parcial", className: "bg-blue-50 text-blue-700 border-blue-200" },
+  PAID: { label: "Pago", className: "bg-green-50 text-green-700 border-green-200" },
+  OVERDUE: { label: "Vencido", className: "bg-red-50 text-red-700 border-red-200" },
+  CANCELLED: { label: "Cancelado", className: "bg-slate-100 text-slate-500 border-slate-200" },
+};
 
 interface GetColumnsOptions {
   onActivate: (enrollment: Enrollment) => void;
@@ -111,6 +121,26 @@ export function getEnrollmentColumns({
       accessorKey: "status",
       header: "Estado",
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+    {
+      accessorKey: "financialStatus",
+      header: "Est. Financeiro",
+      cell: ({ row }) => {
+        const fs = row.original.financialStatus;
+        if (!fs) return <span className="text-xs text-muted-foreground">—</span>;
+        const cfg = FINANCIAL_STATUS_CONFIG[fs];
+        if (!cfg) return <span className="text-xs text-muted-foreground">{fs}</span>;
+        return (
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+              cfg.className
+            )}
+          >
+            {cfg.label}
+          </span>
+        );
+      },
     },
     {
       accessorKey: "enrollmentDate",

@@ -1,7 +1,14 @@
 import { getDb } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult, PaginationParams } from "@/shared/types/common";
-import type { Enrollment, EnrollmentStatusHistory } from "@/modules/enrollments/types";
+import type {
+  Enrollment,
+  EnrollmentStatusHistory,
+  EnrollmentWatchlistItem,
+  EnrollmentMonthlyTrend,
+  EnrollmentCourseDistribution,
+  EnrollmentBranchDistribution,
+} from "@/modules/enrollments/types";
 
 // =============================================================================
 // ENROLLMENT REPOSITORY
@@ -16,6 +23,7 @@ export interface ListEnrollmentsParams extends PaginationParams {
   classGroupId?: string;
   academicYearId?: string;
   academicTermId?: string;
+  financialStatus?: string;
 }
 
 const enrollmentSelect = {
@@ -46,7 +54,18 @@ const enrollmentSelect = {
   branch: { select: { id: true, name: true } },
   academicYear: { select: { id: true, name: true } },
   academicTerm: { select: { id: true, name: true } },
+  invoices: { select: { status: true } },
 } as const;
+
+function computeFinancialStatus(invoices: Array<{ status: string }>): string {
+  if (invoices.length === 0) return "NO_INVOICE";
+  if (invoices.some((i) => i.status === "OVERDUE")) return "OVERDUE";
+  if (invoices.some((i) => i.status === "PARTIALLY_PAID")) return "PARTIALLY_PAID";
+  if (invoices.some((i) => i.status === "PENDING")) return "PENDING";
+  const nonCancelled = invoices.filter((i) => i.status !== "CANCELLED");
+  if (nonCancelled.length > 0 && nonCancelled.every((i) => i.status === "PAID")) return "PAID";
+  return "PENDING";
+}
 
 function mapToEnrollment(row: {
   id: string;
@@ -76,6 +95,7 @@ function mapToEnrollment(row: {
   branch: { id: string; name: string } | null;
   academicYear: { id: string; name: string };
   academicTerm: { id: string; name: string } | null;
+  invoices: Array<{ status: string }>;
 }): Enrollment {
   return {
     id: row.id,
@@ -106,6 +126,7 @@ function mapToEnrollment(row: {
     branchName: row.branch?.name ?? null,
     academicYearName: row.academicYear.name,
     academicTermName: row.academicTerm?.name ?? null,
+    financialStatus: computeFinancialStatus(row.invoices),
   };
 }
 
@@ -116,6 +137,19 @@ export async function findEnrollmentsByOrganization(
   const db = await getDb();
   const { skip, take } = buildSkipTake(params);
 
+  const financialStatusFilter =
+    params.financialStatus === "NO_INVOICE"
+      ? { invoices: { none: {} } }
+      : params.financialStatus === "OVERDUE"
+        ? { invoices: { some: { status: "OVERDUE" } } }
+        : params.financialStatus === "PARTIALLY_PAID"
+          ? { invoices: { some: { status: "PARTIALLY_PAID" } } }
+          : params.financialStatus === "PENDING"
+            ? { invoices: { some: { status: "PENDING" } } }
+            : params.financialStatus === "PAID"
+              ? { invoices: { some: { status: "PAID" } }, NOT: { invoices: { some: { status: { in: ["OVERDUE", "PENDING", "PARTIALLY_PAID"] } } } } }
+              : {};
+
   const where = {
     organizationId,
     deletedAt: null,
@@ -125,6 +159,7 @@ export async function findEnrollmentsByOrganization(
     ...(params.classGroupId && { classGroupId: params.classGroupId }),
     ...(params.academicYearId && { academicYearId: params.academicYearId }),
     ...(params.academicTermId && { academicTermId: params.academicTermId }),
+    ...(params.financialStatus && financialStatusFilter),
     ...(params.search && {
       OR: [
         { enrollmentNumber: { contains: params.search } },
@@ -419,4 +454,214 @@ export async function findEnrollmentStatsByCourse(
   }
 
   return { total, active, byLevel };
+}
+
+// =============================================================================
+// DASHBOARD QUERIES
+// =============================================================================
+
+export async function countActiveEnrollmentsWithoutClassGroup(
+  organizationId: string
+): Promise<number> {
+  const db = await getDb();
+  return db.enrollment.count({
+    where: { organizationId, status: "ACTIVE", classGroupId: null, deletedAt: null },
+  });
+}
+
+export async function countEnrollmentsWithOverdueInvoices(
+  organizationId: string
+): Promise<number> {
+  const db = await getDb();
+  return db.enrollment.count({
+    where: { organizationId, deletedAt: null, invoices: { some: { status: "OVERDUE" } } },
+  });
+}
+
+export async function countActiveEnrollmentsWithoutInvoice(
+  organizationId: string
+): Promise<number> {
+  const db = await getDb();
+  return db.enrollment.count({
+    where: { organizationId, status: "ACTIVE", deletedAt: null, invoices: { none: {} } },
+  });
+}
+
+export async function countStudentsWithWalletCredit(
+  organizationId: string
+): Promise<number> {
+  const db = await getDb();
+  const result = await db.$queryRaw<Array<{ cnt: number | bigint }>>`
+    SELECT COUNT(*) as cnt
+    FROM (
+      SELECT sw.studentId
+      FROM student_wallets sw
+      INNER JOIN student_wallet_transactions swt ON swt.studentWalletId = sw.id
+      WHERE sw.organizationId = ${organizationId}
+      AND sw.status = 'ACTIVE'
+      GROUP BY sw.studentId
+      HAVING SUM(swt.amount) > 0
+    ) AS t
+  `;
+  return Number(result[0]?.cnt ?? 0);
+}
+
+export async function findTopCoursesByActiveEnrollments(
+  organizationId: string,
+  limit = 5
+): Promise<EnrollmentCourseDistribution[]> {
+  const db = await getDb();
+  const rows = await db.enrollment.groupBy({
+    by: ["courseId"],
+    where: { organizationId, status: "ACTIVE", deletedAt: null },
+    _count: { _all: true },
+  });
+  if (rows.length === 0) return [];
+  const sorted = [...rows].sort((a, b) => b._count._all - a._count._all).slice(0, limit);
+  const courseIds = sorted.map((r) => r.courseId);
+  const courses = await db.course.findMany({
+    where: { id: { in: courseIds } },
+    select: { id: true, name: true },
+  });
+  const nameMap = Object.fromEntries(courses.map((c) => [c.id, c.name]));
+  return sorted.map((r) => ({
+    courseId: r.courseId,
+    courseName: nameMap[r.courseId] ?? r.courseId,
+    activeCount: r._count._all,
+  }));
+}
+
+export async function findEnrollmentMonthlyTrend(
+  organizationId: string,
+  months = 6
+): Promise<EnrollmentMonthlyTrend[]> {
+  const db = await getDb();
+  const since = new Date();
+  since.setMonth(since.getMonth() - months);
+  since.setDate(1);
+  since.setHours(0, 0, 0, 0);
+  const rows = await db.enrollment.findMany({
+    where: { organizationId, deletedAt: null, createdAt: { gte: since } },
+    select: { createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    const key = `${row.createdAt.getFullYear()}-${String(row.createdAt.getMonth() + 1).padStart(2, "0")}`;
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
+  return Array.from(map.entries()).map(([month, total]) => ({ month, total }));
+}
+
+export async function findEnrollmentBranchDistribution(
+  organizationId: string
+): Promise<EnrollmentBranchDistribution[]> {
+  const db = await getDb();
+  const rows = await db.enrollment.groupBy({
+    by: ["branchId"],
+    where: { organizationId, status: "ACTIVE", deletedAt: null },
+    _count: { _all: true },
+  });
+  if (rows.length === 0) return [];
+  const branchIds = rows.filter((r) => r.branchId !== null).map((r) => r.branchId as string);
+  const branches =
+    branchIds.length > 0
+      ? await db.branch.findMany({
+          where: { id: { in: branchIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+  const nameMap = Object.fromEntries(branches.map((b) => [b.id, b.name]));
+  return rows
+    .map((r) => ({
+      branchId: r.branchId,
+      branchName: r.branchId ? (nameMap[r.branchId] ?? r.branchId) : "Sem filial",
+      count: r._count._all,
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+const watchlistSelect = {
+  id: true,
+  enrollmentNumber: true,
+  studentId: true,
+  createdAt: true,
+  student: { select: { id: true, firstName: true, lastName: true, code: true } },
+  course: { select: { id: true, name: true } },
+  courseLevel: { select: { id: true, name: true } },
+  classGroup: { select: { id: true, name: true } },
+} as const;
+
+export async function findEnrollmentWatchlist(
+  organizationId: string,
+  limit = 20
+): Promise<EnrollmentWatchlistItem[]> {
+  const db = await getDb();
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const perGroup = Math.ceil(limit / 4);
+
+  const [withOverdue, withoutInvoice, longPending, withoutClassGroup] = await Promise.all([
+    db.enrollment.findMany({
+      where: { organizationId, status: "ACTIVE", deletedAt: null, invoices: { some: { status: "OVERDUE" } } },
+      select: watchlistSelect,
+      take: perGroup,
+      orderBy: { createdAt: "desc" },
+    }),
+    db.enrollment.findMany({
+      where: { organizationId, status: "ACTIVE", deletedAt: null, invoices: { none: {} } },
+      select: watchlistSelect,
+      take: perGroup,
+      orderBy: { createdAt: "desc" },
+    }),
+    db.enrollment.findMany({
+      where: { organizationId, status: "PENDING_PAYMENT", deletedAt: null, createdAt: { lt: sevenDaysAgo } },
+      select: watchlistSelect,
+      take: perGroup,
+      orderBy: { createdAt: "asc" },
+    }),
+    db.enrollment.findMany({
+      where: { organizationId, status: "ACTIVE", classGroupId: null, deletedAt: null },
+      select: watchlistSelect,
+      take: perGroup,
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  const results: EnrollmentWatchlistItem[] = [];
+  const seenIds = new Set<string>();
+
+  const push = (
+    rows: typeof withOverdue,
+    issue: string,
+    severity: EnrollmentWatchlistItem["severity"],
+    recommendedAction: string
+  ) => {
+    for (const row of rows) {
+      if (seenIds.has(row.id)) continue;
+      seenIds.add(row.id);
+      results.push({
+        enrollmentId: row.id,
+        enrollmentNumber: row.enrollmentNumber,
+        studentId: row.studentId,
+        studentName: `${row.student.firstName} ${row.student.lastName}`,
+        studentCode: row.student.code,
+        courseName: row.course.name,
+        courseLevelName: row.courseLevel?.name ?? null,
+        classGroupName: row.classGroup?.name ?? null,
+        issue,
+        severity,
+        recommendedAction,
+        createdAt: row.createdAt,
+      });
+    }
+  };
+
+  push(withOverdue, "Fatura vencida", "critical", "Regularizar pagamento");
+  push(withoutInvoice, "Sem fatura associada", "high", "Gerar fatura");
+  push(longPending, "Aguarda pagamento há mais de 7 dias", "medium", "Verificar pagamento");
+  push(withoutClassGroup, "Sem turma atribuída", "low", "Atribuir turma");
+
+  return results.slice(0, limit);
 }

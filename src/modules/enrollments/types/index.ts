@@ -32,6 +32,8 @@ export interface Enrollment {
   branchName?: string | null;
   academicYearName?: string;
   academicTermName?: string | null;
+  // computed fields
+  financialStatus?: string | null;
 }
 
 export interface EnrollmentStatusHistory {
@@ -74,3 +76,71 @@ export const ENROLLMENT_TRANSITIONS: Record<string, string[]> = {
   COMPLETED: [],
   CANCELLED: [],
 };
+
+export const FINANCIAL_STATUS_LABELS: Record<string, string> = {
+  NO_INVOICE: "Sem Fatura",
+  PENDING: "Pendente",
+  PARTIALLY_PAID: "Parcialmente Pago",
+  PAID: "Pago",
+  OVERDUE: "Vencido",
+  CANCELLED: "Cancelado",
+};
+
+// =============================================================================
+// DASHBOARD TYPES
+// =============================================================================
+
+export interface EnrollmentWatchlistItem {
+  enrollmentId: string;
+  enrollmentNumber: string | null;
+  studentId: string;
+  studentName: string;
+  studentCode: string | null;
+  courseName: string;
+  courseLevelName: string | null;
+  classGroupName: string | null;
+  issue: string;
+  severity: "low" | "medium" | "high" | "critical";
+  recommendedAction: string;
+  createdAt: Date;
+}
+
+export interface EnrollmentMonthlyTrend {
+  month: string;
+  total: number;
+}
+
+export interface EnrollmentCourseDistribution {
+  courseId: string;
+  courseName: string;
+  activeCount: number;
+}
+
+export interface EnrollmentBranchDistribution {
+  branchId: string | null;
+  branchName: string;
+  count: number;
+}
+
+export interface EnrollmentDashboardKPIs {
+  total: number;
+  active: number;
+  pendingPayment: number;
+  draft: number;
+  suspended: number;
+  completed: number;
+  cancelled: number;
+  awaitingClassAssignment: number;
+  overdueAccounts: number;
+  studentsWithWalletCredit: number;
+  activeWithoutInvoice: number;
+}
+
+export interface EnrollmentInsight {
+  id: string;
+  message: string;
+  severity: "info" | "warning" | "critical";
+  count?: number;
+  linkHref?: string;
+  linkLabel?: string;
+}
