@@ -385,3 +385,38 @@ export async function countEnrollmentsByStatus(
   }
   return result;
 }
+
+export interface CourseLevelEnrollmentStats {
+  total: number;
+  active: number;
+  byLevel: Record<string, { total: number; active: number }>;
+}
+
+export async function findEnrollmentStatsByCourse(
+  courseId: string,
+  organizationId: string
+): Promise<CourseLevelEnrollmentStats> {
+  const db = await getDb();
+  const rows = await db.enrollment.groupBy({
+    by: ["courseLevelId", "status"],
+    where: { courseId, organizationId, deletedAt: null },
+    _count: { _all: true },
+  });
+
+  const byLevel: Record<string, { total: number; active: number }> = {};
+  let total = 0;
+  let active = 0;
+
+  for (const row of rows) {
+    const count = row._count._all;
+    total += count;
+    if (row.status === "ACTIVE") active += count;
+    if (row.courseLevelId) {
+      if (!byLevel[row.courseLevelId]) byLevel[row.courseLevelId] = { total: 0, active: 0 };
+      byLevel[row.courseLevelId].total += count;
+      if (row.status === "ACTIVE") byLevel[row.courseLevelId].active += count;
+    }
+  }
+
+  return { total, active, byLevel };
+}

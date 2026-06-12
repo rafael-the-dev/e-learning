@@ -38,9 +38,10 @@ interface LevelsTableProps {
   courseId: string;
   levels: CourseLevel[];
   canManage?: boolean;
+  enrollmentCountsByLevel?: Record<string, { total: number; active: number }>;
 }
 
-export function LevelsTable({ courseId, levels, canManage = false }: LevelsTableProps) {
+export function LevelsTable({ courseId, levels, canManage = false, enrollmentCountsByLevel }: LevelsTableProps) {
   const router = useRouter();
   const [showCreate, setShowCreate] = React.useState(false);
   const [editTarget, setEditTarget] = React.useState<CourseLevel | null>(null);
@@ -169,6 +170,11 @@ export function LevelsTable({ courseId, levels, canManage = false }: LevelsTable
                 {level.subjectsCount !== undefined && (
                   <span className="text-xs text-muted-foreground hidden sm:inline">
                     {level.subjectsCount} disciplina(s)
+                  </span>
+                )}
+                {enrollmentCountsByLevel?.[level.id] !== undefined && (
+                  <span className="text-xs text-muted-foreground hidden sm:inline">
+                    {enrollmentCountsByLevel[level.id].active} aluno(s)
                   </span>
                 )}
                 <StatusBadge status={level.status} />

@@ -3,7 +3,9 @@ import {
   findEnrollmentByIdInOrganization,
   findEnrollmentHistory,
   countEnrollmentsByStatus,
+  findEnrollmentStatsByCourse,
   type ListEnrollmentsParams,
+  type CourseLevelEnrollmentStats,
 } from "@/modules/enrollments/repositories/enrollment.repository";
 import { NotFoundError } from "@/shared/lib/command";
 import type { Enrollment, EnrollmentStatusHistory } from "@/modules/enrollments/types";
@@ -36,4 +38,11 @@ export async function getEnrollmentStats(
   organizationId: string
 ): Promise<Record<string, number>> {
   return countEnrollmentsByStatus(organizationId);
+}
+
+export async function getEnrollmentStatsByCourse(
+  courseId: string,
+  organizationId: string
+): Promise<CourseLevelEnrollmentStats> {
+  return findEnrollmentStatsByCourse(courseId, organizationId);
 }
