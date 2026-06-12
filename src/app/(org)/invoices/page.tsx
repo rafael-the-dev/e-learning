@@ -160,11 +160,7 @@ export default async function InvoicesPage({
     colors: ["#6366f1"],
   };
 
-  const coursesRevenueBar = {
-    categories: courseDistribution.slice(0, 8).map((c) => c.courseName),
-    series: [{ name: "Facturado (MT)", data: courseDistribution.slice(0, 8).map((c) => c.totalAmount) }],
-    colors: ["#22c55e"],
-  };
+  const maxCourseAmount = courseDistribution[0]?.totalAmount ?? 1;
 
   const watchlistPreview = watchlist.slice(0, 5);
 
@@ -398,7 +394,33 @@ export default async function InvoicesPage({
 
                   <TabsContent value="courses" className="mt-0">
                     {courseDistribution.length > 0 ? (
-                      <ApexBarChart data={coursesRevenueBar} height={220} horizontal currency />
+                      <div className="space-y-3 pt-1">
+                        {courseDistribution.slice(0, 8).map((c) => {
+                          const pct = maxCourseAmount > 0 ? Math.round((c.totalAmount / maxCourseAmount) * 100) : 0;
+                          return (
+                            <div key={c.courseId ?? c.courseName} className="space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                {c.courseId ? (
+                                  <Link href={`/invoices?courseId=${c.courseId}`} className="truncate hover:underline">
+                                    {c.courseName}
+                                  </Link>
+                                ) : (
+                                  <span className="truncate text-muted-foreground">{c.courseName}</span>
+                                )}
+                                <span className="font-medium tabular-nums shrink-0 ml-2">
+                                  {c.totalAmount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} MT
+                                </span>
+                              </div>
+                              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-indigo-500"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     ) : (
                       <p className="text-sm text-muted-foreground py-4 text-center">Sem dados de cursos.</p>
                     )}

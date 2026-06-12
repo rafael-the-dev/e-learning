@@ -3,6 +3,7 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useCallback, useState } from "react";
+import { useTransition } from "react";
 import {
   MoreHorizontal,
   CheckCircle,
@@ -12,21 +13,12 @@ import {
   ChevronRight,
   Wallet,
   ExternalLink,
-  Filter,
 } from "lucide-react";
-import { useTransition } from "react";
 import { toast } from "@/shared/hooks/use-toast";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
 import {
   Table,
   TableBody,
@@ -50,16 +42,8 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/shared/components/ui/sheet";
-import {
   PAYMENT_STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
-  RECEIPT_STATUS_FILTER_LABELS,
 } from "@/modules/finance/types";
 import { confirmPaymentAction, cancelPaymentAction } from "@/modules/finance/actions/payment.actions";
 import { issueReceiptAction } from "@/modules/finance/actions/receipt.actions";
@@ -78,21 +62,8 @@ const RECEIPT_STATUS_CONFIG: Record<string, { label: string; className: string }
   CANCELLED: { label: "Cancelado", className: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
-interface FilterOption {
-  id: string;
-  name: string;
-}
-
 interface Props {
   result: PaginatedResult<Payment>;
-  branches: FilterOption[];
-  defaultSearch?: string;
-  defaultStatus?: string;
-  defaultMethod?: string;
-  defaultReceiptStatus?: string;
-  defaultBranchId?: string;
-  defaultDateFrom?: string;
-  defaultDateTo?: string;
   canConfirm: boolean;
   canCancel: boolean;
   canIssueReceipt: boolean;
@@ -101,14 +72,6 @@ interface Props {
 
 export function PaymentsTable({
   result,
-  branches,
-  defaultSearch,
-  defaultStatus,
-  defaultMethod,
-  defaultReceiptStatus,
-  defaultBranchId,
-  defaultDateFrom,
-  defaultDateTo,
   canConfirm,
   canCancel,
   canIssueReceipt,
@@ -121,31 +84,19 @@ export function PaymentsTable({
 
   const [confirmingPayment, setConfirmingPayment] = useState<Payment | null>(null);
   const [walletCreditInput, setWalletCreditInput] = useState("");
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const updateParam = useCallback(
     (key: string, value: string | undefined) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (value && value !== "ALL") {
+      if (value) {
         params.set(key, value);
       } else {
         params.delete(key);
       }
-      params.delete("page");
       router.push(`${pathname}?${params.toString()}`);
     },
     [pathname, router, searchParams]
   );
-
-  function updateParams(updates: Record<string, string>) {
-    const params = new URLSearchParams(searchParams.toString());
-    Object.entries(updates).forEach(([k, v]) => {
-      if (v && v !== "ALL") params.set(k, v);
-      else params.delete(k);
-    });
-    params.delete("page");
-    router.push(`${pathname}?${params.toString()}`);
-  }
 
   function openConfirmDialog(payment: Payment) {
     setConfirmingPayment(payment);
@@ -199,198 +150,8 @@ export function PaymentsTable({
       ? (walletBalances[confirmingPayment.studentId] ?? 0)
       : 0;
 
-  const FilterControls = (
-    <div className="flex flex-col gap-3">
-      <div>
-        <Label className="text-xs text-muted-foreground mb-1 block">Pesquisar</Label>
-        <Input
-          placeholder="Pagamento ou aluno..."
-          defaultValue={defaultSearch}
-          className="max-w-xs"
-          onChange={(e) => {
-            const v = e.target.value;
-            const t = setTimeout(() => updateParam("search", v || undefined), 400);
-            return () => clearTimeout(t);
-          }}
-        />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Select defaultValue={defaultStatus ?? "ALL"} onValueChange={(v) => updateParam("status", v)}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Estado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Todos os estados</SelectItem>
-            {Object.entries(PAYMENT_STATUS_LABELS).map(([val, label]) => (
-              <SelectItem key={val} value={val}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select defaultValue={defaultMethod ?? "ALL"} onValueChange={(v) => updateParam("method", v)}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Método" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Todos os métodos</SelectItem>
-            {Object.entries(PAYMENT_METHOD_LABELS).map(([val, label]) => (
-              <SelectItem key={val} value={val}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          defaultValue={defaultReceiptStatus ?? "ALL"}
-          onValueChange={(v) => updateParam("receiptStatus", v)}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Estado do Recibo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Todos os recibos</SelectItem>
-            {Object.entries(RECEIPT_STATUS_FILTER_LABELS).map(([val, label]) => (
-              <SelectItem key={val} value={val}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {branches.length > 0 && (
-          <Select
-            defaultValue={defaultBranchId ?? "ALL"}
-            onValueChange={(v) => updateParam("branchId", v)}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Filial" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todas as filiais</SelectItem>
-              {branches.map((b) => (
-                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        <div className="flex items-center gap-1.5">
-          <Input
-            type="date"
-            defaultValue={defaultDateFrom ?? ""}
-            className="w-36 text-sm"
-            onChange={(e) => updateParam("dateFrom", e.target.value || undefined)}
-          />
-          <span className="text-muted-foreground text-xs">até</span>
-          <Input
-            type="date"
-            defaultValue={defaultDateTo ?? ""}
-            className="w-36 text-sm"
-            onChange={(e) => updateParam("dateTo", e.target.value || undefined)}
-          />
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <>
-      {/* Desktop filters */}
-      <div className="hidden md:block space-y-3">{FilterControls}</div>
-
-      {/* Mobile: collapsed filters in a sheet */}
-      <div className="flex items-center gap-2 md:hidden">
-        <Input
-          placeholder="Pesquisar pagamento ou aluno..."
-          defaultValue={defaultSearch}
-          className="flex-1"
-          onChange={(e) => {
-            const v = e.target.value;
-            const t = setTimeout(() => updateParam("search", v || undefined), 400);
-            return () => clearTimeout(t);
-          }}
-        />
-        <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-          <SheetTrigger asChild>
-            <Button variant="outline" size="sm" className="shrink-0">
-              <Filter className="size-4 mr-1.5" />
-              Filtros
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="bottom" className="max-h-[80vh] overflow-auto">
-            <SheetHeader>
-              <SheetTitle>Filtros</SheetTitle>
-            </SheetHeader>
-            <div className="mt-4 space-y-3">
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1.5 block">Estado</Label>
-                <Select defaultValue={defaultStatus ?? "ALL"} onValueChange={(v) => { updateParam("status", v); setMobileFiltersOpen(false); }}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Estado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">Todos os estados</SelectItem>
-                    {Object.entries(PAYMENT_STATUS_LABELS).map(([val, label]) => (
-                      <SelectItem key={val} value={val}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1.5 block">Método</Label>
-                <Select defaultValue={defaultMethod ?? "ALL"} onValueChange={(v) => { updateParam("method", v); setMobileFiltersOpen(false); }}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Método" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">Todos os métodos</SelectItem>
-                    {Object.entries(PAYMENT_METHOD_LABELS).map(([val, label]) => (
-                      <SelectItem key={val} value={val}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1.5 block">Recibo</Label>
-                <Select defaultValue={defaultReceiptStatus ?? "ALL"} onValueChange={(v) => { updateParam("receiptStatus", v); setMobileFiltersOpen(false); }}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Recibo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">Todos os recibos</SelectItem>
-                    {Object.entries(RECEIPT_STATUS_FILTER_LABELS).map(([val, label]) => (
-                      <SelectItem key={val} value={val}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {branches.length > 0 && (
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-1.5 block">Filial</Label>
-                  <Select defaultValue={defaultBranchId ?? "ALL"} onValueChange={(v) => { updateParam("branchId", v); setMobileFiltersOpen(false); }}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Filial" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">Todas as filiais</SelectItem>
-                      {branches.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1.5 block">Data (de/até)</Label>
-                <div className="flex items-center gap-1.5">
-                  <Input type="date" defaultValue={defaultDateFrom ?? ""} className="flex-1 text-sm" onChange={(e) => updateParam("dateFrom", e.target.value || undefined)} />
-                  <span className="text-xs text-muted-foreground">—</span>
-                  <Input type="date" defaultValue={defaultDateTo ?? ""} className="flex-1 text-sm" onChange={(e) => updateParam("dateTo", e.target.value || undefined)} />
-                </div>
-              </div>
-            </div>
-          </SheetContent>
-        </Sheet>
-      </div>
-
-      {/* Table */}
       <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
@@ -547,32 +308,32 @@ export function PaymentsTable({
         </Table>
       </div>
 
-      {/* Pagination */}
       {result.totalPages > 1 && (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-between gap-2">
           <span className="text-sm text-muted-foreground">
-            Página {result.page} de {result.totalPages}
+            {result.total.toLocaleString("pt-PT")} pagamentos · página {result.page} de {result.totalPages}
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!result.hasPreviousPage}
-            onClick={() => updateParam("page", String(result.page - 1))}
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!result.hasNextPage}
-            onClick={() => updateParam("page", String(result.page + 1))}
-          >
-            <ChevronRight className="size-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!result.hasPreviousPage}
+              onClick={() => updateParam("page", String(result.page - 1))}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!result.hasNextPage}
+              onClick={() => updateParam("page", String(result.page + 1))}
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
       )}
 
-      {/* Confirmation dialog */}
       <Dialog
         open={confirmingPayment !== null}
         onOpenChange={(open) => { if (!open) setConfirmingPayment(null); }}

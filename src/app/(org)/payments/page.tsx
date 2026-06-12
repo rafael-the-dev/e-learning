@@ -7,6 +7,7 @@ import {
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { StatCard } from "@/shared/components/layout/stat-card";
+import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import {
   ExecutiveMainGrid,
@@ -15,9 +16,10 @@ import {
   ExecutiveKpiGrid,
   DashboardSideCard,
   DashboardInsightRow,
-  QuickActionTile,
 } from "@/shared/components/layout/executive-dashboard";
-import { ApexDonutChart, ApexBarChart, ApexLineChart } from "@/shared/components/charts";
+import { ApexDonutChart, ApexLineChart } from "@/shared/components/charts";
+import { PaymentActionBar } from "@/modules/finance/components/payment-action-bar";
+import { PaymentTableFilters } from "@/modules/finance/components/payment-table-filters";
 import { requirePermission } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -113,17 +115,14 @@ export default async function PaymentsPage({
     colors: statusItems.map((d) => STATUS_COLORS[d.status] ?? "#6366f1"),
   };
 
-  const methodBar = {
-    categories: methodDistribution.slice(0, 6).map((d) => PAYMENT_METHOD_LABELS[d.method] ?? d.method),
-    series: [{ name: "Valor (MT)", data: methodDistribution.slice(0, 6).map((d) => d.totalAmount) }],
-    colors: ["#6366f1"],
-  };
-
   const trendLine = {
     categories: monthlyTrend.map((m) => formatMonthKey(m.month)),
     series: [{ name: "Valor Recebido", data: monthlyTrend.map((m) => m.totalAmount) }],
     colors: ["#22c55e"],
   };
+
+  const maxMethodAmount = methodDistribution[0]?.totalAmount ?? 1;
+  const watchlistPreview = watchlist.slice(0, 5);
 
   return (
     <>
@@ -161,6 +160,12 @@ export default async function PaymentsPage({
         }
       />
 
+      <PaymentActionBar
+        pendingCount={kpis.pendingCount}
+        requireReceiptCount={kpis.requireReceiptCount}
+        cancelledCount={kpis.cancelledCount}
+      />
+
       <div className="p-4 sm:p-8 space-y-6">
 
         {/* KPI Cards */}
@@ -175,6 +180,21 @@ export default async function PaymentsPage({
           <StatCard title="Crédito Aplicado" value={fmt(kpis.walletCreditUsed)} description="Crédito de carteira este mês" icon={<Wallet className="size-5" />} />
         </ExecutiveKpiGrid>
 
+        {/* Full-width trend chart */}
+        {monthlyTrend.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium">Recebimentos Mensais</CardTitle>
+                <span className="text-xs text-muted-foreground">Últimos 6 meses</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ApexLineChart data={trendLine} height={200} currency />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Two-column main content */}
         <ExecutiveMainGrid>
 
@@ -185,13 +205,21 @@ export default async function PaymentsPage({
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-medium">Lista de Atenção</CardTitle>
-                    <span className="text-xs text-muted-foreground">
-                      {watchlist.length} {watchlist.length === 1 ? "item" : "itens"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {watchlist.length > 5 && (
+                        <Link
+                          href="/payments?status=PENDING"
+                          className="text-xs text-muted-foreground hover:underline"
+                        >
+                          Ver todos ({watchlist.length})
+                        </Link>
+                      )}
+                      <Badge variant="secondary" className="text-xs">{watchlist.length}</Badge>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0 pb-2">
-                  <PaymentWatchlist items={watchlist} />
+                  <PaymentWatchlist items={watchlistPreview} />
                 </CardContent>
               </Card>
             )}
@@ -200,12 +228,9 @@ export default async function PaymentsPage({
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-medium">Registos de Pagamentos</CardTitle>
-                  <span className="text-xs text-muted-foreground">{result.total.toLocaleString("pt-PT")} no total</span>
+                  <Badge variant="secondary" className="text-xs">{result.total.toLocaleString("pt-PT")}</Badge>
                 </div>
-              </CardHeader>
-              <CardContent className="p-0 sm:px-4 sm:pb-4">
-                <PaymentsTable
-                  result={result}
+                <PaymentTableFilters
                   branches={branches}
                   defaultSearch={search}
                   defaultStatus={status}
@@ -214,6 +239,11 @@ export default async function PaymentsPage({
                   defaultBranchId={branchId}
                   defaultDateFrom={dateFrom}
                   defaultDateTo={dateTo}
+                />
+              </CardHeader>
+              <CardContent className="p-0 sm:px-4 sm:pb-4">
+                <PaymentsTable
+                  result={result}
                   canConfirm={canConfirm}
                   canCancel={canCancel}
                   canIssueReceipt={canIssueReceipt}
@@ -223,7 +253,7 @@ export default async function PaymentsPage({
             </Card>
           </ExecutiveLeftColumn>
 
-          {/* RIGHT: Insights + Quick Actions + Charts */}
+          {/* RIGHT: Insights + Tabbed charts */}
           <ExecutiveRightColumn>
 
             {insights.length > 0 && (
@@ -238,33 +268,44 @@ export default async function PaymentsPage({
               </DashboardSideCard>
             )}
 
-            <DashboardSideCard title="Ações Rápidas">
-              <div className="space-y-2">
-                {canCreate && (
-                  <QuickActionTile href="/payments/new" icon={<Plus className="size-4" />} label="Registar Pagamento" variant="success" />
-                )}
-                <QuickActionTile href="/payments?status=PENDING" icon={<Clock className="size-4" />} label="Ver Pendentes" description={`${kpis.pendingCount} por confirmar`} variant={kpis.pendingCount > 0 ? "warning" : "default"} />
-                <QuickActionTile href="/payments?receiptStatus=MISSING" icon={<FileText className="size-4" />} label="Ver Sem Recibo" description={`${kpis.requireReceiptCount} sem recibo`} variant={kpis.requireReceiptCount > 0 ? "warning" : "default"} />
-                <QuickActionTile href="/payments?status=CANCELLED" icon={<XCircle className="size-4" />} label="Ver Cancelados" description={`${kpis.cancelledCount} cancelados`} variant={kpis.cancelledCount > 0 ? "destructive" : "default"} />
-                <QuickActionTile href="/receipts" icon={<Receipt className="size-4" />} label="Ver Recibos" />
-              </div>
-            </DashboardSideCard>
-
-            <DashboardSideCard title="Por Estado">
-              <ApexDonutChart data={statusDonut} height={220} />
-            </DashboardSideCard>
-
             {methodDistribution.length > 0 && (
               <DashboardSideCard title="Por Método de Pagamento">
-                <ApexBarChart data={methodBar} height={200} currency />
+                <div className="space-y-3">
+                  {methodDistribution.slice(0, 6).map((d) => {
+                    const pct = maxMethodAmount > 0 ? Math.round((d.totalAmount / maxMethodAmount) * 100) : 0;
+                    return (
+                      <div key={d.method} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <Link
+                            href={`/payments?method=${d.method}`}
+                            className="truncate hover:underline"
+                          >
+                            {PAYMENT_METHOD_LABELS[d.method] ?? d.method}
+                          </Link>
+                          <span className="font-medium tabular-nums shrink-0 ml-2">
+                            {d.totalAmount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} MT
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </DashboardSideCard>
             )}
 
-            {monthlyTrend.length > 0 && (
-              <DashboardSideCard title="Tendência Mensal" badge={<span className="text-xs text-muted-foreground">6 meses</span>}>
-                <ApexLineChart data={trendLine} height={180} currency />
-              </DashboardSideCard>
-            )}
+            <DashboardSideCard title="Por Estado">
+              {statusItems.length > 0 ? (
+                <ApexDonutChart data={statusDonut} height={200} />
+              ) : (
+                <p className="text-sm text-muted-foreground py-4 text-center">Sem pagamentos.</p>
+              )}
+            </DashboardSideCard>
 
           </ExecutiveRightColumn>
         </ExecutiveMainGrid>
