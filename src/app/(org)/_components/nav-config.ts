@@ -126,6 +126,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         requiredPermission: "studentSubjectProgress.view",
       },
       {
+        href: "/level-progression",
+        label: "Progressão por Nível",
+        iconName: "BarChart3",
+        requiredPermission: "levelProgression.view",
+      },
+      {
         href: "/teachers",
         label: "Professores",
         iconName: "BookUser",

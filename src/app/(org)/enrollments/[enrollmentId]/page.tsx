@@ -25,6 +25,8 @@ import {
   ArrowRight,
   BarChart3,
   FileText,
+  Layers,
+  TrendingUp,
 } from "lucide-react";
 import { ENROLLMENT_STATUS_LABELS } from "@/modules/enrollments/types";
 import { Badge } from "@/shared/components/ui/badge";
@@ -35,6 +37,7 @@ import {
   AccordionTrigger,
 } from "@/shared/components/ui/accordion";
 import { getEnrollmentAcademicProgress } from "@/modules/grades/services/academic-progress.service";
+import { getDb } from "@/server/db";
 import type { AuthContext } from "@/server/auth/context";
 
 const PROGRESS_STATUS_LABELS: Record<string, string> = {
@@ -45,6 +48,32 @@ const PROGRESS_STATUS_LABELS: Record<string, string> = {
   RECOVERY_REQUIRED: "Recuperação",
   INCOMPLETE: "Incompleto",
   BLOCKED: "Bloqueado",
+};
+
+const LEVEL_PROGRESS_STATUS_LABELS: Record<string, string> = {
+  NOT_STARTED: "Por Iniciar",
+  IN_PROGRESS: "Em Progresso",
+  PASSED: "Aprovado",
+  FAILED: "Reprovado",
+  RECOVERY_REQUIRED: "Recuperação",
+  ELIGIBLE_TO_PROGRESS: "Elegível para Progressão",
+  PROMOTED: "Promovido",
+  PROMOTED_WITH_PENDING_SUBJECTS: "Promovido c/ Pendentes",
+  BLOCKED: "Bloqueado",
+  COMPLETED: "Concluído",
+};
+
+const LEVEL_PROGRESS_BADGE_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  PASSED: "default",
+  COMPLETED: "default",
+  PROMOTED: "default",
+  FAILED: "destructive",
+  RECOVERY_REQUIRED: "destructive",
+  BLOCKED: "destructive",
+  IN_PROGRESS: "secondary",
+  PROMOTED_WITH_PENDING_SUBJECTS: "secondary",
+  ELIGIBLE_TO_PROGRESS: "outline",
+  NOT_STARTED: "outline",
 };
 
 const PROGRESS_BADGE_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -100,9 +129,33 @@ export default async function EnrollmentDetailPage({
   const history = await getEnrollmentHistory(enrollmentId, context.organizationId);
 
   const canViewProgress = ability.can(PERMISSIONS.STUDENT_SUBJECT_PROGRESS_VIEW);
+  const canViewLevelProgress = ability.can(PERMISSIONS.STUDENT_LEVEL_PROGRESS_VIEW);
   const academicProgress = canViewProgress
     ? await getEnrollmentAcademicProgress(enrollmentId, context.organizationId)
     : [];
+
+  // Level progress and course progress
+  const db = await getDb();
+  const levelProgressData = canViewLevelProgress
+    ? await db.studentLevelProgress.findMany({
+        where: { enrollmentId, organizationId: context.organizationId },
+        select: {
+          id: true,
+          status: true,
+          finalGrade: true,
+          earnedCredits: true,
+          courseLevelId: true,
+          courseLevel: { select: { name: true, order: true } },
+        },
+        orderBy: { courseLevel: { order: "asc" } },
+      })
+    : [];
+
+  const courseProgressData = canViewLevelProgress
+    ? await db.studentCourseProgress.findFirst({
+        where: { enrollmentId, organizationId: context.organizationId },
+      })
+    : null;
 
   const isEditable = !["COMPLETED", "CANCELLED"].includes(enrollment.status);
 
@@ -417,6 +470,67 @@ export default async function EnrollmentDetailPage({
                   );
                 })}
               </Accordion>
+            )}
+          </div>
+        )}
+
+        {/* Level Progress */}
+        {canViewLevelProgress && (
+          <div className="rounded-xl border p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Progressão por Nível</h3>
+              </div>
+              {courseProgressData && (
+                <div className="flex items-center gap-2">
+                  {courseProgressData.finalGrade != null && (
+                    <span className="text-sm font-mono font-semibold">
+                      {parseFloat(String(courseProgressData.finalGrade)).toLocaleString("pt-PT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                    </span>
+                  )}
+                  <Badge variant={LEVEL_PROGRESS_BADGE_VARIANT[courseProgressData.status] ?? "outline"} className="text-xs">
+                    {LEVEL_PROGRESS_STATUS_LABELS[courseProgressData.status] ?? courseProgressData.status}
+                  </Badge>
+                </div>
+              )}
+            </div>
+
+            {levelProgressData.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sem dados de progressão registados.</p>
+            ) : (
+              <div className="space-y-2">
+                {levelProgressData.map((lp) => {
+                  const variant = LEVEL_PROGRESS_BADGE_VARIANT[lp.status] ?? "outline";
+                  return (
+                    <div key={lp.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <TrendingUp className="size-3.5 text-muted-foreground shrink-0" />
+                        <span className="font-medium truncate">{lp.courseLevel.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        {lp.earnedCredits != null && lp.earnedCredits > 0 && (
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            {lp.earnedCredits} créd.
+                          </span>
+                        )}
+                        {lp.finalGrade != null && (
+                          <span className="font-mono font-semibold tabular-nums">
+                            {parseFloat(String(lp.finalGrade)).toLocaleString("pt-PT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                          </span>
+                        )}
+                        <Badge variant={variant} className="text-xs">
+                          {LEVEL_PROGRESS_STATUS_LABELS[lp.status] ?? lp.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {courseProgressData?.progressReason && (
+              <p className="text-xs text-muted-foreground">{courseProgressData.progressReason}</p>
             )}
           </div>
         )}
