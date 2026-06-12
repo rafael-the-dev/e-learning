@@ -31,7 +31,7 @@ export default async function SubjectsPage() {
         title="Disciplinas"
         description="Gerir as disciplinas globais da organização."
       />
-      <div className="p-8 max-w-3xl">
+      <div className="p-6">
         <SubjectsTable subjects={subjects} canManage={canManage} />
       </div>
     </>

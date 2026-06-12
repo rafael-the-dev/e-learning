@@ -187,7 +187,7 @@ export default async function EnrollmentDetailPage({
         }
       />
 
-      <div className="p-8 max-w-3xl space-y-6">
+      <div className="p-6 space-y-6">
         {/* Status row + quick actions */}
         <div className="flex flex-wrap items-center gap-3">
           <StatusBadge status={enrollment.status} />
@@ -236,342 +236,349 @@ export default async function EnrollmentDetailPage({
           />
         </div>
 
-        {/* Student & Course */}
-        <div className="rounded-xl border p-5 space-y-3">
-          <h3 className="text-sm font-semibold">Informação</h3>
-          <dl className="space-y-2 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground shrink-0">
-                <GraduationCap className="size-3.5" />
-              </span>
-              <dt className="w-28 shrink-0 text-muted-foreground">Aluno</dt>
-              <dd className="font-medium truncate">
-                <Link href={`/students/${enrollment.studentId}`} className="hover:underline">
-                  {enrollment.studentName ?? "—"}
-                </Link>
-              </dd>
-            </div>
-            <DetailRow
-              icon={<BookOpen className="size-3.5" />}
-              label="Curso"
-              value={enrollment.courseName ?? "—"}
-            />
-            {enrollment.courseLevelName && (
-              <DetailRow
-                icon={<ArrowRight className="size-3.5" />}
-                label="Nível"
-                value={enrollment.courseLevelName}
-              />
-            )}
-            {enrollment.classGroupName && (
-              <DetailRow
-                icon={<Users className="size-3.5" />}
-                label="Turma"
-                value={enrollment.classGroupName}
-              />
-            )}
-            {enrollment.branchName && (
-              <DetailRow
-                icon={<Building2 className="size-3.5" />}
-                label="Filial"
-                value={enrollment.branchName}
-              />
-            )}
-            {enrollment.notes && (
-              <div className="flex gap-2 items-start">
-                <span className="text-muted-foreground shrink-0 mt-0.5">
-                  <ClipboardList className="size-3.5" />
-                </span>
-                <dt className="w-28 shrink-0 text-muted-foreground">Notas</dt>
-                <dd className="text-sm">{enrollment.notes}</dd>
-              </div>
-            )}
-          </dl>
-        </div>
-
-        {/* Status History */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <h3 className="text-sm font-semibold">Histórico de Estado</h3>
-          {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem histórico de estados.</p>
-          ) : (
-            <ul className="space-y-3">
-              {history.map((h) => (
-                <li key={h.id} className="flex items-start gap-3 text-sm">
-                  <div className="size-2 rounded-full bg-muted-foreground mt-1.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {h.fromStatus && (
-                        <>
-                          <StatusBadge status={h.fromStatus} />
-                          <ArrowRight className="size-3.5 text-muted-foreground" />
-                        </>
-                      )}
-                      <StatusBadge status={h.toStatus} />
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(h.changedAt).toLocaleString("pt-PT")}
-                      </span>
-                    </div>
-                    {h.reason && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Motivo: {h.reason}
-                      </p>
-                    )}
+        {/* Two-column layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          {/* Main column */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Student & Course */}
+            <div className="rounded-xl border p-5 space-y-3">
+              <h3 className="text-sm font-semibold">Informação</h3>
+              <dl className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground shrink-0">
+                    <GraduationCap className="size-3.5" />
+                  </span>
+                  <dt className="w-28 shrink-0 text-muted-foreground">Aluno</dt>
+                  <dd className="font-medium truncate">
+                    <Link href={`/students/${enrollment.studentId}`} className="hover:underline">
+                      {enrollment.studentName ?? "—"}
+                    </Link>
+                  </dd>
+                </div>
+                <DetailRow
+                  icon={<BookOpen className="size-3.5" />}
+                  label="Curso"
+                  value={enrollment.courseName ?? "—"}
+                />
+                {enrollment.courseLevelName && (
+                  <DetailRow
+                    icon={<ArrowRight className="size-3.5" />}
+                    label="Nível"
+                    value={enrollment.courseLevelName}
+                  />
+                )}
+                {enrollment.classGroupName && (
+                  <DetailRow
+                    icon={<Users className="size-3.5" />}
+                    label="Turma"
+                    value={enrollment.classGroupName}
+                  />
+                )}
+                {enrollment.branchName && (
+                  <DetailRow
+                    icon={<Building2 className="size-3.5" />}
+                    label="Filial"
+                    value={enrollment.branchName}
+                  />
+                )}
+                {enrollment.notes && (
+                  <div className="flex gap-2 items-start">
+                    <span className="text-muted-foreground shrink-0 mt-0.5">
+                      <ClipboardList className="size-3.5" />
+                    </span>
+                    <dt className="w-28 shrink-0 text-muted-foreground">Notas</dt>
+                    <dd className="text-sm">{enrollment.notes}</dd>
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Faturas e Pagamentos */}
-        <div className="rounded-xl border p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CreditCard className="size-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Faturas e Pagamentos</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/invoices?enrollmentId=${enrollment.id}`}>
-                  Ver faturas
-                </Link>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/payments?search=${enrollment.enrollmentNumber ?? enrollment.id}`}>
-                  Ver pagamentos
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Academic Progress */}
-        {canViewProgress && (
-          <div className="rounded-xl border p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="size-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Progresso Académico</h3>
-              </div>
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/students/${enrollment.studentId}/transcript`}>
-                  <FileText className="size-3.5 mr-1.5" />
-                  Boletim
-                </Link>
-              </Button>
+                )}
+              </dl>
             </div>
 
-            {academicProgress.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Sem notas registadas para esta matrícula.</p>
-            ) : (
-              <Accordion type="multiple" className="space-y-2">
-                {academicProgress.map((subject) => {
-                  const statusVariant = PROGRESS_BADGE_VARIANT[subject.status] ?? "outline";
-                  return (
-                    <AccordionItem
-                      key={subject.levelSubjectId}
-                      value={subject.levelSubjectId}
-                      className="border rounded-lg px-4"
-                    >
-                      <AccordionTrigger className="py-3 hover:no-underline">
-                        <div className="flex items-center justify-between w-full pr-2">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span className="text-sm font-medium truncate">{subject.subjectName}</span>
-                            <Badge variant={statusVariant} className="text-xs shrink-0">
-                              {PROGRESS_STATUS_LABELS[subject.status] ?? subject.status}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-4 shrink-0 text-sm">
-                            {subject.finalGrade != null && (
-                              <span className="font-mono font-semibold">
-                                {subject.finalGrade.toLocaleString("pt-PT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                                {subject.minimumPassingGrade != null && (
-                                  <span className="text-muted-foreground font-normal text-xs ml-1">
-                                    / mín. {subject.minimumPassingGrade}
+            {/* Academic Progress */}
+            {canViewProgress && (
+              <div className="rounded-xl border p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="size-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">Progresso Académico</h3>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/students/${enrollment.studentId}/transcript`}>
+                      <FileText className="size-3.5 mr-1.5" />
+                      Boletim
+                    </Link>
+                  </Button>
+                </div>
+
+                {academicProgress.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Sem notas registadas para esta matrícula.</p>
+                ) : (
+                  <Accordion type="multiple" className="space-y-2">
+                    {academicProgress.map((subject) => {
+                      const statusVariant = PROGRESS_BADGE_VARIANT[subject.status] ?? "outline";
+                      return (
+                        <AccordionItem
+                          key={subject.levelSubjectId}
+                          value={subject.levelSubjectId}
+                          className="border rounded-lg px-4"
+                        >
+                          <AccordionTrigger className="py-3 hover:no-underline">
+                            <div className="flex items-center justify-between w-full pr-2">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <span className="text-sm font-medium truncate">{subject.subjectName}</span>
+                                <Badge variant={statusVariant} className="text-xs shrink-0">
+                                  {PROGRESS_STATUS_LABELS[subject.status] ?? subject.status}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-4 shrink-0 text-sm">
+                                {subject.finalGrade != null && (
+                                  <span className="font-mono font-semibold">
+                                    {subject.finalGrade.toLocaleString("pt-PT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                    {subject.minimumPassingGrade != null && (
+                                      <span className="text-muted-foreground font-normal text-xs ml-1">
+                                        / mín. {subject.minimumPassingGrade}
+                                      </span>
+                                    )}
                                   </span>
                                 )}
+                                <span className="text-xs text-muted-foreground">
+                                  {subject.gradedCount}/{subject.components.length} componentes
+                                </span>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="pb-3">
+                            <div className="space-y-2">
+                              {subject.missingRequiredCount > 0 && (
+                                <p className="text-xs text-amber-600 dark:text-amber-400">
+                                  {subject.missingRequiredCount} componente(s) obrigatório(s) sem nota
+                                </p>
+                              )}
+                              {subject.components.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">Sem componentes configurados.</p>
+                              ) : (
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b text-muted-foreground">
+                                      <th className="text-left py-1.5 font-medium">Componente</th>
+                                      <th className="text-right py-1.5 font-medium w-20">Peso</th>
+                                      <th className="text-right py-1.5 font-medium w-28">Nota</th>
+                                      <th className="text-right py-1.5 font-medium w-24">Normalizada</th>
+                                      <th className="text-left py-1.5 font-medium w-28 pl-3">Fonte</th>
+                                      <th className="text-left py-1.5 font-medium w-28 pl-3">Data</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y">
+                                    {subject.components.map((comp) => (
+                                      <tr key={comp.componentId} className="text-muted-foreground hover:text-foreground">
+                                        <td className="py-1.5">
+                                          <span className={comp.isRequired ? "font-medium text-foreground" : ""}>
+                                            {comp.componentName}
+                                          </span>
+                                          {comp.isRequired && (
+                                            <span className="ml-1 text-destructive">*</span>
+                                          )}
+                                        </td>
+                                        <td className="text-right py-1.5 tabular-nums">
+                                          {comp.weight > 0 ? `${comp.weight}%` : "—"}
+                                        </td>
+                                        <td className="text-right py-1.5 tabular-nums font-mono">
+                                          {comp.grade != null
+                                            ? `${comp.grade.toLocaleString("pt-PT")} / ${comp.maxGrade}`
+                                            : <span className="text-muted-foreground/50">—</span>}
+                                        </td>
+                                        <td className="text-right py-1.5 tabular-nums">
+                                          {comp.normalizedGrade != null
+                                            ? `${comp.normalizedGrade.toLocaleString("pt-PT", { maximumFractionDigits: 1 })}%`
+                                            : <span className="text-muted-foreground/50">—</span>}
+                                        </td>
+                                        <td className="py-1.5 pl-3">
+                                          {comp.sourceType
+                                            ? SOURCE_TYPE_LABELS[comp.sourceType] ?? comp.sourceType
+                                            : <span className="text-muted-foreground/50">—</span>}
+                                        </td>
+                                        <td className="py-1.5 pl-3">
+                                          {comp.gradedAt
+                                            ? new Date(comp.gradedAt).toLocaleDateString("pt-PT")
+                                            : <span className="text-muted-foreground/50">—</span>}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                              {subject.completedAt && (
+                                <p className="text-xs text-muted-foreground pt-1">
+                                  Concluído a {new Date(subject.completedAt).toLocaleDateString("pt-PT")}
+                                </p>
+                              )}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
+                )}
+              </div>
+            )}
+
+            {/* Level Progress */}
+            {canViewLevelProgress && (
+              <div className="rounded-xl border p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Layers className="size-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">Progressão por Nível</h3>
+                  </div>
+                  {courseProgressData && (
+                    <div className="flex items-center gap-2">
+                      {courseProgressData.finalGrade != null && (
+                        <span className="text-sm font-mono font-semibold">
+                          {parseFloat(String(courseProgressData.finalGrade)).toLocaleString("pt-PT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                        </span>
+                      )}
+                      <Badge variant={LEVEL_PROGRESS_BADGE_VARIANT[courseProgressData.status] ?? "outline"} className="text-xs">
+                        {LEVEL_PROGRESS_STATUS_LABELS[courseProgressData.status] ?? courseProgressData.status}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+
+                {levelProgressData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Sem dados de progressão registados.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {levelProgressData.map((lp) => {
+                      const variant = LEVEL_PROGRESS_BADGE_VARIANT[lp.status] ?? "outline";
+                      return (
+                        <div key={lp.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <TrendingUp className="size-3.5 text-muted-foreground shrink-0" />
+                            <span className="font-medium truncate">{lp.courseLevel.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            {lp.earnedCredits != null && lp.earnedCredits > 0 && (
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {lp.earnedCredits} créd.
                               </span>
                             )}
-                            <span className="text-xs text-muted-foreground">
-                              {subject.gradedCount}/{subject.components.length} componentes
-                            </span>
+                            {lp.finalGrade != null && (
+                              <span className="font-mono font-semibold tabular-nums">
+                                {parseFloat(String(lp.finalGrade)).toLocaleString("pt-PT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                              </span>
+                            )}
+                            <Badge variant={variant} className="text-xs">
+                              {LEVEL_PROGRESS_STATUS_LABELS[lp.status] ?? lp.status}
+                            </Badge>
                           </div>
                         </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="pb-3">
-                        <div className="space-y-2">
-                          {subject.missingRequiredCount > 0 && (
-                            <p className="text-xs text-amber-600 dark:text-amber-400">
-                              {subject.missingRequiredCount} componente(s) obrigatório(s) sem nota
-                            </p>
-                          )}
-                          {subject.components.length === 0 ? (
-                            <p className="text-xs text-muted-foreground">Sem componentes configurados.</p>
-                          ) : (
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className="border-b text-muted-foreground">
-                                  <th className="text-left py-1.5 font-medium">Componente</th>
-                                  <th className="text-right py-1.5 font-medium w-20">Peso</th>
-                                  <th className="text-right py-1.5 font-medium w-28">Nota</th>
-                                  <th className="text-right py-1.5 font-medium w-24">Normalizada</th>
-                                  <th className="text-left py-1.5 font-medium w-28 pl-3">Fonte</th>
-                                  <th className="text-left py-1.5 font-medium w-28 pl-3">Data</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y">
-                                {subject.components.map((comp) => (
-                                  <tr key={comp.componentId} className="text-muted-foreground hover:text-foreground">
-                                    <td className="py-1.5">
-                                      <span className={comp.isRequired ? "font-medium text-foreground" : ""}>
-                                        {comp.componentName}
-                                      </span>
-                                      {comp.isRequired && (
-                                        <span className="ml-1 text-destructive">*</span>
-                                      )}
-                                    </td>
-                                    <td className="text-right py-1.5 tabular-nums">
-                                      {comp.weight > 0 ? `${comp.weight}%` : "—"}
-                                    </td>
-                                    <td className="text-right py-1.5 tabular-nums font-mono">
-                                      {comp.grade != null
-                                        ? `${comp.grade.toLocaleString("pt-PT")} / ${comp.maxGrade}`
-                                        : <span className="text-muted-foreground/50">—</span>}
-                                    </td>
-                                    <td className="text-right py-1.5 tabular-nums">
-                                      {comp.normalizedGrade != null
-                                        ? `${comp.normalizedGrade.toLocaleString("pt-PT", { maximumFractionDigits: 1 })}%`
-                                        : <span className="text-muted-foreground/50">—</span>}
-                                    </td>
-                                    <td className="py-1.5 pl-3">
-                                      {comp.sourceType
-                                        ? SOURCE_TYPE_LABELS[comp.sourceType] ?? comp.sourceType
-                                        : <span className="text-muted-foreground/50">—</span>}
-                                    </td>
-                                    <td className="py-1.5 pl-3">
-                                      {comp.gradedAt
-                                        ? new Date(comp.gradedAt).toLocaleDateString("pt-PT")
-                                        : <span className="text-muted-foreground/50">—</span>}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          )}
-                          {subject.completedAt && (
-                            <p className="text-xs text-muted-foreground pt-1">
-                              Concluído a {new Date(subject.completedAt).toLocaleDateString("pt-PT")}
-                            </p>
-                          )}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {courseProgressData?.progressReason && (
+                  <p className="text-xs text-muted-foreground">{courseProgressData.progressReason}</p>
+                )}
+              </div>
             )}
           </div>
-        )}
 
-        {/* Level Progress */}
-        {canViewLevelProgress && (
-          <div className="rounded-xl border p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Layers className="size-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Progressão por Nível</h3>
-              </div>
-              {courseProgressData && (
-                <div className="flex items-center gap-2">
-                  {courseProgressData.finalGrade != null && (
-                    <span className="text-sm font-mono font-semibold">
-                      {parseFloat(String(courseProgressData.finalGrade)).toLocaleString("pt-PT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                    </span>
-                  )}
-                  <Badge variant={LEVEL_PROGRESS_BADGE_VARIANT[courseProgressData.status] ?? "outline"} className="text-xs">
-                    {LEVEL_PROGRESS_STATUS_LABELS[courseProgressData.status] ?? courseProgressData.status}
-                  </Badge>
-                </div>
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Status History */}
+            <div className="rounded-xl border p-5 space-y-4">
+              <h3 className="text-sm font-semibold">Histórico de Estado</h3>
+              {history.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sem histórico de estados.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {history.map((h) => (
+                    <li key={h.id} className="flex items-start gap-3 text-sm">
+                      <div className="size-2 rounded-full bg-muted-foreground mt-1.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {h.fromStatus && (
+                            <>
+                              <StatusBadge status={h.fromStatus} />
+                              <ArrowRight className="size-3.5 text-muted-foreground" />
+                            </>
+                          )}
+                          <StatusBadge status={h.toStatus} />
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(h.changedAt).toLocaleString("pt-PT")}
+                          </span>
+                        </div>
+                        {h.reason && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Motivo: {h.reason}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
 
-            {levelProgressData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Sem dados de progressão registados.</p>
-            ) : (
-              <div className="space-y-2">
-                {levelProgressData.map((lp) => {
-                  const variant = LEVEL_PROGRESS_BADGE_VARIANT[lp.status] ?? "outline";
-                  return (
-                    <div key={lp.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <TrendingUp className="size-3.5 text-muted-foreground shrink-0" />
-                        <span className="font-medium truncate">{lp.courseLevel.name}</span>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        {lp.earnedCredits != null && lp.earnedCredits > 0 && (
-                          <span className="text-xs text-muted-foreground tabular-nums">
-                            {lp.earnedCredits} créd.
-                          </span>
-                        )}
-                        {lp.finalGrade != null && (
-                          <span className="font-mono font-semibold tabular-nums">
-                            {parseFloat(String(lp.finalGrade)).toLocaleString("pt-PT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                          </span>
-                        )}
-                        <Badge variant={variant} className="text-xs">
-                          {LEVEL_PROGRESS_STATUS_LABELS[lp.status] ?? lp.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  );
-                })}
+            {/* Faturas e Pagamentos */}
+            <div className="rounded-xl border p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <CreditCard className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Faturas e Pagamentos</h3>
               </div>
-            )}
+              <div className="flex flex-col gap-2">
+                <Button asChild variant="outline" size="sm" className="w-full justify-start">
+                  <Link href={`/invoices?enrollmentId=${enrollment.id}`}>
+                    Ver faturas
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" size="sm" className="w-full justify-start">
+                  <Link href={`/payments?search=${enrollment.enrollmentNumber ?? enrollment.id}`}>
+                    Ver pagamentos
+                  </Link>
+                </Button>
+              </div>
+            </div>
 
-            {courseProgressData?.progressReason && (
-              <p className="text-xs text-muted-foreground">{courseProgressData.progressReason}</p>
-            )}
+            {/* Placeholder: Attendance */}
+            <div className="rounded-xl border border-dashed p-5 space-y-2">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <ClipboardList className="size-4" />
+                <h3 className="text-sm font-semibold">Assiduidade</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Módulo de assiduidade em desenvolvimento.
+              </p>
+            </div>
+
+            {/* Placeholder: Certificates */}
+            <div className="rounded-xl border border-dashed p-5 space-y-2">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Award className="size-4" />
+                <h3 className="text-sm font-semibold">Certificados</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Módulo de certificados em desenvolvimento.
+              </p>
+            </div>
+
+            {/* Timestamps */}
+            <div className="rounded-xl border p-5 space-y-2">
+              <h3 className="text-sm font-semibold">Registo</h3>
+              <dl className="space-y-2 text-sm">
+                <DetailRow
+                  icon={<Calendar className="size-3.5" />}
+                  label="Criado a"
+                  value={new Date(enrollment.createdAt).toLocaleString("pt-PT")}
+                />
+                <DetailRow
+                  icon={<Calendar className="size-3.5" />}
+                  label="Atualizado a"
+                  value={new Date(enrollment.updatedAt).toLocaleString("pt-PT")}
+                />
+              </dl>
+            </div>
           </div>
-        )}
-
-        {/* Placeholder: Attendance */}
-        <div className="rounded-xl border border-dashed p-5 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <ClipboardList className="size-4" />
-            <h3 className="text-sm font-semibold">Assiduidade</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Módulo de assiduidade em desenvolvimento.
-          </p>
-        </div>
-
-        {/* Placeholder: Certificates */}
-        <div className="rounded-xl border border-dashed p-5 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Award className="size-4" />
-            <h3 className="text-sm font-semibold">Certificados</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Módulo de certificados em desenvolvimento.
-          </p>
-        </div>
-
-        {/* Timestamps */}
-        <div className="rounded-xl border p-5 space-y-2">
-          <h3 className="text-sm font-semibold">Registo</h3>
-          <dl className="space-y-2 text-sm">
-            <DetailRow
-              icon={<Calendar className="size-3.5" />}
-              label="Criado a"
-              value={new Date(enrollment.createdAt).toLocaleString("pt-PT")}
-            />
-            <DetailRow
-              icon={<Calendar className="size-3.5" />}
-              label="Atualizado a"
-              value={new Date(enrollment.updatedAt).toLocaleString("pt-PT")}
-            />
-          </dl>
         </div>
       </div>
     </>

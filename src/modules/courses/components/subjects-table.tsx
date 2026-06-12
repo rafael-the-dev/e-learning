@@ -129,7 +129,7 @@ export function SubjectsTable({ subjects, canManage }: SubjectsTableProps) {
         )}
       </div>
 
-      {/* Table */}
+      {/* Grid */}
       {filtered.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="size-8" />}
@@ -141,29 +141,24 @@ export function SubjectsTable({ subjects, canManage }: SubjectsTableProps) {
           }
         />
       ) : (
-        <div className="rounded-xl border divide-y">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((subject) => (
             <div
               key={subject.id}
-              className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
+              className="group relative rounded-xl border bg-card p-5 cursor-pointer hover:border-foreground/20 hover:shadow-sm transition-all flex flex-col gap-4"
               onClick={() => router.push(`/subjects/${subject.id}`)}
             >
-              <div className="min-w-0">
-                <p className="font-medium text-sm truncate">{subject.name}</p>
-                {subject.code && (
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {subject.code}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <StatusBadge status={subject.status} />
+              {/* Header */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="rounded-lg bg-muted p-2 shrink-0">
+                  <BookOpen className="size-4 text-muted-foreground" />
+                </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-7"
+                      className="size-7 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <MoreHorizontal className="size-4" />
@@ -176,14 +171,14 @@ export function SubjectsTable({ subjects, canManage }: SubjectsTableProps) {
                     </DropdownMenuItem>
                     {canManage && (
                       <>
-                        <DropdownMenuItem onClick={() => setEditTarget(subject)}>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditTarget(subject); }}>
                           <Pencil className="size-4" />
                           Editar
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {subject.status !== "ARCHIVED" && (
                           <DropdownMenuItem
-                            onClick={() => setArchiveTarget(subject)}
+                            onClick={(e) => { e.stopPropagation(); setArchiveTarget(subject); }}
                             className="text-destructive focus:text-destructive"
                           >
                             <Archive className="size-4" />
@@ -191,7 +186,7 @@ export function SubjectsTable({ subjects, canManage }: SubjectsTableProps) {
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
-                          onClick={() => setDeleteTarget(subject)}
+                          onClick={(e) => { e.stopPropagation(); setDeleteTarget(subject); }}
                           className="text-destructive focus:text-destructive"
                         >
                           <Trash2 className="size-4" />
@@ -201,6 +196,22 @@ export function SubjectsTable({ subjects, canManage }: SubjectsTableProps) {
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 min-w-0 space-y-1">
+                <p className="font-semibold text-sm leading-snug line-clamp-2">{subject.name}</p>
+                {subject.code && (
+                  <p className="text-xs text-muted-foreground font-mono">{subject.code}</p>
+                )}
+                {subject.description && (
+                  <p className="text-xs text-muted-foreground line-clamp-2 pt-1">{subject.description}</p>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between">
+                <StatusBadge status={subject.status} />
               </div>
             </div>
           ))}
