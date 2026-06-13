@@ -134,7 +134,7 @@ export default async function LessonDetailPage({
         }
       />
 
-      <div className="p-8 space-y-8 max-w-4xl">
+      <div className="p-4 sm:p-8 space-y-8">
         {/* Status / type / duration */}
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant={statusVariant}>
