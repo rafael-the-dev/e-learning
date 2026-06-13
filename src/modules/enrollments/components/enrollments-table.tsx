@@ -6,14 +6,6 @@ import { type PaginationState } from "@tanstack/react-table";
 import { DataTable } from "@/shared/components/data/data-table";
 import { EmptyState } from "@/shared/components/layout/empty-state";
 import { ConfirmDialog } from "@/shared/components/feedback/confirm-dialog";
-import { Input } from "@/shared/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +16,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Button } from "@/shared/components/ui/button";
 import { Label } from "@/shared/components/ui/label";
-import { Input as ReasonInput } from "@/shared/components/ui/input";
+import { Input } from "@/shared/components/ui/input";
 import { getEnrollmentColumns } from "./enrollment-columns";
 import {
   activateEnrollmentAction,
@@ -35,28 +27,11 @@ import {
 } from "@/modules/enrollments/actions/enrollment.actions";
 import { toast } from "@/shared/hooks/use-toast";
 import { ClipboardList } from "lucide-react";
-import { ENROLLMENT_STATUS_LABELS, FINANCIAL_STATUS_LABELS } from "@/modules/enrollments/types";
 import type { Enrollment } from "@/modules/enrollments/types";
 import type { PaginatedResult } from "@/shared/types/common";
 
-interface FilterOption {
-  id: string;
-  name: string;
-}
-
 interface EnrollmentsTableProps {
   result: PaginatedResult<Enrollment>;
-  courses: FilterOption[];
-  branches: FilterOption[];
-  classGroups: FilterOption[];
-  academicYears: FilterOption[];
-  defaultSearch?: string;
-  defaultStatus?: string;
-  defaultCourseId?: string;
-  defaultBranchId?: string;
-  defaultClassGroupId?: string;
-  defaultAcademicYearId?: string;
-  defaultFinancialStatus?: string;
   canEdit: boolean;
   canActivate: boolean;
   canSuspend: boolean;
@@ -107,17 +82,6 @@ const dialogConfig: Record<
 
 export function EnrollmentsTable({
   result,
-  courses,
-  branches,
-  classGroups,
-  academicYears,
-  defaultSearch = "",
-  defaultStatus = "",
-  defaultCourseId = "",
-  defaultBranchId = "",
-  defaultClassGroupId = "",
-  defaultAcademicYearId = "",
-  defaultFinancialStatus = "",
   canEdit,
   canActivate,
   canSuspend,
@@ -128,25 +92,16 @@ export function EnrollmentsTable({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [search, setSearch] = React.useState(defaultSearch);
   const [actionTarget, setActionTarget] = React.useState<Enrollment | null>(null);
   const [actionDialog, setActionDialog] = React.useState<ActionDialog>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<Enrollment | null>(null);
   const [reason, setReason] = React.useState("");
   const [isProcessing, setIsProcessing] = React.useState(false);
 
-  function updateParams(updates: Record<string, string>) {
+  function goToPage(pageIndex: number) {
     const params = new URLSearchParams(searchParams.toString());
-    Object.entries(updates).forEach(([k, v]) => {
-      if (v) params.set(k, v);
-      else params.delete(k);
-    });
-    params.set("page", "1");
+    params.set("page", String(pageIndex + 1));
     router.push(`?${params.toString()}`);
-  }
-
-  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") updateParams({ search });
   }
 
   function openAction(type: NonNullable<ActionDialog>, enrollment: Enrollment) {
@@ -165,10 +120,6 @@ export function EnrollmentsTable({
     pageIndex: result.page - 1,
     pageSize: result.pageSize,
   };
-
-  function handlePaginationChange(p: PaginationState) {
-    updateParams({ page: String(p.pageIndex + 1) });
-  }
 
   const columns = getEnrollmentColumns({
     onActivate: (e) => openAction("activate", e),
@@ -230,113 +181,6 @@ export function EnrollmentsTable({
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <Input
-          placeholder="Pesquisar aluno ou n.º matrícula..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
-          className="max-w-xs"
-        />
-        <Select
-          value={defaultStatus || "all"}
-          onValueChange={(v) => updateParams({ status: v === "all" ? "" : v })}
-        >
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Estado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os estados</SelectItem>
-            {Object.entries(ENROLLMENT_STATUS_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={defaultCourseId || "all"}
-          onValueChange={(v) => updateParams({ courseId: v === "all" ? "" : v })}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Curso" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os cursos</SelectItem>
-            {courses.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={defaultBranchId || "all"}
-          onValueChange={(v) => updateParams({ branchId: v === "all" ? "" : v })}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Filial" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as filiais</SelectItem>
-            {branches.map((b) => (
-              <SelectItem key={b.id} value={b.id}>
-                {b.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={defaultClassGroupId || "all"}
-          onValueChange={(v) => updateParams({ classGroupId: v === "all" ? "" : v })}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Turma" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as turmas</SelectItem>
-            {classGroups.map((g) => (
-              <SelectItem key={g.id} value={g.id}>
-                {g.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={defaultAcademicYearId || "all"}
-          onValueChange={(v) => updateParams({ yearId: v === "all" ? "" : v })}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Ano Letivo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os anos</SelectItem>
-            {academicYears.map((y) => (
-              <SelectItem key={y.id} value={y.id}>
-                {y.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={defaultFinancialStatus || "all"}
-          onValueChange={(v) => updateParams({ financialStatus: v === "all" ? "" : v })}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Est. Financeiro" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os estados</SelectItem>
-            {Object.entries(FINANCIAL_STATUS_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       {result.data.length === 0 ? (
         <EmptyState
           icon={<ClipboardList className="size-8" />}
@@ -349,11 +193,10 @@ export function EnrollmentsTable({
           data={result.data}
           totalRows={result.total}
           pagination={pagination}
-          onPaginationChange={handlePaginationChange}
+          onPaginationChange={(p) => goToPage(p.pageIndex)}
         />
       )}
 
-      {/* Status action dialog */}
       <Dialog open={!!actionDialog} onOpenChange={(open) => !open && closeAction()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -363,7 +206,7 @@ export function EnrollmentsTable({
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
               <Label htmlFor="enroll-reason">{currentDialog?.reasonLabel}</Label>
-              <ReasonInput
+              <Input
                 id="enroll-reason"
                 placeholder="Introduza o motivo..."
                 value={reason}

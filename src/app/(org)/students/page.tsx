@@ -3,7 +3,9 @@ import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Button } from "@/shared/components/ui/button";
+import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/components/ui/tabs";
 import {
   ExecutiveMainGrid,
   ExecutiveLeftColumn,
@@ -11,9 +13,7 @@ import {
   ExecutiveKpiGrid,
   DashboardSideCard,
   DashboardInsightRow,
-  QuickActionTile,
 } from "@/shared/components/layout/executive-dashboard";
-import { ApexDonutChart, ApexBarChart, ApexLineChart } from "@/shared/components/charts";
 import { requirePermission } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -31,6 +31,9 @@ import {
   getPendingEnrollmentsCount,
 } from "@/modules/students/services/student.service";
 import { StudentsTable } from "@/modules/students/components/students-table";
+import { StudentTableFilters } from "@/modules/students/components/student-table-filters";
+import { StudentActionBar } from "@/modules/students/components/student-action-bar";
+import { StudentStatusChart } from "@/modules/students/components/student-status-chart";
 import { RiskWatchlist } from "@/modules/students/components/risk-watchlist";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { cn } from "@/shared/lib/utils";
@@ -45,9 +48,6 @@ import {
   AlertTriangle,
   ShieldAlert,
   Users,
-  Lightbulb,
-  Eye,
-  LayoutGrid,
 } from "lucide-react";
 import type { AuthContext } from "@/server/auth/context";
 
@@ -143,11 +143,7 @@ export default async function StudentsPage({
     colors: statusEntries.map(([k]) => STATUS_COLORS[k] ?? "#94a3b8"),
   };
 
-  const coursesBar = {
-    categories: topCourses.slice(0, 8).map((c) => c.courseName),
-    series: [{ name: "Alunos Ativos", data: topCourses.slice(0, 8).map((c) => c.activeCount) }],
-    colors: ["#6366f1"],
-  };
+  const maxCourseCount = topCourses[0]?.activeCount ?? 1;
 
   return (
     <>
@@ -176,36 +172,46 @@ export default async function StudentsPage({
         }
       />
 
+      <StudentActionBar
+        pendingStudents={statusCounts["PENDING"] ?? 0}
+        pendingEnrollments={pendingEnrollments}
+        withPendingPayments={withPendingPayments}
+        showEnrollments={canViewEnrollments}
+        showPayments={canViewPayments}
+      />
+
       <div className="p-4 sm:p-8 space-y-6">
 
         {/* KPI Cards */}
         <ExecutiveKpiGrid>
-          <StatCard title="Total de Alunos" value={totalStudents} icon={<GraduationCap className="size-5" />} description={`${activePct}% estão ativos`} />
-          <StatCard title="Alunos Ativos" value={activeStudents} icon={<UserCheck className="size-5" />} description="com acesso ativo" />
-          <StatCard title="Novos Este Mês" value={newThisMonth} icon={<UserPlus className="size-5" />} description="registados este mês" />
-          <StatCard title="Suspensos" value={suspendedStudents} icon={<UserX className="size-5" />} description="acesso suspenso" />
+          <StatCard title="Total de Alunos" value={totalStudents} icon={<GraduationCap className="size-4 text-muted-foreground" />} description={`${activePct}% estão ativos`} />
+          <StatCard title="Alunos Ativos" value={activeStudents} icon={<UserCheck className="size-4 text-green-500" />} description="com acesso ativo" />
+          <StatCard title="Novos Este Mês" value={newThisMonth} icon={<UserPlus className="size-4 text-blue-500" />} description="registados este mês" />
+          <StatCard title="Suspensos" value={suspendedStudents} icon={<UserX className="size-4 text-orange-500" />} description="acesso suspenso" />
           {canViewEnrollments && (
-            <StatCard title="Matrículas Pendentes" value={pendingEnrollments} icon={<ClipboardList className="size-5" />} description="aguardam confirmação" />
+            <StatCard title="Matrículas Pendentes" value={pendingEnrollments} icon={<ClipboardList className="size-4 text-amber-500" />} description="aguardam confirmação" />
           )}
           {canViewPayments && (
-            <StatCard title="Pag. Pendentes" value={withPendingPayments} icon={<AlertCircle className="size-5" />} description="faturas por liquidar" />
+            <StatCard title="Pag. Pendentes" value={withPendingPayments} icon={<AlertCircle className="size-4 text-red-500" />} description="faturas por liquidar" />
           )}
-          <StatCard title="Presença Abaixo" value={withLowAttendance} icon={<Clock className="size-5" />} description="abaixo de 75%" />
-          <StatCard title="Risco Académico" value={atAcademicRisk} icon={<AlertTriangle className="size-5" />} description="com disciplinas reprovadas" />
+          <StatCard title="Presença Abaixo" value={withLowAttendance} icon={<Clock className="size-4 text-amber-500" />} description="abaixo de 75%" />
+          <StatCard title="Risco Académico" value={atAcademicRisk} icon={<AlertTriangle className="size-4 text-red-500" />} description="com disciplinas reprovadas" />
         </ExecutiveKpiGrid>
 
         {/* Two-column main content */}
         <ExecutiveMainGrid>
 
-          {/* LEFT: Watchlist + Table */}
+          {/* LEFT: Risk Watchlist + Table */}
           <ExecutiveLeftColumn>
             {riskStudents.length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
-                  <div className="flex items-center gap-2">
-                    <ShieldAlert className="size-4 text-muted-foreground" />
-                    <CardTitle className="text-sm font-medium">Watchlist de Risco</CardTitle>
-                    <span className="ml-auto text-xs text-muted-foreground">{riskStudents.length} aluno(s)</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="size-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-medium">Watchlist de Risco</CardTitle>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">{riskStudents.length}</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0 pb-2">
@@ -216,31 +222,33 @@ export default async function StudentsPage({
 
             <Card>
               <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <Users className="size-4 text-muted-foreground" />
-                  <CardTitle className="text-sm font-medium">Lista de Alunos</CardTitle>
-                  <span className="ml-auto text-xs text-muted-foreground">{result.total} aluno(s)</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="size-4 text-muted-foreground" />
+                    <CardTitle className="text-sm font-medium">Alunos</CardTitle>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">{result.total.toLocaleString("pt-PT")}</Badge>
                 </div>
-              </CardHeader>
-              <CardContent className="p-0 sm:px-4 sm:pb-4">
-                <StudentsTable
-                  result={result}
+                <StudentTableFilters
                   branches={branches}
                   defaultSearch={search}
                   defaultStatus={status}
                   defaultBranchId={branchId}
                 />
+              </CardHeader>
+              <CardContent className="p-0 sm:px-4 sm:pb-4">
+                <StudentsTable result={result} />
               </CardContent>
             </Card>
           </ExecutiveLeftColumn>
 
-          {/* RIGHT: Insights + Quick Actions + Charts */}
+          {/* RIGHT: Insights + Tabbed analysis */}
           <ExecutiveRightColumn>
 
             {insights.length > 0 && (
               <DashboardSideCard
-                title="Alertas"
-                icon={<Lightbulb className="size-4" />}
+                title="Informações e Alertas"
+                icon={<AlertCircle className="size-4" />}
                 badge={<span className="text-xs text-muted-foreground">{insights.length}</span>}
               >
                 <div className="space-y-2">
@@ -249,66 +257,72 @@ export default async function StudentsPage({
               </DashboardSideCard>
             )}
 
-            <DashboardSideCard title="Ações Rápidas" icon={<LayoutGrid className="size-4" />}>
-              <div className="space-y-2">
-                {canCreateStudents && (
-                  <QuickActionTile href="/students/new" icon={<UserPlus className="size-4" />} label="Novo Aluno" variant="success" />
-                )}
-                {canCreateEnrollments && (
-                  <QuickActionTile href="/enrollments/new" icon={<ClipboardList className="size-4" />} label="Nova Matrícula" />
-                )}
-                {canViewPayments && (
-                  <QuickActionTile
-                    href="/invoices?status=PENDING"
-                    icon={<AlertCircle className="size-4" />}
-                    label="Pagamentos Pendentes"
-                    description={`${withPendingPayments} alunos`}
-                    variant={withPendingPayments > 0 ? "warning" : "default"}
-                  />
-                )}
-                <QuickActionTile
-                  href="/students"
-                  icon={<Eye className="size-4" />}
-                  label="Ver Todos os Alunos"
-                  description={`${totalStudents} registados`}
-                />
-              </div>
-            </DashboardSideCard>
-
-            <DashboardSideCard title="Alunos por Estado" icon={<GraduationCap className="size-4" />}>
-              <ApexDonutChart data={statusDonut} height={220} />
-            </DashboardSideCard>
-
-            {topCourses.length > 0 && (
-              <DashboardSideCard title="Alunos por Curso" icon={<Users className="size-4" />}>
-                <ApexBarChart data={coursesBar} height={200} horizontal />
-              </DashboardSideCard>
-            )}
-
-            {topClassGroups.length > 0 && (
-              <DashboardSideCard title="Turmas por Ocupação">
-                <div className="space-y-3">
-                  {topClassGroups.map((cg) => (
-                    <div key={cg.id} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <Link href={`/class-groups/${cg.id}`} className="truncate hover:underline">
-                          {cg.name}
-                        </Link>
-                        <span className="font-medium tabular-nums shrink-0 ml-2">
-                          {cg.currentCount}/{cg.capacity}
-                        </span>
+            <Card>
+              <Tabs defaultValue="courses">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Análise</CardTitle>
+                  <TabsList className="w-full mt-2 grid grid-cols-2 h-8">
+                    <TabsTrigger value="courses" className="text-xs">Cursos</TabsTrigger>
+                    <TabsTrigger value="classes" className="text-xs">Turmas</TabsTrigger>
+                  </TabsList>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <TabsContent value="courses" className="mt-0">
+                    {topCourses.length > 0 ? (
+                      <div className="space-y-3 pt-1">
+                        {topCourses.slice(0, 8).map((c) => {
+                          const pct = maxCourseCount > 0 ? Math.round((c.activeCount / maxCourseCount) * 100) : 0;
+                          return (
+                            <div key={c.courseId} className="space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="truncate">{c.courseName}</span>
+                                <span className="font-medium tabular-nums shrink-0 ml-2">
+                                  {c.activeCount.toLocaleString("pt-PT")}
+                                </span>
+                              </div>
+                              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                <div className="h-full rounded-full bg-indigo-500" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                        <div
-                          className={cn("h-full rounded-full", cg.occupancyPct >= 90 ? "bg-red-500" : cg.occupancyPct >= 70 ? "bg-amber-500" : "bg-emerald-500")}
-                          style={{ width: `${cg.occupancyPct}%` }}
-                        />
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-4 text-center">Sem dados de cursos.</p>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="classes" className="mt-0">
+                    {topClassGroups.length > 0 ? (
+                      <div className="space-y-3 pt-1">
+                        {topClassGroups.map((cg) => (
+                          <div key={cg.id} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <Link href={`/class-groups/${cg.id}`} className="truncate hover:underline">
+                                {cg.name}
+                              </Link>
+                              <span className="font-medium tabular-nums shrink-0 ml-2">
+                                {cg.currentCount}/{cg.capacity}
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full", cg.occupancyPct >= 90 ? "bg-red-500" : cg.occupancyPct >= 70 ? "bg-amber-500" : "bg-emerald-500")}
+                                style={{ width: `${cg.occupancyPct}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </DashboardSideCard>
-            )}
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-4 text-center">Sem turmas.</p>
+                    )}
+                  </TabsContent>
+                </CardContent>
+              </Tabs>
+            </Card>
+
+            <StudentStatusChart data={statusDonut} />
 
           </ExecutiveRightColumn>
         </ExecutiveMainGrid>

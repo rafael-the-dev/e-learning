@@ -2,12 +2,14 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   BookOpen, CheckCircle2, Clock, Users, AlertTriangle, XCircle,
-  BadgeCheck, Wallet, UserX, Plus, FileText, CreditCard, Eye, AlertCircle,
+  BadgeCheck, Wallet, UserX, Plus, AlertCircle,
 } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Button } from "@/shared/components/ui/button";
+import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/components/ui/tabs";
 import {
   ExecutiveMainGrid,
   ExecutiveLeftColumn,
@@ -15,9 +17,10 @@ import {
   ExecutiveKpiGrid,
   DashboardSideCard,
   DashboardInsightRow,
-  QuickActionTile,
 } from "@/shared/components/layout/executive-dashboard";
-import { ApexDonutChart, ApexBarChart, ApexLineChart } from "@/shared/components/charts";
+import { ApexDonutChart, ApexLineChart } from "@/shared/components/charts";
+import { EnrollmentActionBar } from "@/modules/enrollments/components/enrollment-action-bar";
+import { EnrollmentTableFilters } from "@/modules/enrollments/components/enrollment-table-filters";
 import { requirePermission } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -117,17 +120,14 @@ export default async function EnrollmentsPage({
     colors: statusItems.map((i) => i.color),
   };
 
-  const coursesBar = {
-    categories: courseDistribution.slice(0, 8).map((c) => c.courseName),
-    series: [{ name: "Matrículas", data: courseDistribution.slice(0, 8).map((c) => c.activeCount) }],
-    colors: ["#6366f1"],
-  };
-
   const trendLine = {
     categories: monthlyTrend.map((m) => formatMonthKey(m.month)),
     series: [{ name: "Matrículas", data: monthlyTrend.map((m) => m.total) }],
     colors: ["#22c55e"],
   };
+
+  const maxCourseCount = courseDistribution[0]?.activeCount ?? 1;
+  const watchlistPreview = watchlist.slice(0, 5);
 
   return (
     <>
@@ -144,6 +144,13 @@ export default async function EnrollmentsPage({
             </Button>
           ) : undefined
         }
+      />
+
+      <EnrollmentActionBar
+        pendingPaymentCount={kpis.pendingPayment}
+        overdueAccountsCount={kpis.overdueAccounts}
+        activeWithoutInvoiceCount={kpis.activeWithoutInvoice}
+        showFinancial={canViewPayments}
       />
 
       <div className="p-4 sm:p-8 space-y-6">
@@ -164,6 +171,21 @@ export default async function EnrollmentsPage({
           <StatCard title={ENROLLMENT_STATUS_LABELS["COMPLETED"]!} value={kpis.completed} description="Matrículas concluídas" icon={<BadgeCheck className="size-4 text-teal-500" />} />
         </ExecutiveKpiGrid>
 
+        {/* Full-width trend chart */}
+        {monthlyTrend.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium">Novas Matrículas por Mês</CardTitle>
+                <span className="text-xs text-muted-foreground">Últimos 6 meses</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ApexLineChart data={trendLine} height={200} />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Two-column main content */}
         <ExecutiveMainGrid>
 
@@ -172,33 +194,40 @@ export default async function EnrollmentsPage({
             {watchlist.length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
-                  <div className="flex items-center gap-2">
-                    <UserX className="size-4 text-muted-foreground" />
-                    <CardTitle className="text-sm font-medium">Lista de Atenção</CardTitle>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {watchlist.length} {watchlist.length === 1 ? "matrícula" : "matrículas"}
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <UserX className="size-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-medium">Lista de Atenção</CardTitle>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {watchlist.length > 5 && (
+                        <Link
+                          href="/enrollments?status=PENDING_PAYMENT"
+                          className="text-xs text-muted-foreground hover:underline"
+                        >
+                          Ver todos ({watchlist.length})
+                        </Link>
+                      )}
+                      <Badge variant="secondary" className="text-xs">{watchlist.length}</Badge>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0 pb-2">
-                  <EnrollmentWatchlist items={watchlist} />
+                  <EnrollmentWatchlist items={watchlistPreview} />
                 </CardContent>
               </Card>
             )}
 
             <Card>
               <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="size-4 text-muted-foreground" />
-                  <CardTitle className="text-sm font-medium">Todas as Matrículas</CardTitle>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {result.total} {result.total === 1 ? "registo" : "registos"}
-                  </span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="size-4 text-muted-foreground" />
+                    <CardTitle className="text-sm font-medium">Matrículas</CardTitle>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">{result.total.toLocaleString("pt-PT")}</Badge>
                 </div>
-              </CardHeader>
-              <CardContent className="p-0 sm:px-4 sm:pb-4">
-                <EnrollmentsTable
-                  result={result}
+                <EnrollmentTableFilters
                   courses={filterOptions.courses}
                   branches={filterOptions.branches}
                   classGroups={filterOptions.classGroups}
@@ -210,6 +239,11 @@ export default async function EnrollmentsPage({
                   defaultClassGroupId={classGroupId}
                   defaultAcademicYearId={yearId}
                   defaultFinancialStatus={financialStatus}
+                />
+              </CardHeader>
+              <CardContent className="p-0 sm:px-4 sm:pb-4">
+                <EnrollmentsTable
+                  result={result}
                   canEdit={canEdit}
                   canActivate={canActivate}
                   canSuspend={canSuspend}
@@ -221,14 +255,14 @@ export default async function EnrollmentsPage({
             </Card>
           </ExecutiveLeftColumn>
 
-          {/* RIGHT: Insights + Quick Actions + Charts */}
+          {/* RIGHT: Insights + Tabbed analysis */}
           <ExecutiveRightColumn>
 
             {insights.length > 0 && (
               <DashboardSideCard
-                title="Insights Operacionais"
+                title="Informações e Alertas"
                 icon={<AlertCircle className="size-4" />}
-                badge={<span className="text-xs text-muted-foreground">{insights.length} {insights.length === 1 ? "alerta" : "alertas"}</span>}
+                badge={<span className="text-xs text-muted-foreground">{insights.length}</span>}
               >
                 <div className="space-y-2">
                   {insights.map((i) => <DashboardInsightRow key={i.id} insight={i} />)}
@@ -236,37 +270,59 @@ export default async function EnrollmentsPage({
               </DashboardSideCard>
             )}
 
-            <DashboardSideCard title="Ações Rápidas">
-              <div className="space-y-2">
-                {canCreate && (
-                  <QuickActionTile href="/enrollments/new" icon={<Plus className="size-4" />} label="Nova Matrícula" variant="success" />
-                )}
-                <QuickActionTile href="/enrollments?status=PENDING_PAYMENT" icon={<Clock className="size-4" />} label="Aguardam Pagamento" description={`${kpis.pendingPayment} matrículas`} variant={kpis.pendingPayment > 0 ? "warning" : "default"} />
-                {canViewPayments && (
-                  <QuickActionTile href="/enrollments?financialStatus=OVERDUE" icon={<AlertTriangle className="size-4" />} label="Contas Vencidas" description={`${kpis.overdueAccounts} matrículas`} variant={kpis.overdueAccounts > 0 ? "destructive" : "default"} />
-                )}
-                {canViewPayments && (
-                  <QuickActionTile href="/enrollments?financialStatus=NO_INVOICE" icon={<FileText className="size-4" />} label="Sem Fatura" description={`${kpis.activeWithoutInvoice} sem fatura`} variant={kpis.activeWithoutInvoice > 0 ? "warning" : "default"} />
-                )}
-                <QuickActionTile href="/enrollments" icon={<Eye className="size-4" />} label="Ver Todas" description={`${kpis.total} registadas`} />
-              </div>
-            </DashboardSideCard>
+            <Card>
+              <Tabs defaultValue="status">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Análise</CardTitle>
+                  <TabsList className="w-full mt-2 grid grid-cols-2 h-8">
+                    <TabsTrigger value="status" className="text-xs">Estado</TabsTrigger>
+                    <TabsTrigger value="courses" className="text-xs">Cursos</TabsTrigger>
+                  </TabsList>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <TabsContent value="status" className="mt-0">
+                    {statusItems.length > 0 ? (
+                      <ApexDonutChart data={statusDonut} height={200} />
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-4 text-center">Sem matrículas.</p>
+                    )}
+                  </TabsContent>
 
-            <DashboardSideCard title="Distribuição por Estado">
-              <ApexDonutChart data={statusDonut} height={220} />
-            </DashboardSideCard>
-
-            {courseDistribution.length > 0 && (
-              <DashboardSideCard title="Matrículas por Curso">
-                <ApexBarChart data={coursesBar} height={200} horizontal />
-              </DashboardSideCard>
-            )}
-
-            {monthlyTrend.length > 0 && (
-              <DashboardSideCard title="Tendência Mensal" badge={<span className="text-xs text-muted-foreground">6 meses</span>}>
-                <ApexLineChart data={trendLine} height={180} />
-              </DashboardSideCard>
-            )}
+                  <TabsContent value="courses" className="mt-0">
+                    {courseDistribution.length > 0 ? (
+                      <div className="space-y-3 pt-1">
+                        {courseDistribution.slice(0, 8).map((c) => {
+                          const pct = maxCourseCount > 0 ? Math.round((c.activeCount / maxCourseCount) * 100) : 0;
+                          return (
+                            <div key={c.courseId} className="space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                <Link
+                                  href={`/enrollments?courseId=${c.courseId}`}
+                                  className="truncate hover:underline"
+                                >
+                                  {c.courseName}
+                                </Link>
+                                <span className="font-medium tabular-nums shrink-0 ml-2">
+                                  {c.activeCount.toLocaleString("pt-PT")}
+                                </span>
+                              </div>
+                              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-indigo-500"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-4 text-center">Sem dados de cursos.</p>
+                    )}
+                  </TabsContent>
+                </CardContent>
+              </Tabs>
+            </Card>
 
           </ExecutiveRightColumn>
         </ExecutiveMainGrid>

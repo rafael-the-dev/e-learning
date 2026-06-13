@@ -55,8 +55,8 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className={cn("space-y-4", className)}>
-      <div className="rounded-lg border">
-        <table className="w-full text-sm">
+      <div className="rounded-lg border overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr
