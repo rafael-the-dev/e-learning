@@ -18,6 +18,9 @@ export const DomainEventType = {
   INVOICE_OVERDUE: "invoice.overdue",
   INVOICE_CANCELLED: "invoice.cancelled",
 
+  // Billing Jobs
+  BILLING_OVERDUE_DETECTED: "billing.overdue_detected",
+
   // Payment
   PAYMENT_REGISTERED: "payment.registered",
   PAYMENT_CONFIRMED: "payment.confirmed",
@@ -26,6 +29,7 @@ export const DomainEventType = {
 
   // Receipt
   RECEIPT_ISSUED: "receipt.issued",
+  RECEIPT_CANCELLED: "receipt.cancelled",
 
   // Wallet
   WALLET_DEPOSIT_CREATED: "wallet.deposit_created",
@@ -57,6 +61,12 @@ export const DomainEventType = {
   ASSESSMENT_RESULTS_PUBLISHED: "assessment.results_published",
   STUDENT_SUBJECT_PASSED: "student_subject.passed",
   STUDENT_SUBJECT_FAILED: "student_subject.failed",
+
+  // Refunds
+  REFUND_REQUESTED: "refund.requested",
+  REFUND_APPROVED: "refund.approved",
+  REFUND_REJECTED: "refund.rejected",
+  REFUND_COMPLETED: "refund.completed",
 } as const;
 
 export type DomainEventType = (typeof DomainEventType)[keyof typeof DomainEventType];
@@ -75,6 +85,8 @@ export const DomainAggregateType = {
   ATTENDANCE_JUSTIFICATION: "ATTENDANCE_JUSTIFICATION",
   ATTENDANCE: "ATTENDANCE",
   ASSESSMENT: "ASSESSMENT",
+  BILLING_JOB: "BILLING_JOB",
+  REFUND: "REFUND",
 } as const;
 
 export type DomainAggregateType = (typeof DomainAggregateType)[keyof typeof DomainAggregateType];

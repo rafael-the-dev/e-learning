@@ -199,6 +199,7 @@ export const PaymentStatus = {
   PENDING: "PENDING",
   CONFIRMED: "CONFIRMED",
   CANCELLED: "CANCELLED",
+  PARTIALLY_REFUNDED: "PARTIALLY_REFUNDED",
   REFUNDED: "REFUNDED",
 } as const;
 export type PaymentStatus =
@@ -214,10 +215,85 @@ export type PaymentPlanStatus =
 
 export const ReceiptStatus = {
   ISSUED: "ISSUED",
+  PARTIALLY_REFUNDED: "PARTIALLY_REFUNDED",
   CANCELLED: "CANCELLED",
 } as const;
 export type ReceiptStatus =
   (typeof ReceiptStatus)[keyof typeof ReceiptStatus];
+
+export const RefundMethod = {
+  CASH_RETURN: "CASH_RETURN",
+  WALLET_CREDIT: "WALLET_CREDIT",
+} as const;
+export type RefundMethod = (typeof RefundMethod)[keyof typeof RefundMethod];
+
+export const RefundStatus = {
+  REQUESTED: "REQUESTED",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  COMPLETED: "COMPLETED",
+} as const;
+export type RefundStatus =
+  (typeof RefundStatus)[keyof typeof RefundStatus];
+
+// FinancialTransactionType — what kind of financial event this entry records
+export const FinancialTransactionType = {
+  INVOICE_CREATED:   "INVOICE_CREATED",
+  INVOICE_CANCELLED: "INVOICE_CANCELLED",
+  PAYMENT_RECEIVED:  "PAYMENT_RECEIVED",
+  PAYMENT_CANCELLED: "PAYMENT_CANCELLED",
+  CREDIT_APPLIED:    "CREDIT_APPLIED",
+  WALLET_CREDIT:     "WALLET_CREDIT",
+  WALLET_DEBIT:      "WALLET_DEBIT",
+  REFUND_DISBURSED:  "REFUND_DISBURSED",
+  RECEIPT_ISSUED:    "RECEIPT_ISSUED",
+} as const;
+export type FinancialTransactionType =
+  (typeof FinancialTransactionType)[keyof typeof FinancialTransactionType];
+
+// FinancialDirection — from the organization's cash-flow perspective
+// CREDIT = value flowing IN  (payment received, invoice recognised, credit applied)
+// DEBIT  = value flowing OUT (refund, cancellation, wallet liability created)
+export const FinancialDirection = {
+  CREDIT: "CREDIT",
+  DEBIT:  "DEBIT",
+} as const;
+export type FinancialDirection =
+  (typeof FinancialDirection)[keyof typeof FinancialDirection];
+
+// IntegrityIssueSeverity — how urgently the issue demands attention
+export const IntegrityIssueSeverity = {
+  CRITICAL: "CRITICAL", // data corruption; immediate action required
+  HIGH:     "HIGH",     // balance mismatch; investigate before end of day
+  MEDIUM:   "MEDIUM",   // soft inconsistency; investigate within the week
+  LOW:      "LOW",       // informational / historical gap; review at leisure
+} as const;
+export type IntegrityIssueSeverity =
+  (typeof IntegrityIssueSeverity)[keyof typeof IntegrityIssueSeverity];
+
+// IntegrityIssueCategory — which domain area the check covers
+export const IntegrityIssueCategory = {
+  INVOICE_BALANCE:      "INVOICE_BALANCE",
+  INSTALLMENT_BALANCE:  "INSTALLMENT_BALANCE",
+  PAYMENT_ALLOCATION:   "PAYMENT_ALLOCATION",
+  WALLET_BALANCE:       "WALLET_BALANCE",
+  REFUND_TOTAL:         "REFUND_TOTAL",
+  RECEIPT_INTEGRITY:    "RECEIPT_INTEGRITY",
+  ORPHAN_RECORD:        "ORPHAN_RECORD",
+  LEDGER_CONSISTENCY:   "LEDGER_CONSISTENCY",
+} as const;
+export type IntegrityIssueCategory =
+  (typeof IntegrityIssueCategory)[keyof typeof IntegrityIssueCategory];
+
+// IntegrityIssueStatus — lifecycle of a detected issue
+export const IntegrityIssueStatus = {
+  OPEN:         "OPEN",         // newly detected, not yet reviewed
+  ACKNOWLEDGED: "ACKNOWLEDGED", // seen by operator, under investigation
+  RESOLVED:     "RESOLVED",     // manually fixed by operator
+  SUPPRESSED:   "SUPPRESSED",   // known false-positive; intentionally ignored
+} as const;
+export type IntegrityIssueStatus =
+  (typeof IntegrityIssueStatus)[keyof typeof IntegrityIssueStatus];
 
 export const NotificationType = {
   ENROLLMENT_APPROVED: "ENROLLMENT_APPROVED",

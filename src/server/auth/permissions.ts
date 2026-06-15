@@ -171,6 +171,13 @@ export const PERMISSIONS = {
   RECEIPTS_ISSUE: "receipts.issue",
   RECEIPTS_CANCEL: "receipts.cancel",
 
+  // Refunds
+  REFUNDS_VIEW: "refunds.view",
+  REFUNDS_CREATE: "refunds.create",
+  REFUNDS_APPROVE: "refunds.approve",
+  REFUNDS_REJECT: "refunds.reject",
+  REFUNDS_COMPLETE: "refunds.complete",
+
   // Payment Plans
   PAYMENT_PLANS_VIEW: "paymentPlans.view",
   PAYMENT_PLANS_CREATE: "paymentPlans.create",
@@ -384,6 +391,11 @@ export const PERMISSIONS = {
 
   // Dashboard
   DASHBOARD_VIEW: "dashboard.view",
+
+  // Financial Integrity
+  INTEGRITY_CHECKS_RUN:    "integrity.checks.run",
+  INTEGRITY_ISSUES_VIEW:   "integrity.issues.view",
+  INTEGRITY_ISSUES_RESOLVE: "integrity.issues.resolve",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -480,6 +492,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.PAYMENTS_CANCEL,
     PERMISSIONS.RECEIPTS_VIEW,
     PERMISSIONS.RECEIPTS_ISSUE,
+    PERMISSIONS.REFUNDS_VIEW,
+    PERMISSIONS.REFUNDS_CREATE,
     PERMISSIONS.PAYMENT_PLANS_VIEW,
     PERMISSIONS.PAYMENT_PLANS_CREATE,
     PERMISSIONS.WALLETS_VIEW,

@@ -8,6 +8,12 @@ import type {
   PaymentPlanStatus,
   ReceiptStatus,
   AllocationType,
+  RefundMethod,
+  FinancialTransactionType,
+  FinancialDirection,
+  IntegrityIssueSeverity,
+  IntegrityIssueCategory,
+  IntegrityIssueStatus,
 } from "@/shared/types/common";
 
 // =============================================================================
@@ -152,8 +158,12 @@ export interface Receipt {
   receiptNumber: string;
   issueDate: Date;
   amount: number;
+  refundedAmount: number;
   status: ReceiptStatus;
   issuedBy: string | null;
+  cancelledAt: Date | null;
+  cancelledBy: string | null;
+  cancellationReason: string | null;
   // denormalized
   studentName: string | null;
   invoiceNumber: string | null;
@@ -205,6 +215,7 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
   PENDING: "Pendente",
   CONFIRMED: "Confirmado",
   CANCELLED: "Cancelado",
+  PARTIALLY_REFUNDED: "Parcialmente Reembolsado",
   REFUNDED: "Reembolsado",
 };
 
@@ -234,7 +245,13 @@ export const INSTALLMENT_STATUS_LABELS: Record<string, string> = {
 
 export const RECEIPT_STATUS_LABELS: Record<string, string> = {
   ISSUED: "Emitido",
+  PARTIALLY_REFUNDED: "Parcialmente Reembolsado",
   CANCELLED: "Cancelado",
+};
+
+export const REFUND_METHOD_LABELS: Record<string, string> = {
+  CASH_RETURN: "Devolução em Numerário",
+  WALLET_CREDIT: "Crédito na Carteira",
 };
 
 export const ALLOCATION_TYPE_LABELS: Record<string, string> = {
@@ -243,6 +260,69 @@ export const ALLOCATION_TYPE_LABELS: Record<string, string> = {
   ADJUSTMENT: "Ajuste",
   REFUND_REVERSAL: "Reversão de Reembolso",
 };
+
+export const REFUND_STATUS_LABELS: Record<string, string> = {
+  REQUESTED: "Solicitado",
+  APPROVED: "Aprovado",
+  REJECTED: "Rejeitado",
+  COMPLETED: "Concluído",
+};
+
+// Re-export types so callers don't need to import from shared/types
+export type { RefundMethod, FinancialTransactionType, FinancialDirection };
+
+// =============================================================================
+// FINANCIAL TRANSACTION LEDGER LABELS (pt-PT)
+// =============================================================================
+
+export const FINANCIAL_TRANSACTION_TYPE_LABELS: Record<string, string> = {
+  INVOICE_CREATED:   "Fatura Emitida",
+  INVOICE_CANCELLED: "Fatura Cancelada",
+  PAYMENT_RECEIVED:  "Pagamento Recebido",
+  PAYMENT_CANCELLED: "Pagamento Cancelado",
+  CREDIT_APPLIED:    "Crédito Aplicado",
+  WALLET_CREDIT:     "Crédito em Carteira",
+  WALLET_DEBIT:      "Débito de Carteira",
+  REFUND_DISBURSED:  "Reembolso Desembolsado",
+  RECEIPT_ISSUED:    "Recibo Emitido",
+};
+
+export const FINANCIAL_DIRECTION_LABELS: Record<string, string> = {
+  CREDIT: "Crédito",
+  DEBIT:  "Débito",
+};
+
+// =============================================================================
+// FINANCIAL INTEGRITY LABELS (pt-PT)
+// =============================================================================
+
+export const INTEGRITY_SEVERITY_LABELS: Record<string, string> = {
+  CRITICAL: "Crítico",
+  HIGH:     "Alto",
+  MEDIUM:   "Médio",
+  LOW:      "Baixo",
+};
+
+export const INTEGRITY_CATEGORY_LABELS: Record<string, string> = {
+  INVOICE_BALANCE:     "Saldo de Fatura",
+  INSTALLMENT_BALANCE: "Saldo de Prestação",
+  PAYMENT_ALLOCATION:  "Imputação de Pagamento",
+  WALLET_BALANCE:      "Saldo de Carteira",
+  REFUND_TOTAL:        "Total de Reembolso",
+  RECEIPT_INTEGRITY:   "Integridade do Recibo",
+  ORPHAN_RECORD:       "Registo Órfão",
+  LEDGER_CONSISTENCY:  "Consistência do Razão",
+};
+
+export const INTEGRITY_STATUS_LABELS: Record<string, string> = {
+  OPEN:         "Em Aberto",
+  ACKNOWLEDGED: "Reconhecido",
+  RESOLVED:     "Resolvido",
+  SUPPRESSED:   "Suprimido",
+};
+
+// Re-export for callers
+export type { IntegrityIssueSeverity, IntegrityIssueCategory, IntegrityIssueStatus };
 
 // =============================================================================
 // DASHBOARD TYPES
