@@ -40,7 +40,13 @@
       "Bash(Select-Object -Property Name, PSIsContainer)",
       "Bash(Format-Table)",
       "Bash(Get-ChildItem -Path \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "PowerShell(cd \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\" ; $result = npx tsc --noEmit 2>&1; $relevant = $result | Where-Object { $_ -match \"grades|assessments|students|enrollments|subjects\" }; $relevant | Select-Object -First 50)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\payments\" -Recurse -Force)",
+      "Bash(Select-Object FullName)",
+      "Bash(npx vitest *)"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]",
