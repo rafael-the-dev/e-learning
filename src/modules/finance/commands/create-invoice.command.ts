@@ -1,13 +1,15 @@
 import { BaseCommand, ValidationError, AuthorizationError, BusinessRuleError } from "@/shared/lib/command";
 import { createInvoiceSchema, type CreateInvoiceInput } from "@/modules/finance/schemas/invoice.schema";
-import { createInvoice, getLastInvoiceNumber } from "@/modules/finance/repositories/invoice.repository";
+import { findInvoiceById } from "@/modules/finance/repositories/invoice.repository";
+import { getNextInvoiceNumber } from "@/modules/finance/services/financial-sequence.service";
+import { recordInvoiceCreated } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
+import { ITEM_TYPE_PRIORITY } from "@/modules/finance/types";
 import type { Invoice } from "@/modules/finance/types";
-import type { ServiceContext } from "@/shared/types/common";
 import { getDb } from "@/server/db";
 
 export class CreateInvoiceCommand extends BaseCommand<CreateInvoiceInput, Invoice> {
@@ -48,9 +50,6 @@ export class CreateInvoiceCommand extends BaseCommand<CreateInvoiceInput, Invoic
   }
 
   async execute(): Promise<Invoice> {
-    const lastNum = await getLastInvoiceNumber(this.context.organizationId);
-    const invoiceNumber = `FAT-${String(lastNum + 1).padStart(6, "0")}`;
-
     const subtotal = this.input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
     const discountAmount = this.input.discountAmount ?? 0;
     const taxAmount = this.input.taxAmount ?? 0;
@@ -60,29 +59,62 @@ export class CreateInvoiceCommand extends BaseCommand<CreateInvoiceInput, Invoic
       throw new BusinessRuleError("O valor total da fatura deve ser maior que zero");
     }
 
-    const items = this.input.items.map((item) => ({
-      description: item.description,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      totalPrice: item.quantity * item.unitPrice,
-      itemType: item.itemType ?? "OTHER",
-    }));
+    const db = await getDb();
 
-    const invoice = await createInvoice({
-      organizationId: this.context.organizationId,
-      branchId: this.input.branchId ?? null,
-      enrollmentId: this.input.enrollmentId ?? null,
-      studentId: this.input.studentId ?? null,
-      invoiceNumber,
-      dueDate: this.input.dueDate ? new Date(this.input.dueDate) : null,
-      subtotal,
-      discountAmount,
-      taxAmount,
-      totalAmount,
-      notes: this.input.notes ?? null,
-      createdBy: this.context.userId,
-      items,
+    // Sequence number generation and record creation are a single atomic operation.
+    // No other transaction can observe the same sequence value.
+    const { invoiceId, invoiceNumber } = await db.$transaction(async (tx) => {
+      const nextNumber = await getNextInvoiceNumber(tx);
+
+      const row = await tx.invoice.create({
+        data: {
+          organizationId: this.context.organizationId,
+          branchId: this.input.branchId ?? null,
+          enrollmentId: this.input.enrollmentId ?? null,
+          studentId: this.input.studentId ?? null,
+          invoiceNumber: nextNumber,
+          dueDate: this.input.dueDate ? new Date(this.input.dueDate) : null,
+          subtotal,
+          discountAmount,
+          taxAmount,
+          totalAmount,
+          balanceAmount: totalAmount,
+          notes: this.input.notes ?? null,
+          createdBy: this.context.userId,
+          items: {
+            create: this.input.items.map((item) => {
+              const itemType = item.itemType ?? "OTHER";
+              return {
+                organizationId: this.context.organizationId,
+                feeDefinitionId: null,
+                itemType,
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalPrice: item.quantity * item.unitPrice,
+                balanceAmount: item.quantity * item.unitPrice,
+                priority: ITEM_TYPE_PRIORITY[itemType] ?? 7,
+              };
+            }),
+          },
+        },
+        select: { id: true },
+      });
+
+      await recordInvoiceCreated(tx, this.context.organizationId, {
+        invoiceId: row.id,
+        invoiceNumber: nextNumber,
+        amount: totalAmount,
+        studentId: this.input.studentId,
+        enrollmentId: this.input.enrollmentId,
+        actorId: this.context.userId,
+      });
+
+      return { invoiceId: row.id, invoiceNumber: nextNumber };
     });
+
+    const invoice = await findInvoiceById(invoiceId, this.context.organizationId);
+    if (!invoice) throw new BusinessRuleError("Erro ao recuperar fatura após criação");
 
     await auditService.log(this.context, {
       entity: "Invoice",

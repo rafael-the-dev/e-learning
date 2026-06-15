@@ -28,6 +28,9 @@ const receiptSelect = {
   amount: true,
   status: true,
   issuedBy: true,
+  cancelledAt: true,
+  cancelledBy: true,
+  cancellationReason: true,
   student: { select: { id: true, firstName: true, lastName: true } },
   invoice: { select: { id: true, invoiceNumber: true } },
   payment: {
@@ -106,6 +109,9 @@ type ReceiptRow = {
   amount: DecimalLike;
   status: string;
   issuedBy: string | null;
+  cancelledAt: Date | null;
+  cancelledBy: string | null;
+  cancellationReason: string | null;
   student: { id: string; firstName: string; lastName: string } | null;
   invoice: { id: string; invoiceNumber: string };
   payment: {
@@ -160,6 +166,9 @@ function mapToReceipt(row: ReceiptRow): Receipt {
     amount: row.amount.toNumber(),
     status: row.status as Receipt["status"],
     issuedBy: row.issuedBy,
+    cancelledAt: row.cancelledAt,
+    cancelledBy: row.cancelledBy,
+    cancellationReason: row.cancellationReason,
     studentName: row.student ? `${row.student.firstName} ${row.student.lastName}` : null,
     invoiceNumber: row.invoice.invoiceNumber,
     paymentNumber: row.payment.paymentNumber,
@@ -234,18 +243,6 @@ export async function receiptNumberExists(receiptNumber: string, organizationId:
   const db = await getDb();
   const count = await db.receipt.count({ where: { receiptNumber, organizationId } });
   return count > 0;
-}
-
-export async function getLastReceiptNumber(organizationId: string): Promise<number> {
-  const db = await getDb();
-  const last = await db.receipt.findFirst({
-    where: { organizationId },
-    orderBy: { receiptNumber: "desc" },
-    select: { receiptNumber: true },
-  });
-  if (!last?.receiptNumber) return 0;
-  const num = parseInt(last.receiptNumber.replace(/\D/g, ""), 10);
-  return isNaN(num) ? 0 : num;
 }
 
 export async function createReceipt(data: {

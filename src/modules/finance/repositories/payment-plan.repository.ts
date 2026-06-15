@@ -1,4 +1,5 @@
 import { getDb } from "@/server/db";
+import { computeNewInstallmentStatus } from "@/modules/finance/utils/status-computation";
 import type { PaymentPlan, Installment } from "@/modules/finance/types";
 
 type DecimalLike = { toNumber(): number };
@@ -170,13 +171,17 @@ export async function applyPaymentToInstallment(
   const db = await getDb();
   const inst = await db.installment.findUniqueOrThrow({
     where: { id: installmentId },
-    select: { paidAmount: true, amount: true },
+    select: { paidAmount: true, amount: true, status: true },
   });
   const newPaid = inst.paidAmount.toNumber() + amount;
   const newBalance = inst.amount.toNumber() - newPaid;
-  const newStatus = newBalance <= 0 ? "PAID" : "PARTIALLY_PAID";
   await db.installment.update({
     where: { id: installmentId, organizationId },
-    data: { paidAmount: newPaid, balanceAmount: newBalance, status: newStatus, paidAt: newBalance <= 0 ? new Date() : null },
+    data: {
+      paidAmount: newPaid,
+      balanceAmount: newBalance,
+      status: computeNewInstallmentStatus(inst.status, newBalance),
+      paidAt: newBalance <= 0 ? new Date() : null,
+    },
   });
 }

@@ -1,6 +1,7 @@
 import { getDb } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import { ITEM_TYPE_PRIORITY } from "@/modules/finance/types";
+import { computeNewInvoiceStatus } from "@/modules/finance/utils/status-computation";
 import type { PaginatedResult, PaginationParams } from "@/shared/types/common";
 import type { Invoice, InvoiceItem } from "@/modules/finance/types";
 
@@ -275,18 +276,6 @@ export async function invoiceNumberExists(invoiceNumber: string, organizationId:
   return count > 0;
 }
 
-export async function getLastInvoiceNumber(organizationId: string): Promise<number> {
-  const db = await getDb();
-  const last = await db.invoice.findFirst({
-    where: { organizationId },
-    orderBy: { invoiceNumber: "desc" },
-    select: { invoiceNumber: true },
-  });
-  if (!last?.invoiceNumber) return 0;
-  const num = parseInt(last.invoiceNumber.replace(/\D/g, ""), 10);
-  return isNaN(num) ? 0 : num;
-}
-
 export async function createInvoice(data: {
   organizationId: string;
   branchId?: string | null;
@@ -393,13 +382,19 @@ export async function applyPaymentToInvoice(
   amount: number
 ): Promise<Invoice> {
   const db = await getDb();
-  const current = await db.invoice.findUniqueOrThrow({ where: { id, organizationId }, select: { paidAmount: true, totalAmount: true } });
+  const current = await db.invoice.findUniqueOrThrow({
+    where: { id, organizationId },
+    select: { paidAmount: true, totalAmount: true, status: true },
+  });
   const newPaid = current.paidAmount.toNumber() + amount;
   const newBalance = current.totalAmount.toNumber() - newPaid;
-  const newStatus = newBalance <= 0 ? "PAID" : "PARTIALLY_PAID";
   const row = await db.invoice.update({
     where: { id, organizationId },
-    data: { paidAmount: newPaid, balanceAmount: newBalance, status: newStatus },
+    data: {
+      paidAmount: newPaid,
+      balanceAmount: newBalance,
+      status: computeNewInvoiceStatus(current.status, newBalance, newPaid),
+    },
     select: invoiceSelect,
   });
   return mapToInvoice(row);

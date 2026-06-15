@@ -2,6 +2,13 @@ import { BaseCommand, ValidationError, AuthorizationError, NotFoundError, Busine
 import { confirmPaymentSchema, type ConfirmPaymentInput } from "@/modules/finance/schemas/payment.schema";
 import { findPaymentById } from "@/modules/finance/repositories/payment.repository";
 import { findWalletByStudentId } from "@/modules/wallets/repositories/wallet.repository";
+import { lockAndGetWalletBalance } from "@/modules/wallets/services/wallet-concurrency.service";
+import { computeNewInvoiceStatus, computeNewInstallmentStatus } from "@/modules/finance/utils/status-computation";
+import {
+  recordPaymentReceived,
+  recordCreditApplied,
+  recordWalletCredit,
+} from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -87,13 +94,15 @@ export class ConfirmPaymentCommand extends BaseCommand<ConfirmPaymentInput, Paym
         );
       }
 
-      // Re-check wallet balance inside transaction
+      // Lock the wallet row and re-read the authoritative ledger balance.
+      // This blocks any concurrent transaction from debiting the same wallet
+      // until the current transaction commits, preventing double-spend.
       if (walletCreditApplied > 0) {
-        const balanceResult = await tx.studentWalletTransaction.aggregate({
-          where: { studentWalletId: this.wallet!.id },
-          _sum: { amount: true },
-        });
-        const liveBalance = (balanceResult._sum.amount as DecimalLike | null)?.toNumber() ?? 0;
+        const { balance: liveBalance } = await lockAndGetWalletBalance(
+          tx,
+          this.wallet!.id,
+          this.context.organizationId
+        );
         if (walletCreditApplied > liveBalance) {
           throw new BusinessRuleError(`Saldo insuficiente na carteira. Disponível: ${liveBalance.toFixed(2)}`);
         }
@@ -226,7 +235,7 @@ export class ConfirmPaymentCommand extends BaseCommand<ConfirmPaymentInput, Paym
         data: {
           paidAmount: newPaid,
           balanceAmount: newBalance,
-          status: newBalance <= 0 ? "PAID" : newPaid > 0 ? "PARTIALLY_PAID" : "PENDING",
+          status: computeNewInvoiceStatus(inv.status, newBalance, newPaid),
         },
       });
 
@@ -274,7 +283,7 @@ export class ConfirmPaymentCommand extends BaseCommand<ConfirmPaymentInput, Paym
       if (payment.installmentId) {
         const inst = await tx.installment.findUniqueOrThrow({
           where: { id: payment.installmentId },
-          select: { paidAmount: true, amount: true },
+          select: { paidAmount: true, amount: true, status: true },
         });
         const newInstPaid = (inst.paidAmount as DecimalLike).toNumber() + totalNewMoneyApplied;
         const newInstBalance = (inst.amount as DecimalLike).toNumber() - newInstPaid;
@@ -283,7 +292,8 @@ export class ConfirmPaymentCommand extends BaseCommand<ConfirmPaymentInput, Paym
           data: {
             paidAmount: newInstPaid,
             balanceAmount: newInstBalance,
-            status: newInstBalance <= 0 ? "PAID" : "PARTIALLY_PAID",
+            status: computeNewInstallmentStatus(inst.status, newInstBalance),
+            paidAt: newInstBalance <= 0 ? new Date() : null,
           },
         });
       }
@@ -293,6 +303,42 @@ export class ConfirmPaymentCommand extends BaseCommand<ConfirmPaymentInput, Paym
         where: { id: payment.id, organizationId: this.context.organizationId },
         data: { status: "CONFIRMED" },
       });
+
+      // ── Ledger entries ─────────────────────────────────────────────────────
+      // Cash received from payment splits
+      await recordPaymentReceived(tx, this.context.organizationId, {
+        paymentId: payment.id,
+        paymentNumber: payment.paymentNumber,
+        amount: newMoneyReceived,
+        invoiceId: payment.invoiceId,
+        studentId: payment.studentId,
+        enrollmentId: payment.enrollmentId,
+        actorId: this.context.userId,
+      });
+
+      // Wallet credit debited to settle invoice (if any)
+      if (walletCreditApplied > 0 && creditApplicationId) {
+        await recordCreditApplied(tx, this.context.organizationId, {
+          sourceId: creditApplicationId,
+          amount: walletCreditApplied,
+          invoiceId: payment.invoiceId,
+          paymentId: payment.id,
+          studentId: payment.studentId,
+          actorId: this.context.userId,
+        });
+      }
+
+      // Overpayment credited to wallet (if any) — tracked as wallet liability
+      if (overpayment > 0 && overpaymentWalletId) {
+        await recordWalletCredit(tx, this.context.organizationId, {
+          sourceId: payment.id,
+          amount: overpayment,
+          studentId: payment.studentId,
+          paymentId: payment.id,
+          description: `Excesso de pagamento ${payment.paymentNumber} creditado na carteira`,
+          actorId: this.context.userId,
+        });
+      }
     });
 
     const updated = await findPaymentById(payment.id, this.context.organizationId);

@@ -182,18 +182,6 @@ export async function paymentNumberExists(paymentNumber: string, organizationId:
   return count > 0;
 }
 
-export async function getLastPaymentNumber(organizationId: string): Promise<number> {
-  const db = await getDb();
-  const last = await db.payment.findFirst({
-    where: { organizationId },
-    orderBy: { paymentNumber: "desc" },
-    select: { paymentNumber: true },
-  });
-  if (!last?.paymentNumber) return 0;
-  const num = parseInt(last.paymentNumber.replace(/\D/g, ""), 10);
-  return isNaN(num) ? 0 : num;
-}
-
 export async function updatePaymentStatus(
   id: string,
   organizationId: string,

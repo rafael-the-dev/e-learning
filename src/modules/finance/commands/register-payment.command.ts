@@ -1,7 +1,8 @@
 import { BaseCommand, ValidationError, AuthorizationError, NotFoundError, BusinessRuleError } from "@/shared/lib/command";
 import { registerPaymentSchema, type RegisterPaymentInput } from "@/modules/finance/schemas/payment.schema";
 import { findInvoiceById } from "@/modules/finance/repositories/invoice.repository";
-import { findPaymentById, getLastPaymentNumber } from "@/modules/finance/repositories/payment.repository";
+import { findPaymentById } from "@/modules/finance/repositories/payment.repository";
+import { getNextPaymentNumber } from "@/modules/finance/services/financial-sequence.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -52,13 +53,15 @@ export class RegisterPaymentCommand extends BaseCommand<RegisterPaymentInput, Pa
 
   async execute(): Promise<Payment> {
     const invoice = this.invoice!;
-    const lastNum = await getLastPaymentNumber(this.context.organizationId);
-    const paymentNumber = `PAG-${String(lastNum + 1).padStart(6, "0")}`;
     const paymentDate = this.input.paymentDate ? new Date(this.input.paymentDate) : new Date();
 
     const db = await getDb();
 
+    // Sequence number generation is inside the transaction so the number and
+    // the payment row are created atomically — no gap or duplicate is possible.
     const created = await db.$transaction(async (tx) => {
+      const paymentNumber = await getNextPaymentNumber(tx);
+
       const paymentRow = await tx.payment.create({
         data: {
           organizationId: this.context.organizationId,
@@ -72,7 +75,7 @@ export class RegisterPaymentCommand extends BaseCommand<RegisterPaymentInput, Pa
           notes: this.input.notes ?? null,
           createdBy: this.context.userId,
         },
-        select: { id: true },
+        select: { id: true, paymentNumber: true },
       });
 
       await tx.paymentSplit.createMany({
@@ -97,7 +100,7 @@ export class RegisterPaymentCommand extends BaseCommand<RegisterPaymentInput, Pa
       entityId: payment.id,
       action: "payment.registered",
       newValues: {
-        paymentNumber,
+        paymentNumber: created.paymentNumber,
         totalAmount: this.totalAmount,
         invoiceId: invoice.id,
         status: "PENDING",

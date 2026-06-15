@@ -1,13 +1,16 @@
 import { BaseCommand, ValidationError, AuthorizationError, NotFoundError, BusinessRuleError } from "@/shared/lib/command";
 import { issueReceiptSchema, type IssueReceiptInput } from "@/modules/finance/schemas/receipt.schema";
 import { findPaymentById } from "@/modules/finance/repositories/payment.repository";
-import { createReceipt, hasIssuedReceiptForPayment, getLastReceiptNumber } from "@/modules/finance/repositories/receipt.repository";
+import { hasIssuedReceiptForPayment, findReceiptById } from "@/modules/finance/repositories/receipt.repository";
 import { sumAllocationsByPayment } from "@/modules/finance/repositories/payment-allocation.repository";
+import { getNextReceiptNumber } from "@/modules/finance/services/financial-sequence.service";
+import { recordReceiptIssued } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { getDb } from "@/server/db";
 import type { Receipt, Payment } from "@/modules/finance/types";
 
 export class IssueReceiptCommand extends BaseCommand<IssueReceiptInput, Receipt> {
@@ -37,24 +40,45 @@ export class IssueReceiptCommand extends BaseCommand<IssueReceiptInput, Receipt>
   async execute(): Promise<Receipt> {
     const payment = this.payment!;
 
-    // Receipt amount = total applied to invoice (sum of all allocations for this payment)
-    // Falls back to payment.totalAmount for legacy payments without allocation records
+    // Receipt amount = total applied to invoice (falls back to payment.totalAmount for legacy payments)
     const allocationSum = await sumAllocationsByPayment(payment.id, this.context.organizationId);
     const totalSettled = allocationSum > 0 ? allocationSum : payment.totalAmount;
 
-    const lastNum = await getLastReceiptNumber(this.context.organizationId);
-    const receiptNumber = `REC-${String(lastNum + 1).padStart(6, "0")}`;
+    const db = await getDb();
 
-    const receipt = await createReceipt({
-      organizationId: this.context.organizationId,
-      branchId: payment.branchId,
-      paymentId: payment.id,
-      invoiceId: payment.invoiceId!,
-      studentId: payment.studentId,
-      receiptNumber,
-      amount: totalSettled,
-      issuedBy: this.context.userId,
+    // Sequence number generation and receipt creation are a single atomic operation.
+    const { receiptId, receiptNumber } = await db.$transaction(async (tx) => {
+      const nextNumber = await getNextReceiptNumber(tx);
+
+      const row = await tx.receipt.create({
+        data: {
+          organizationId: this.context.organizationId,
+          branchId: payment.branchId ?? null,
+          paymentId: payment.id,
+          invoiceId: payment.invoiceId!,
+          studentId: payment.studentId ?? null,
+          receiptNumber: nextNumber,
+          amount: totalSettled,
+          issuedBy: this.context.userId ?? null,
+        },
+        select: { id: true },
+      });
+
+      await recordReceiptIssued(tx, this.context.organizationId, {
+        receiptId: row.id,
+        receiptNumber: nextNumber,
+        amount: totalSettled,
+        paymentId: payment.id,
+        invoiceId: payment.invoiceId ?? null,
+        studentId: payment.studentId ?? null,
+        actorId: this.context.userId,
+      });
+
+      return { receiptId: row.id, receiptNumber: nextNumber };
     });
+
+    const receipt = await findReceiptById(receiptId, this.context.organizationId);
+    if (!receipt) throw new BusinessRuleError("Erro ao recuperar recibo após emissão");
 
     await auditService.log(this.context, {
       entity: "Receipt",
