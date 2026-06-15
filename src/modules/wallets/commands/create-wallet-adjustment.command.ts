@@ -1,6 +1,8 @@
 import { BaseCommand, ValidationError, AuthorizationError, NotFoundError, BusinessRuleError } from "@/shared/lib/command";
 import { createWalletAdjustmentSchema, type CreateWalletAdjustmentInput } from "@/modules/wallets/schemas/wallet.schema";
 import { findWalletById, getWalletBalance } from "@/modules/wallets/repositories/wallet.repository";
+import { lockAndGetWalletBalance } from "@/modules/wallets/services/wallet-concurrency.service";
+import { recordWalletCredit, recordWalletDebit } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -23,12 +25,13 @@ export class CreateWalletAdjustmentCommand extends BaseCommand<CreateWalletAdjus
     const wallet = await findWalletById(this.input.walletId, this.context.organizationId);
     if (!wallet) throw new NotFoundError("Carteira", this.input.walletId);
 
-    // Negative adjustment must not exceed available balance
+    // Fast-fail for negative adjustments: non-locking pre-check for user feedback.
+    // The authoritative check happens under lock inside execute().
     if (this.input.amount < 0) {
       const balance = await getWalletBalance(this.input.walletId);
       if (Math.abs(this.input.amount) > balance) {
         throw new BusinessRuleError(
-          `O ajuste negativo (${Math.abs(this.input.amount)}) excede o saldo disponível (${balance.toFixed(2)})`
+          `O ajuste negativo (${Math.abs(this.input.amount).toFixed(2)}) excede o saldo disponível (${balance.toFixed(2)})`
         );
       }
     }
@@ -41,15 +44,55 @@ export class CreateWalletAdjustmentCommand extends BaseCommand<CreateWalletAdjus
 
   async execute(): Promise<WalletTransaction> {
     const db = await getDb();
-    const row = await db.studentWalletTransaction.create({
-      data: {
-        organizationId: this.context.organizationId,
-        studentWalletId: this.input.walletId,
-        type: "ADJUSTMENT",
-        amount: this.input.amount,
-        description: this.input.description,
-        createdBy: this.context.userId,
-      },
+
+    const row = await db.$transaction(async (tx) => {
+      // Negative adjustments consume wallet balance and must be serialised
+      // to prevent double-spend under concurrent requests.
+      if (this.input.amount < 0) {
+        const { balance: liveBalance } = await lockAndGetWalletBalance(
+          tx,
+          this.input.walletId,
+          this.context.organizationId
+        );
+        if (Math.abs(this.input.amount) > liveBalance) {
+          throw new BusinessRuleError(
+            `O ajuste negativo (${Math.abs(this.input.amount).toFixed(2)}) excede o saldo disponível (${liveBalance.toFixed(2)})`
+          );
+        }
+      }
+
+      const walletTx = await tx.studentWalletTransaction.create({
+        data: {
+          organizationId: this.context.organizationId,
+          studentWalletId: this.input.walletId,
+          type: "ADJUSTMENT",
+          amount: this.input.amount,
+          description: this.input.description,
+          createdBy: this.context.userId,
+        },
+      });
+
+      // Ledger: positive adjustment = wallet liability created (DEBIT for org)
+      //         negative adjustment = wallet balance reduced, cash paid out (DEBIT for org)
+      if (this.input.amount > 0) {
+        await recordWalletCredit(tx, this.context.organizationId, {
+          sourceId: walletTx.id,
+          amount: this.input.amount,
+          studentId: null,
+          description: this.input.description ?? "Ajuste positivo de carteira",
+          actorId: this.context.userId,
+        });
+      } else {
+        await recordWalletDebit(tx, this.context.organizationId, {
+          sourceId: walletTx.id,
+          amount: Math.abs(this.input.amount),
+          studentId: null,
+          description: this.input.description ?? "Ajuste negativo de carteira",
+          actorId: this.context.userId,
+        });
+      }
+
+      return walletTx;
     });
 
     await auditService.log(this.context, {

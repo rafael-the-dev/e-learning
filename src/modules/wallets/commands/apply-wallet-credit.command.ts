@@ -1,7 +1,9 @@
 import { BaseCommand, ValidationError, AuthorizationError, NotFoundError, BusinessRuleError } from "@/shared/lib/command";
 import { applyWalletCreditSchema, type ApplyWalletCreditInput } from "@/modules/wallets/schemas/wallet.schema";
 import { findWalletById, getWalletBalance } from "@/modules/wallets/repositories/wallet.repository";
+import { lockAndGetWalletBalance } from "@/modules/wallets/services/wallet-concurrency.service";
 import { findInvoiceById } from "@/modules/finance/repositories/invoice.repository";
+import { recordCreditApplied } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -64,12 +66,13 @@ export class ApplyWalletCreditCommand extends BaseCommand<ApplyWalletCreditInput
     const db = await getDb();
 
     await db.$transaction(async (tx) => {
-      // Re-check balance inside the transaction
-      const balanceResult = await tx.studentWalletTransaction.aggregate({
-        where: { studentWalletId: wallet.id },
-        _sum: { amount: true },
-      });
-      const liveBalance = (balanceResult._sum.amount as DecimalLike | null)?.toNumber() ?? 0;
+      // Lock the wallet row and re-read the authoritative ledger balance.
+      // Blocks any concurrent debit on this wallet until we commit.
+      const { balance: liveBalance } = await lockAndGetWalletBalance(
+        tx,
+        wallet.id,
+        this.context.organizationId
+      );
       if (this.input.amount > liveBalance) {
         throw new BusinessRuleError(`Saldo insuficiente na carteira. Disponível: ${liveBalance.toFixed(2)}`);
       }
@@ -174,6 +177,16 @@ export class ApplyWalletCreditCommand extends BaseCommand<ApplyWalletCreditInput
           balanceAmount: newBalance,
           status: newBalance <= 0 ? "PAID" : "PARTIALLY_PAID",
         },
+      });
+
+      // Ledger entry — wallet credit applied to settle invoice balance
+      await recordCreditApplied(tx, this.context.organizationId, {
+        sourceId: ca.id,
+        amount: totalAllocated,
+        invoiceId: this.input.invoiceId,
+        studentId: wallet.studentId,
+        description: this.input.notes ?? `Crédito de carteira aplicado à fatura`,
+        actorId: this.context.userId,
       });
     });
 

@@ -1,6 +1,8 @@
 import { BaseCommand, ValidationError, AuthorizationError, NotFoundError, BusinessRuleError } from "@/shared/lib/command";
 import { refundWalletSchema, type RefundWalletInput } from "@/modules/wallets/schemas/wallet.schema";
 import { findWalletById, getWalletBalance } from "@/modules/wallets/repositories/wallet.repository";
+import { lockAndGetWalletBalance } from "@/modules/wallets/services/wallet-concurrency.service";
+import { recordWalletDebit } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -23,10 +25,12 @@ export class RefundWalletCommand extends BaseCommand<RefundWalletInput, WalletTr
     const wallet = await findWalletById(this.input.walletId, this.context.organizationId);
     if (!wallet) throw new NotFoundError("Carteira", this.input.walletId);
 
+    // Fast-fail: non-locking pre-check for immediate user feedback.
+    // The authoritative balance check happens under lock inside execute().
     const balance = await getWalletBalance(this.input.walletId);
     if (this.input.amount > balance) {
       throw new BusinessRuleError(
-        `O reembolso (${this.input.amount}) excede o saldo disponível (${balance.toFixed(2)})`
+        `O reembolso (${this.input.amount.toFixed(2)}) excede o saldo disponível (${balance.toFixed(2)})`
       );
     }
   }
@@ -38,15 +42,44 @@ export class RefundWalletCommand extends BaseCommand<RefundWalletInput, WalletTr
 
   async execute(): Promise<WalletTransaction> {
     const db = await getDb();
-    const row = await db.studentWalletTransaction.create({
-      data: {
-        organizationId: this.context.organizationId,
-        studentWalletId: this.input.walletId,
-        type: "REFUND",
-        amount: -this.input.amount,
-        description: this.input.description ?? null,
-        createdBy: this.context.userId,
-      },
+
+    // The entire debit is wrapped in a transaction so that the UPDLOCK acquired
+    // by lockAndGetWalletBalance is held until the new transaction row is written.
+    // This prevents two concurrent refunds from both passing the balance check
+    // and both inserting, which would push the wallet negative.
+    const row = await db.$transaction(async (tx) => {
+      const { balance: liveBalance } = await lockAndGetWalletBalance(
+        tx,
+        this.input.walletId,
+        this.context.organizationId
+      );
+      if (this.input.amount > liveBalance) {
+        throw new BusinessRuleError(
+          `O reembolso (${this.input.amount.toFixed(2)}) excede o saldo disponível (${liveBalance.toFixed(2)})`
+        );
+      }
+
+      const walletTx = await tx.studentWalletTransaction.create({
+        data: {
+          organizationId: this.context.organizationId,
+          studentWalletId: this.input.walletId,
+          type: "REFUND",
+          amount: -this.input.amount,
+          description: this.input.description ?? null,
+          createdBy: this.context.userId,
+        },
+      });
+
+      // Ledger: cash paid out to student from their wallet balance
+      await recordWalletDebit(tx, this.context.organizationId, {
+        sourceId: walletTx.id,
+        amount: this.input.amount,
+        studentId: null,
+        description: this.input.description ?? "Reembolso de saldo de carteira",
+        actorId: this.context.userId,
+      });
+
+      return walletTx;
     });
 
     await auditService.log(this.context, {
