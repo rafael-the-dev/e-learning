@@ -103,6 +103,9 @@ model Organization {
   prerequisiteWaivers        PrerequisiteWaiver[]
   levelProgressionPolicies   LevelProgressionPolicy[]
   levelProgressionRequests   LevelProgressionRequest[]
+  refunds                    Refund[]
+  financialTransactions      FinancialTransaction[]
+  financialIntegrityIssues   FinancialIntegrityIssue[]
 
   @@map("organizations")
 }
@@ -134,6 +137,7 @@ model Branch {
   classrooms   Classroom[]
   classroomBookings  ClassroomBooking[]
   attendanceSessions AttendanceSession[]
+  refunds            Refund[]
 
   @@map("branches")
 }
@@ -148,10 +152,15 @@ model OrganizationSettings {
   taxName           String?
   invoicePrefix     String   @default("INV")
   receiptPrefix     String   @default("REC")
-  allowLatePayments Boolean  @default(true)
-  gracePeriodDays   Int      @default(7)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  allowLatePayments                            Boolean  @default(true)
+  gracePeriodDays                              Int      @default(7)
+  enableAutomaticOverdueProcessing             Boolean  @default(true)
+  overdueGraceDays                             Int      @default(0)
+  markInvoiceOverdueWhenAnyInstallmentOverdue  Boolean  @default(true)
+  notifyOnOverdue                              Boolean  @default(true)
+  overdueNotificationDelayDays                 Int      @default(0)
+  createdAt                                    DateTime @default(now())
+  updatedAt                                    DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -353,6 +362,7 @@ model Student {
   studentCourseProgress      StudentCourseProgress[]
   prerequisiteWaivers        PrerequisiteWaiver[]
   levelProgressionRequests   LevelProgressionRequest[]
+  refunds                    Refund[]
 
   @@map("students")
 }
@@ -895,6 +905,7 @@ model Enrollment {
   studentCourseProgress    StudentCourseProgress?
   prerequisiteWaivers      PrerequisiteWaiver[]
   levelProgressionRequests LevelProgressionRequest[]
+  refunds                  Refund[]
 
   @@unique([organizationId, enrollmentNumber])
   @@map("enrollments")
@@ -1115,6 +1126,7 @@ model Invoice {
   allocations    PaymentAllocation[]
   appliedDiscounts AppliedDiscount[]
   appliedTaxes     AppliedTax[]
+  refunds          Refund[]
 
   @@unique([organizationId, invoiceNumber])
   @@map("invoices")
@@ -1212,6 +1224,7 @@ model Payment {
   splits             PaymentSplit[]
   creditApplications CreditApplication[]
   allocations        PaymentAllocation[]
+  refunds            Refund[]
 
   @@unique([organizationId, paymentNumber])
   @@map("payments")
@@ -1227,15 +1240,20 @@ model Receipt {
   receiptNumber  String
   issueDate      DateTime @default(now())
   amount         Decimal  @db.Decimal(10, 2)
-  // ReceiptStatus: ISSUED | CANCELLED
-  status         String   @default("ISSUED")
-  issuedBy       String?
+  refundedAmount Decimal  @db.Decimal(10, 2) @default(0)
+  // ReceiptStatus: ISSUED | PARTIALLY_REFUNDED | CANCELLED
+  status             String    @default("ISSUED")
+  issuedBy           String?
+  cancelledAt        DateTime?
+  cancelledBy        String?
+  cancellationReason String?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   payment      Payment      @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   student      Student?     @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  refunds      Refund[]
 
   @@unique([organizationId, receiptNumber])
   @@map("receipts")
@@ -2371,4 +2389,142 @@ model LevelProgressionRequest {
   @@index([organizationId, studentId])
   @@index([organizationId, decision])
   @@map("level_progression_requests")
+}
+
+// =============================================================================
+// REFUNDS
+// =============================================================================
+
+model Refund {
+  id              String    @id @default(cuid())
+  organizationId  String
+  branchId        String?
+  paymentId       String
+  receiptId       String?
+  studentId       String?
+  enrollmentId    String?
+  invoiceId       String?
+  refundNumber    String
+  amount          Decimal   @db.Decimal(10, 2)
+  reason          String    @db.NVarChar(Max)
+  // RefundStatus: REQUESTED | APPROVED | REJECTED | COMPLETED
+  status          String    @default("REQUESTED")
+  // RefundMethod: CASH_RETURN | WALLET_CREDIT
+  refundMethod    String    @default("CASH_RETURN")
+  notes           String?   @db.NVarChar(Max)
+  rejectionReason String?   @db.NVarChar(Max)
+  requestedBy     String
+  approvedBy      String?
+  rejectedBy      String?
+  completedBy     String?
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment      Payment      @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  receipt      Receipt?     @relation(fields: [receiptId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student?     @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment?  @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([organizationId, refundNumber])
+  @@map("refunds")
+}
+
+// =============================================================================
+// FINANCIAL TRANSACTION LEDGER (append-only)
+// =============================================================================
+// CRITICAL: This model is IMMUTABLE. Never update or delete rows.
+// Every financial movement produces one or more journal entries here.
+// Used as the source of truth for reconciliation and cash-flow reports.
+
+model FinancialTransaction {
+  id                String   @id @default(cuid())
+  organizationId    String
+  transactionNumber String
+  // FinancialTransactionType:
+  //   INVOICE_CREATED | INVOICE_CANCELLED |
+  //   PAYMENT_RECEIVED | PAYMENT_CANCELLED |
+  //   CREDIT_APPLIED |
+  //   WALLET_CREDIT | WALLET_DEBIT |
+  //   REFUND_DISBURSED | RECEIPT_ISSUED
+  transactionType   String
+  // FinancialDirection: CREDIT | DEBIT  (from organization's perspective)
+  direction         String
+  amount            Decimal  @db.Decimal(10, 2)
+  currencyCode      String   @default("MZN")
+  // sourceType: "Invoice" | "Payment" | "Receipt" | "Refund" |
+  //             "WalletTransaction" | "CreditApplication"
+  sourceType        String
+  sourceId          String
+  // Cross-references for reconciliation queries
+  invoiceId         String?
+  paymentId         String?
+  receiptId         String?
+  refundId          String?
+  studentId         String?
+  enrollmentId      String?
+  description       String?  @db.NVarChar(Max)
+  actorId           String?
+  occurredAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([organizationId, transactionNumber])
+  @@index([organizationId, invoiceId])
+  @@index([organizationId, paymentId])
+  @@index([organizationId, studentId])
+  @@index([organizationId, occurredAt])
+  @@index([organizationId, transactionType])
+  @@map("financial_transactions")
+}
+
+// =============================================================================
+// FINANCIAL INTEGRITY ISSUES
+// =============================================================================
+// Populated by the daily integrity-check job. Never auto-repaired — only
+// detected and recorded. Resolved by a human operator via the admin UI.
+
+model FinancialIntegrityIssue {
+  id              String    @id @default(cuid())
+  organizationId  String
+  // IntegrityIssueSeverity: CRITICAL | HIGH | MEDIUM | LOW
+  severity        String
+  // IntegrityIssueCategory: INVOICE_BALANCE | INSTALLMENT_BALANCE |
+  //   PAYMENT_ALLOCATION | WALLET_BALANCE | REFUND_TOTAL |
+  //   RECEIPT_INTEGRITY | ORPHAN_RECORD | LEDGER_CONSISTENCY
+  category        String
+  // Machine-readable check identifier e.g. "invoice.balance_amounts"
+  checkName       String
+  // Domain entity type e.g. "Invoice", "Payment", "Receipt", "Refund"
+  entityType      String
+  entityId        String
+  description     String    @db.NVarChar(Max)
+  expectedValue   String?
+  actualValue     String?
+  detectedAt      DateTime  @default(now())
+  jobRunId        String?
+  // IntegrityIssueStatus: OPEN | ACKNOWLEDGED | RESOLVED | SUPPRESSED
+  status          String    @default("OPEN")
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  resolutionNotes String?   @db.NVarChar(Max)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // No @@unique here: deduplication of OPEN issues is enforced by the
+  // filtered unique index in migration SQL (WHERE status = 'OPEN').
+  @@index([organizationId, severity])
+  @@index([organizationId, category])
+  @@index([organizationId, status, detectedAt])
+  @@index([organizationId, entityType, entityId])
+  @@map("financial_integrity_issues")
 }
