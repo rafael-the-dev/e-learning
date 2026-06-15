@@ -6,9 +6,11 @@ import { getDb } from "@/server/db";
 import { findDefaultBillingPolicy, findBillingPolicyById } from "@/modules/billing/repositories/billing-policy.repository";
 import { findActiveDiscountRules, createAppliedDiscount } from "@/modules/billing/repositories/discount-rule.repository";
 import { findActiveTaxRules, createAppliedTax } from "@/modules/billing/repositories/tax-rule.repository";
-import { createInvoice, getLastInvoiceNumber } from "@/modules/finance/repositories/invoice.repository";
+import { findInvoiceById } from "@/modules/finance/repositories/invoice.repository";
+import { getNextInvoiceNumber } from "@/modules/finance/services/financial-sequence.service";
 import { createPaymentPlan } from "@/modules/finance/repositories/payment-plan.repository";
 import { calculateBilling } from "@/modules/billing/services/billing-calculator.service";
+import { ITEM_TYPE_PRIORITY } from "@/modules/finance/types";
 import type { Invoice } from "@/modules/finance/types";
 
 export interface GenerateInvoiceFromEnrollmentInput {
@@ -91,42 +93,60 @@ export class GenerateInvoiceFromEnrollmentCommand extends BaseCommand<
       throw new BusinessRuleError("O valor total calculado deve ser maior que zero. Verifique as taxas da política.");
     }
 
-    // 5. Generate invoice number
-    const lastNum = await getLastInvoiceNumber(this.context.organizationId);
-    const invoiceNumber = `FAT-${String(lastNum + 1).padStart(6, "0")}`;
+    // 5. Generate invoice number and create invoice atomically.
+    // The sequence guarantees uniqueness even under concurrent enrollment activations.
+    const { invoiceId, invoiceNumber } = await db.$transaction(async (tx) => {
+      const nextNumber = await getNextInvoiceNumber(tx);
 
-    // 6. Create invoice with items (billingPolicyId set atomically at creation)
-    const invoice = await createInvoice({
-      organizationId: this.context.organizationId,
-      branchId: enrollment.branchId ?? null,
-      enrollmentId: enrollment.id,
-      studentId: enrollment.studentId,
-      billingPolicyId: policy.id,
-      invoiceNumber,
-      dueDate: this.input.dueDate ?? null,
-      subtotal: calculation.subtotal,
-      discountAmount: calculation.discountAmount,
-      taxAmount: calculation.taxAmount,
-      totalAmount: calculation.totalAmount,
-      notes: null,
-      createdBy: this.context.userId,
-      items: calculation.items.map((item) => ({
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.totalPrice,
-        itemType: item.itemType,
-        feeDefinitionId: item.feeDefinitionId,
-      })),
+      const row = await tx.invoice.create({
+        data: {
+          organizationId: this.context.organizationId,
+          branchId: enrollment.branchId ?? null,
+          enrollmentId: enrollment.id,
+          studentId: enrollment.studentId,
+          billingPolicyId: policy.id,
+          invoiceNumber: nextNumber,
+          dueDate: this.input.dueDate ?? null,
+          subtotal: calculation.subtotal,
+          discountAmount: calculation.discountAmount,
+          taxAmount: calculation.taxAmount,
+          totalAmount: calculation.totalAmount,
+          balanceAmount: calculation.totalAmount,
+          notes: null,
+          createdBy: this.context.userId,
+          items: {
+            create: calculation.items.map((item) => {
+              const itemType = item.itemType ?? "OTHER";
+              return {
+                organizationId: this.context.organizationId,
+                feeDefinitionId: item.feeDefinitionId ?? null,
+                itemType,
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalPrice: item.totalPrice,
+                balanceAmount: item.totalPrice,
+                priority: ITEM_TYPE_PRIORITY[itemType] ?? 7,
+              };
+            }),
+          },
+        },
+        select: { id: true },
+      });
+
+      return { invoiceId: row.id, invoiceNumber: nextNumber };
     });
 
-    // 7. Record which billing policy was used on the enrollment
+    const invoice = await findInvoiceById(invoiceId, this.context.organizationId);
+    if (!invoice) throw new BusinessRuleError("Erro ao recuperar fatura após criação");
+
+    // 6. Record which billing policy was used on the enrollment
     await db.enrollment.update({
       where: { id: enrollment.id },
       data: { billingPolicyId: policy.id },
     });
 
-    // 8. Store applied discounts (auditable snapshot)
+    // 7. Store applied discounts (auditable snapshot)
     for (const discount of calculation.discounts) {
       await createAppliedDiscount({
         organizationId: this.context.organizationId,
@@ -137,7 +157,7 @@ export class GenerateInvoiceFromEnrollmentCommand extends BaseCommand<
       });
     }
 
-    // 9. Store applied taxes (auditable snapshot)
+    // 8. Store applied taxes (auditable snapshot)
     for (const tax of calculation.taxes) {
       await createAppliedTax({
         organizationId: this.context.organizationId,
@@ -149,7 +169,7 @@ export class GenerateInvoiceFromEnrollmentCommand extends BaseCommand<
       });
     }
 
-    // 10. Create payment plan if installments required
+    // 9. Create payment plan if installments required
     if (policy.installmentsRequired && policy.defaultNumberOfInstallments && calculation.installmentsPreview.length > 0) {
       const firstDue = this.input.dueDate ?? new Date();
       const installments = calculation.installmentsPreview.map((inst, i) => {
@@ -168,7 +188,7 @@ export class GenerateInvoiceFromEnrollmentCommand extends BaseCommand<
       });
     }
 
-    // 11. Determine new enrollment status based on activationRule
+    // 10. Determine new enrollment status based on activationRule
     let newEnrollmentStatus = "PENDING_PAYMENT";
     if (policy.activationRule === "AFTER_INVOICE_CREATED") {
       newEnrollmentStatus = "ACTIVE";
@@ -189,7 +209,7 @@ export class GenerateInvoiceFromEnrollmentCommand extends BaseCommand<
       });
     }
 
-    // 12. Audit
+    // 11. Audit
     await auditService.log(this.context, {
       entity: "Invoice",
       entityId: invoice.id,
