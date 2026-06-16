@@ -324,6 +324,15 @@ export const INTEGRITY_STATUS_LABELS: Record<string, string> = {
 // Re-export for callers
 export type { IntegrityIssueSeverity, IntegrityIssueCategory, IntegrityIssueStatus };
 
+export const WALLET_TRANSACTION_TYPE_LABELS: Record<string, string> = {
+  DEPOSIT: "Depósito",
+  OVERPAYMENT: "Excesso de Pagamento",
+  CREDIT_APPLIED: "Crédito Aplicado",
+  REFUND: "Reembolso",
+  ADJUSTMENT: "Ajuste",
+  PROMOTIONAL_CREDIT: "Crédito Promocional",
+};
+
 // =============================================================================
 // DASHBOARD TYPES
 // =============================================================================
