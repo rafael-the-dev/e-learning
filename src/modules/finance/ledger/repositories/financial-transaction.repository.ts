@@ -116,6 +116,11 @@ export async function findLedgerEntriesByStudent(
   return findLedgerEntries({ organizationId, studentId, limit });
 }
 
+// Cash-flow event types — the only entries that represent actual money movement.
+// RECEIPT_ISSUED, INVOICE_CREATED/CANCELLED, WALLET_CREDIT/DEBIT, CREDIT_APPLIED are
+// accounting/administrative entries and must be excluded to avoid double-counting.
+const CASH_FLOW_TYPES = ["PAYMENT_RECEIVED", "PAYMENT_CANCELLED", "REFUND_DISBURSED"] as const;
+
 export async function getLedgerSummary(
   organizationId: string,
   dateFrom?: Date,
@@ -127,6 +132,7 @@ export async function getLedgerSummary(
     by: ["direction"],
     where: {
       organizationId,
+      transactionType: { in: [...CASH_FLOW_TYPES] },
       ...(dateFrom || dateTo
         ? {
             occurredAt: {

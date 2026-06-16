@@ -85,6 +85,7 @@ export async function recordPaymentReceived(
     studentId?: string | null;
     enrollmentId?: string | null;
     actorId?: string | null;
+    occurredAt?: Date | null;
   }
 ): Promise<void> {
   await appendLedgerEntry(tx, organizationId, {
@@ -99,6 +100,7 @@ export async function recordPaymentReceived(
     enrollmentId: args.enrollmentId,
     description: `Pagamento ${args.paymentNumber} confirmado`,
     actorId: args.actorId,
+    occurredAt: args.occurredAt ?? undefined,
   });
 }
 
