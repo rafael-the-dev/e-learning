@@ -396,6 +396,12 @@ export const PERMISSIONS = {
   INTEGRITY_CHECKS_RUN:    "integrity.checks.run",
   INTEGRITY_ISSUES_VIEW:   "integrity.issues.view",
   INTEGRITY_ISSUES_RESOLVE: "integrity.issues.resolve",
+
+  // Financial Reports
+  FINANCIAL_REPORTS_VIEW:             "financialReports.view",
+  FINANCIAL_REPORTS_EXPORT:           "financialReports.export",
+  FINANCIAL_REPORTS_STUDENT_STATEMENT: "financialReports.studentStatement.view",
+  FINANCIAL_REPORTS_INTEGRITY:        "financialReports.integrity.view",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -501,6 +507,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.WALLET_TRANSACTIONS_DEPOSIT,
     PERMISSIONS.WALLET_TRANSACTIONS_APPLY_CREDIT,
     PERMISSIONS.REPORTS_VIEW,
+    PERMISSIONS.FINANCIAL_REPORTS_VIEW,
+    PERMISSIONS.FINANCIAL_REPORTS_EXPORT,
+    PERMISSIONS.FINANCIAL_REPORTS_STUDENT_STATEMENT,
     PERMISSIONS.VEHICLES_READ,
     PERMISSIONS.PRACTICAL_LESSONS_CREATE,
     PERMISSIONS.PRACTICAL_LESSONS_READ,

@@ -31,7 +31,8 @@ export type NavIconName =
   | "Calendar"
   | "Users"
   | "Activity"
-  | "PenLine";
+  | "PenLine"
+  | "TrendingUp";
 
 export interface NavigationItem {
   href: string;
@@ -169,6 +170,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         label: "Carteiras",
         iconName: "Wallet",
         requiredPermission: "wallets.view",
+      },
+      {
+        href: "/reports/finance",
+        label: "Relatórios Financeiros",
+        iconName: "TrendingUp",
+        requiredPermission: "financialReports.view",
       },
     ],
   },
