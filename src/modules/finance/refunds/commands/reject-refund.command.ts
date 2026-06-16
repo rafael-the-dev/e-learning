@@ -5,6 +5,8 @@ import {
 } from "@/modules/finance/refunds/schemas/refund.schema";
 import { findRefundById } from "@/modules/finance/refunds/repositories/refund.repository";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { eventPublisher } from "@/server/events/event-publisher";
@@ -64,6 +66,16 @@ export class RejectRefundCommand extends BaseCommand<RejectRefundInput, Refund> 
         rejectedBy: this.context.userId,
         rejectionReason: this.input.rejectionReason,
       },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.REFUND_REJECTED,
+      entityType: "Refund",
+      entityId: refund.id,
+      amount: refund.amount,
+      beforeData: { status: "REQUESTED" },
+      afterData: { status: "REJECTED", rejectionReason: this.input.rejectionReason },
+      metadata: { refundNumber: refund.refundNumber, paymentId: refund.paymentId },
     });
 
     await eventPublisher.publish({

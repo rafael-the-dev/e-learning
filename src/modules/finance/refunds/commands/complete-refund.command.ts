@@ -33,6 +33,8 @@ import {
 } from "@/modules/finance/refunds/repositories/refund.repository";
 import { recordRefundDisbursed } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { eventPublisher } from "@/server/events/event-publisher";
@@ -282,6 +284,18 @@ export class CompleteRefundCommand extends BaseCommand<CompleteRefundInput, Refu
         oldValues: { status: prevPaymentStatus },
         newValues: { status: newPaymentStatus, refundNumber: refund.refundNumber },
       });
+      await financialAuditService.log(this.context, {
+        eventType:
+          newPaymentStatus === "REFUNDED"
+            ? FinancialAuditEventType.PAYMENT_REFUNDED
+            : FinancialAuditEventType.PAYMENT_PARTIALLY_REFUNDED,
+        entityType: "Payment",
+        entityId: refund.paymentId,
+        amount: refund.amount,
+        beforeData: { status: prevPaymentStatus },
+        afterData: { status: newPaymentStatus },
+        metadata: { refundId: refund.id, refundNumber: refund.refundNumber },
+      });
     }
 
     if (receiptId && newReceiptStatus) {
@@ -293,6 +307,18 @@ export class CompleteRefundCommand extends BaseCommand<CompleteRefundInput, Refu
         action: receiptAction,
         oldValues: { status: prevReceiptStatus },
         newValues: { status: newReceiptStatus, refundNumber: refund.refundNumber },
+      });
+      await financialAuditService.log(this.context, {
+        eventType:
+          newReceiptStatus === "CANCELLED"
+            ? FinancialAuditEventType.RECEIPT_CANCELLED
+            : FinancialAuditEventType.RECEIPT_PARTIALLY_REFUNDED,
+        entityType: "Receipt",
+        entityId: receiptId,
+        amount: refund.amount,
+        beforeData: { status: prevReceiptStatus },
+        afterData: { status: newReceiptStatus },
+        metadata: { refundId: refund.id, refundNumber: refund.refundNumber, paymentId: refund.paymentId },
       });
     }
 
@@ -309,6 +335,23 @@ export class CompleteRefundCommand extends BaseCommand<CompleteRefundInput, Refu
         },
       });
     }
+
+    // Financial audit for the refund itself
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.REFUND_COMPLETED,
+      entityType: "Refund",
+      entityId: refund.id,
+      amount: refund.amount,
+      beforeData: { status: "APPROVED" },
+      afterData: { status: "COMPLETED", refundMethod: existing.refundMethod },
+      metadata: {
+        refundNumber: refund.refundNumber,
+        paymentId: refund.paymentId,
+        receiptId,
+        walletTransactionId,
+        studentId: refund.studentId ?? null,
+      },
+    });
 
     await eventPublisher.publish({
       organizationId: this.context.organizationId,

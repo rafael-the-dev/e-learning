@@ -9,6 +9,8 @@ import {
 } from "@/modules/finance/refunds/repositories/refund.repository";
 import { getNextRefundNumber } from "@/modules/finance/services/financial-sequence.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { eventPublisher } from "@/server/events/event-publisher";
@@ -112,6 +114,20 @@ export class CreateRefundRequestCommand extends BaseCommand<CreateRefundRequestI
         refundNumber: refund.refundNumber,
         amount: refund.amount,
         paymentId: this.input.paymentId,
+      },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.REFUND_REQUESTED,
+      entityType: "Refund",
+      entityId: refund.id,
+      amount: refund.amount,
+      afterData: { refundNumber: refund.refundNumber, status: "REQUESTED", refundMethod: refund.refundMethod },
+      metadata: {
+        paymentId: this.input.paymentId,
+        studentId: refund.studentId ?? null,
+        enrollmentId: refund.enrollmentId ?? null,
+        reason: this.input.reason,
       },
     });
 

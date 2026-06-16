@@ -5,6 +5,8 @@ import {
 } from "@/modules/finance/refunds/schemas/refund.schema";
 import { findRefundById } from "@/modules/finance/refunds/repositories/refund.repository";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { eventPublisher } from "@/server/events/event-publisher";
@@ -60,6 +62,16 @@ export class ApproveRefundCommand extends BaseCommand<ApproveRefundInput, Refund
       action: "refund.approved",
       oldValues: { status: "REQUESTED" },
       newValues: { status: "APPROVED", approvedBy: this.context.userId },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.REFUND_APPROVED,
+      entityType: "Refund",
+      entityId: refund.id,
+      amount: refund.amount,
+      beforeData: { status: "REQUESTED" },
+      afterData: { status: "APPROVED" },
+      metadata: { refundNumber: refund.refundNumber, paymentId: refund.paymentId },
     });
 
     await eventPublisher.publish({
