@@ -4,6 +4,8 @@ import { findWalletById, getWalletBalance } from "@/modules/wallets/repositories
 import { lockAndGetWalletBalance } from "@/modules/wallets/services/wallet-concurrency.service";
 import { recordWalletCredit, recordWalletDebit } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -100,6 +102,15 @@ export class CreateWalletAdjustmentCommand extends BaseCommand<CreateWalletAdjus
       entityId: this.input.walletId,
       action: "wallet.adjustment",
       newValues: { amount: this.input.amount, description: this.input.description },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.WALLET_ADJUSTMENT,
+      entityType: "StudentWallet",
+      entityId: this.input.walletId,
+      amount: this.input.amount,
+      afterData: { amount: this.input.amount, type: this.input.amount > 0 ? "CREDIT" : "DEBIT" },
+      metadata: { description: this.input.description ?? null, walletTransactionId: row.id },
     });
 
     return {

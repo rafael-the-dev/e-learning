@@ -4,6 +4,8 @@ import { findWalletById, getWalletBalance } from "@/modules/wallets/repositories
 import { lockAndGetWalletBalance } from "@/modules/wallets/services/wallet-concurrency.service";
 import { recordWalletDebit } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -87,6 +89,15 @@ export class RefundWalletCommand extends BaseCommand<RefundWalletInput, WalletTr
       entityId: this.input.walletId,
       action: "wallet.refund",
       newValues: { amount: this.input.amount },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.WALLET_REFUND,
+      entityType: "StudentWallet",
+      entityId: this.input.walletId,
+      amount: this.input.amount,
+      afterData: { amount: this.input.amount, walletTransactionId: row.id },
+      metadata: { description: this.input.description ?? null },
     });
 
     return {

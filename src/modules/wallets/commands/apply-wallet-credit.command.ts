@@ -5,6 +5,8 @@ import { lockAndGetWalletBalance } from "@/modules/wallets/services/wallet-concu
 import { findInvoiceById } from "@/modules/finance/repositories/invoice.repository";
 import { recordCreditApplied } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { eventPublisher } from "@/server/events/event-publisher";
@@ -198,6 +200,18 @@ export class ApplyWalletCreditCommand extends BaseCommand<ApplyWalletCreditInput
         amount: this.input.amount,
         invoiceId: this.input.invoiceId,
         studentId: wallet.studentId,
+      },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.WALLET_CREDIT_APPLIED,
+      entityType: "StudentWallet",
+      entityId: wallet.id,
+      amount: this.input.amount,
+      metadata: {
+        invoiceId: this.input.invoiceId,
+        studentId: wallet.studentId,
+        notes: this.input.notes ?? null,
       },
     });
 

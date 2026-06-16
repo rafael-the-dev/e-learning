@@ -1,6 +1,7 @@
 import { BaseCommand, ValidationError, AuthorizationError, NotFoundError, BusinessRuleError } from "@/shared/lib/command";
 import { processOverpaymentSchema, type ProcessOverpaymentInput } from "@/modules/wallets/schemas/wallet.schema";
 import { findWalletById } from "@/modules/wallets/repositories/wallet.repository";
+import { recordWalletCredit } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -66,7 +67,7 @@ export class ProcessOverpaymentCommand extends BaseCommand<ProcessOverpaymentInp
         this.walletId = created.id;
       }
 
-      await tx.studentWalletTransaction.create({
+      const walletTx = await tx.studentWalletTransaction.create({
         data: {
           organizationId: this.context.organizationId,
           studentWalletId: this.walletId,
@@ -77,6 +78,14 @@ export class ProcessOverpaymentCommand extends BaseCommand<ProcessOverpaymentInp
           description: "Excesso de pagamento creditado na carteira",
           createdBy: this.context.userId,
         },
+      });
+      await recordWalletCredit(tx, this.context.organizationId, {
+        sourceId: walletTx.id,
+        amount: this.input.amount,
+        studentId: this.input.studentId,
+        paymentId: this.input.paymentId,
+        description: "Excesso de pagamento creditado na carteira",
+        actorId: this.context.userId,
       });
     });
 

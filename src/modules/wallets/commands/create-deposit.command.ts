@@ -4,6 +4,7 @@ import { findWalletById } from "@/modules/wallets/repositories/wallet.repository
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { recordWalletCredit } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { getDb } from "@/server/db";
@@ -37,17 +38,27 @@ export class CreateDepositCommand extends BaseCommand<CreateDepositInput, Wallet
 
   async execute(): Promise<WalletTransaction> {
     const db = await getDb();
-    const row = await db.studentWalletTransaction.create({
-      data: {
-        organizationId: this.context.organizationId,
-        studentWalletId: this.input.walletId,
-        type: "DEPOSIT",
+    const row = await db.$transaction(async (tx) => {
+      const walletTx = await tx.studentWalletTransaction.create({
+        data: {
+          organizationId: this.context.organizationId,
+          studentWalletId: this.input.walletId,
+          type: "DEPOSIT",
+          amount: this.input.amount,
+          referenceType: this.input.referenceType ?? null,
+          referenceId: this.input.referenceId ?? null,
+          description: this.input.description ?? null,
+          createdBy: this.context.userId,
+        },
+      });
+      await recordWalletCredit(tx, this.context.organizationId, {
+        sourceId: walletTx.id,
         amount: this.input.amount,
-        referenceType: this.input.referenceType ?? null,
-        referenceId: this.input.referenceId ?? null,
-        description: this.input.description ?? null,
-        createdBy: this.context.userId,
-      },
+        studentId: this.walletStudentId,
+        description: this.input.description ?? "Depósito na carteira",
+        actorId: this.context.userId,
+      });
+      return walletTx;
     });
 
     await auditService.log(this.context, {
