@@ -106,6 +106,7 @@ model Organization {
   refunds                    Refund[]
   financialTransactions      FinancialTransaction[]
   financialIntegrityIssues   FinancialIntegrityIssue[]
+  financialAuditLogs         FinancialAuditLog[]
 
   @@map("organizations")
 }
@@ -2527,4 +2528,34 @@ model FinancialIntegrityIssue {
   @@index([organizationId, status, detectedAt])
   @@index([organizationId, entityType, entityId])
   @@map("financial_integrity_issues")
+}
+
+// =============================================================================
+// FINANCIAL AUDIT LOG
+// =============================================================================
+
+model FinancialAuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  eventType      String
+  entityType     String
+  entityId       String
+  performedBy    String?
+  performedAt    DateTime @default(now())
+  amount         Decimal? @db.Decimal(18, 2)
+  currency       String   @default("MZN")
+  beforeData     String?  @db.NVarChar(Max)
+  afterData      String?  @db.NVarChar(Max)
+  metadata       String?  @db.NVarChar(Max)
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, eventType])
+  @@index([organizationId, performedAt])
+  @@index([organizationId, performedBy])
+  @@map("financial_audit_logs")
 }

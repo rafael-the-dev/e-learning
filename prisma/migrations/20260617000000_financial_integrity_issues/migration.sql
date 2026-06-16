@@ -6,9 +6,9 @@
 -- for the same entity + check, while allowing re-detection after resolution.
 -- =============================================================================
 
-CREATE TABLE [financial_integrity_issues] (
-    [id]              NVARCHAR(36)    NOT NULL,
-    [organizationId]  NVARCHAR(36)    NOT NULL,
+CREATE TABLE [dbo].[financial_integrity_issues] (
+    [id]              NVARCHAR(1000)  NOT NULL,
+    [organizationId]  NVARCHAR(1000)  NOT NULL,
     -- IntegrityIssueSeverity: CRITICAL | HIGH | MEDIUM | LOW
     [severity]        NVARCHAR(20)    NOT NULL,
     -- IntegrityIssueCategory: INVOICE_BALANCE | INSTALLMENT_BALANCE | PAYMENT_ALLOCATION |
@@ -19,18 +19,18 @@ CREATE TABLE [financial_integrity_issues] (
     -- Domain entity type, e.g. "Invoice", "Payment", "Receipt"
     [entityType]      NVARCHAR(50)    NOT NULL,
     -- Primary key of the offending entity
-    [entityId]        NVARCHAR(36)    NOT NULL,
+    [entityId]        NVARCHAR(1000)  NOT NULL,
     [description]     NVARCHAR(MAX)   NOT NULL,
     -- Human-readable strings for numeric/status discrepancies
     [expectedValue]   NVARCHAR(500)   NULL,
     [actualValue]     NVARCHAR(500)   NULL,
     [detectedAt]      DATETIME2       NOT NULL CONSTRAINT [DF_fii_detectedAt] DEFAULT GETDATE(),
     -- Links all issues detected in the same job run
-    [jobRunId]        NVARCHAR(36)    NULL,
+    [jobRunId]        NVARCHAR(1000)  NULL,
     -- IntegrityIssueStatus: OPEN | ACKNOWLEDGED | RESOLVED | SUPPRESSED
     [status]          NVARCHAR(20)    NOT NULL CONSTRAINT [DF_fii_status] DEFAULT 'OPEN',
     [resolvedAt]      DATETIME2       NULL,
-    [resolvedBy]      NVARCHAR(36)    NULL,
+    [resolvedBy]      NVARCHAR(1000)  NULL,
     [resolutionNotes] NVARCHAR(MAX)   NULL,
     [createdAt]       DATETIME2       NOT NULL CONSTRAINT [DF_fii_createdAt] DEFAULT GETDATE(),
     [updatedAt]       DATETIME2       NOT NULL CONSTRAINT [DF_fii_updatedAt] DEFAULT GETDATE(),
@@ -38,7 +38,7 @@ CREATE TABLE [financial_integrity_issues] (
     CONSTRAINT [PK_financial_integrity_issues] PRIMARY KEY ([id]),
     CONSTRAINT [FK_fii_organizations]
         FOREIGN KEY ([organizationId])
-        REFERENCES [organizations]([id])
+        REFERENCES [dbo].[organizations]([id])
         ON DELETE NO ACTION
         ON UPDATE NO ACTION
 );
@@ -49,22 +49,22 @@ CREATE TABLE [financial_integrity_issues] (
 -- When an issue is resolved, a new OPEN row can be created again on the next run.
 -- =============================================================================
 CREATE UNIQUE INDEX [uq_open_integrity_issue]
-    ON [financial_integrity_issues] ([organizationId], [entityType], [entityId], [checkName])
+    ON [dbo].[financial_integrity_issues] ([organizationId], [entityType], [entityId], [checkName])
     WHERE [status] = 'OPEN';
 
 -- Query indexes
 CREATE INDEX [idx_fii_severity]
-    ON [financial_integrity_issues] ([organizationId], [severity]);
+    ON [dbo].[financial_integrity_issues] ([organizationId], [severity]);
 
 CREATE INDEX [idx_fii_category]
-    ON [financial_integrity_issues] ([organizationId], [category]);
+    ON [dbo].[financial_integrity_issues] ([organizationId], [category]);
 
 CREATE INDEX [idx_fii_status_date]
-    ON [financial_integrity_issues] ([organizationId], [status], [detectedAt]);
+    ON [dbo].[financial_integrity_issues] ([organizationId], [status], [detectedAt]);
 
 CREATE INDEX [idx_fii_entity]
-    ON [financial_integrity_issues] ([organizationId], [entityType], [entityId]);
+    ON [dbo].[financial_integrity_issues] ([organizationId], [entityType], [entityId]);
 
 CREATE INDEX [idx_fii_job]
-    ON [financial_integrity_issues] ([jobRunId])
+    ON [dbo].[financial_integrity_issues] ([jobRunId])
     WHERE [jobRunId] IS NOT NULL;
