@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import {
   findIntegrityIssueById,
   updateIssueStatus,
@@ -115,6 +117,27 @@ export class ResolveFinancialIntegrityIssueCommand extends BaseCommand<
         entityId: existing.entityId,
         resolutionNotes: this.input.resolutionNotes ?? null,
         resolvedBy: this.context.userId,
+      },
+    });
+
+    const eventTypeMap: Record<string, FinancialAuditEventType> = {
+      RESOLVED:     FinancialAuditEventType.INTEGRITY_ISSUE_RESOLVED,
+      ACKNOWLEDGED: FinancialAuditEventType.INTEGRITY_ISSUE_ACKNOWLEDGED,
+      SUPPRESSED:   FinancialAuditEventType.INTEGRITY_ISSUE_SUPPRESSED,
+    };
+
+    await financialAuditService.log(this.context, {
+      eventType: eventTypeMap[this.input.newStatus],
+      entityType: "FinancialIntegrityIssue",
+      entityId: existing.id,
+      beforeData: { status: existing.status },
+      afterData: { status: this.input.newStatus, resolutionNotes: this.input.resolutionNotes ?? null },
+      metadata: {
+        checkName: existing.checkName,
+        category: existing.category,
+        severity: existing.severity,
+        affectedEntityType: existing.entityType,
+        affectedEntityId: existing.entityId,
       },
     });
 

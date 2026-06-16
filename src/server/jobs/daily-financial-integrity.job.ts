@@ -2,13 +2,14 @@ import { randomUUID } from "crypto";
 import { getDb } from "@/server/db";
 import { ALL_CHECKS } from "@/modules/finance/integrity/services/integrity-checks.service";
 import { upsertOpenIssue } from "@/modules/finance/integrity/repositories/integrity-issue.repository";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType, IntegrityIssueCategory } from "@/shared/types/common";
 import type {
   FinancialIntegrityJobResult,
   OrgIntegrityReport,
   CategoryCheckResult,
   DetectedIssue,
 } from "@/modules/finance/integrity/types";
-import { IntegrityIssueCategory } from "@/shared/types/common";
 
 // =============================================================================
 // OPTIONS
@@ -84,7 +85,7 @@ export async function runDailyFinancialIntegrityJob(
           issues = await run(db, orgId);
 
           for (const issue of issues) {
-            const { isNew } = await upsertOpenIssue(orgId, issue, jobRunId);
+            const { isNew, issueId } = await upsertOpenIssue(orgId, issue, jobRunId);
             if (isNew) {
               newCount++;
               totalNew++;
@@ -92,6 +93,30 @@ export async function runDailyFinancialIntegrityJob(
               reconfirmedCount++;
               totalReconfirmed++;
             }
+
+            // Financial audit entry for every detected (or re-confirmed) issue
+            await financialAuditService.log(
+              { organizationId: orgId, userId: "system" },
+              {
+                eventType: FinancialAuditEventType.INTEGRITY_ISSUE_DETECTED,
+                entityType: "FinancialIntegrityIssue",
+                entityId: issueId,
+                afterData: {
+                  isNew,
+                  severity: issue.severity,
+                  category: issue.category,
+                  checkName: issue.checkName,
+                  description: issue.description,
+                  expectedValue: issue.expectedValue ?? null,
+                  actualValue: issue.actualValue ?? null,
+                },
+                metadata: {
+                  jobRunId,
+                  affectedEntityType: issue.entityType,
+                  affectedEntityId: issue.entityId,
+                },
+              }
+            );
 
             // Tally severities
             switch (issue.severity) {
