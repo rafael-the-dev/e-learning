@@ -11,8 +11,14 @@ import {
 } from "@/modules/finance/services/receipt-cancellation.service";
 import { computeInvoiceStatusOnReversal } from "@/modules/finance/utils/status-computation";
 import { lockAndGetWalletBalance } from "@/modules/wallets/services/wallet-concurrency.service";
-import { recordPaymentCancelled } from "@/modules/finance/ledger/services/financial-transaction.service";
+import {
+  recordPaymentCancelled,
+  recordWalletCredit,
+  recordWalletDebit,
+} from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { eventPublisher } from "@/server/events/event-publisher";
@@ -74,17 +80,27 @@ export class CancelPaymentCommand extends BaseCommand<CancelPaymentInput, Paymen
                 select: { id: true, studentWalletId: true, amount: true },
               });
               for (const ca of creditApps) {
-                await tx.studentWalletTransaction.create({
+                const caAmount = (ca.amount as DecimalLike).toNumber();
+                const reversalTx = await tx.studentWalletTransaction.create({
                   data: {
                     organizationId: this.context.organizationId,
                     studentWalletId: ca.studentWalletId,
                     type: "ADJUSTMENT",
-                    amount: (ca.amount as DecimalLike).toNumber(),
+                    amount: caAmount,
                     referenceType: "Payment",
                     referenceId: existing.id,
                     description: `Crédito revertido — cancelamento do pagamento ${existing.paymentNumber}`,
                     createdBy: this.context.userId,
                   },
+                  select: { id: true },
+                });
+                // Restoring wallet balance = wallet liability increases = WALLET_CREDIT
+                await recordWalletCredit(tx, this.context.organizationId, {
+                  sourceId: reversalTx.id,
+                  amount: caAmount,
+                  studentId: existing.studentId,
+                  description: `Crédito revertido — cancelamento do pagamento ${existing.paymentNumber}`,
+                  actorId: this.context.userId,
                 });
               }
             }
@@ -113,7 +129,7 @@ export class CancelPaymentCommand extends BaseCommand<CancelPaymentInput, Paymen
                   `Não é possível cancelar este pagamento. O excesso de ${overpaymentAmount.toFixed(2)} foi parcialmente utilizado (saldo atual: ${currentBalance.toFixed(2)})`
                 );
               }
-              await tx.studentWalletTransaction.create({
+              const clawbackTx = await tx.studentWalletTransaction.create({
                 data: {
                   organizationId: this.context.organizationId,
                   studentWalletId: overpaymentTx.studentWalletId,
@@ -124,6 +140,15 @@ export class CancelPaymentCommand extends BaseCommand<CancelPaymentInput, Paymen
                   description: `Excesso revertido — cancelamento do pagamento ${existing.paymentNumber}`,
                   createdBy: this.context.userId,
                 },
+                select: { id: true },
+              });
+              // Clawing back overpayment credit = wallet liability decreases = WALLET_DEBIT
+              await recordWalletDebit(tx, this.context.organizationId, {
+                sourceId: clawbackTx.id,
+                amount: overpaymentAmount,
+                studentId: existing.studentId,
+                description: `Excesso revertido — cancelamento do pagamento ${existing.paymentNumber}`,
+                actorId: this.context.userId,
               });
             }
 
@@ -242,6 +267,21 @@ export class CancelPaymentCommand extends BaseCommand<CancelPaymentInput, Paymen
       },
     });
 
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.PAYMENT_CANCELLED,
+      entityType: "Payment",
+      entityId: updated.id,
+      amount: existing.totalAmount,
+      beforeData: { status: existing.status },
+      afterData: { status: "CANCELLED", reason: this.input.reason ?? null },
+      metadata: {
+        paymentNumber: existing.paymentNumber,
+        invoiceId: existing.invoiceId ?? null,
+        studentId: existing.studentId ?? null,
+        enrollmentId: existing.enrollmentId ?? null,
+      },
+    });
+
     if (installmentRecalcResult) {
       await auditService.log(this.context, {
         entity: "Installment",
@@ -257,6 +297,22 @@ export class CancelPaymentCommand extends BaseCommand<CancelPaymentInput, Paymen
           balanceAmount: installmentRecalcResult.newBalanceAmount,
           status: installmentRecalcResult.newStatus,
         },
+      });
+      await financialAuditService.log(this.context, {
+        eventType: FinancialAuditEventType.INSTALLMENT_RECALCULATED,
+        entityType: "Installment",
+        entityId: installmentRecalcResult.installmentId,
+        beforeData: {
+          paidAmount: installmentRecalcResult.oldPaidAmount,
+          balanceAmount: installmentRecalcResult.oldBalanceAmount,
+          status: installmentRecalcResult.oldStatus,
+        },
+        afterData: {
+          paidAmount: installmentRecalcResult.newPaidAmount,
+          balanceAmount: installmentRecalcResult.newBalanceAmount,
+          status: installmentRecalcResult.newStatus,
+        },
+        metadata: { paymentId: existing.id, paymentNumber: existing.paymentNumber },
       });
     }
 

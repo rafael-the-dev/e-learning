@@ -4,6 +4,8 @@ import { findInvoiceById } from "@/modules/finance/repositories/invoice.reposito
 import { findPaymentById } from "@/modules/finance/repositories/payment.repository";
 import { getNextPaymentNumber } from "@/modules/finance/services/financial-sequence.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import type { Payment, Invoice } from "@/modules/finance/types";
@@ -69,6 +71,7 @@ export class RegisterPaymentCommand extends BaseCommand<RegisterPaymentInput, Pa
           installmentId: this.input.installmentId ?? null,
           studentId: invoice.studentId,
           enrollmentId: invoice.enrollmentId,
+          branchId: invoice.branchId ?? null,
           paymentNumber,
           paymentDate,
           totalAmount: this.totalAmount,
@@ -105,6 +108,21 @@ export class RegisterPaymentCommand extends BaseCommand<RegisterPaymentInput, Pa
         invoiceId: invoice.id,
         status: "PENDING",
         splits: this.input.splits.length,
+      },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.PAYMENT_REGISTERED,
+      entityType: "Payment",
+      entityId: payment.id,
+      amount: this.totalAmount,
+      afterData: { paymentNumber: created.paymentNumber, status: "PENDING", splitCount: this.input.splits.length },
+      metadata: {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        studentId: invoice.studentId ?? null,
+        enrollmentId: invoice.enrollmentId ?? null,
+        installmentId: this.input.installmentId ?? null,
       },
     });
 

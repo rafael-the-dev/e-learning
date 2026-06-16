@@ -4,6 +4,8 @@ import { findInvoiceById } from "@/modules/finance/repositories/invoice.reposito
 import { getNextInvoiceNumber } from "@/modules/finance/services/financial-sequence.service";
 import { recordInvoiceCreated } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { eventPublisher } from "@/server/events/event-publisher";
@@ -121,6 +123,19 @@ export class CreateInvoiceCommand extends BaseCommand<CreateInvoiceInput, Invoic
       entityId: invoice.id,
       action: "CREATED",
       newValues: { invoiceNumber, totalAmount, status: "PENDING" },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.INVOICE_CREATED,
+      entityType: "Invoice",
+      entityId: invoice.id,
+      amount: totalAmount,
+      afterData: { invoiceNumber, totalAmount, status: "PENDING", itemCount: this.input.items.length },
+      metadata: {
+        studentId: this.input.studentId ?? null,
+        enrollmentId: this.input.enrollmentId ?? null,
+        branchId: this.input.branchId ?? null,
+      },
     });
 
     await eventPublisher.publish({

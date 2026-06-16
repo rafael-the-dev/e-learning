@@ -6,6 +6,8 @@ import { sumAllocationsByPayment } from "@/modules/finance/repositories/payment-
 import { getNextReceiptNumber } from "@/modules/finance/services/financial-sequence.service";
 import { recordReceiptIssued } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
@@ -88,6 +90,20 @@ export class IssueReceiptCommand extends BaseCommand<IssueReceiptInput, Receipt>
         receiptNumber,
         paymentId: payment.id,
         amount: totalSettled,
+      },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.RECEIPT_ISSUED,
+      entityType: "Receipt",
+      entityId: receipt.id,
+      amount: totalSettled,
+      afterData: { receiptNumber, status: "ISSUED" },
+      metadata: {
+        paymentId: payment.id,
+        paymentNumber: payment.paymentNumber,
+        invoiceId: payment.invoiceId ?? null,
+        studentId: payment.studentId ?? null,
       },
     });
 

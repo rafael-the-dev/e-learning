@@ -2,6 +2,8 @@ import { BaseCommand, ValidationError, AuthorizationError, NotFoundError, Busine
 import { cancelReceiptSchema, type CancelReceiptInput } from "@/modules/finance/schemas/receipt.schema";
 import { findReceiptById, updateReceiptStatus } from "@/modules/finance/repositories/receipt.repository";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import type { Receipt } from "@/modules/finance/types";
@@ -32,6 +34,16 @@ export class CancelReceiptCommand extends BaseCommand<CancelReceiptInput, Receip
       action: "CANCELLED",
       oldValues: { status: "ISSUED" },
       newValues: { status: "CANCELLED", reason: this.input.reason },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.RECEIPT_CANCELLED,
+      entityType: "Receipt",
+      entityId: updated.id,
+      amount: updated.amount,
+      beforeData: { status: this.existing!.status },
+      afterData: { status: "CANCELLED", reason: this.input.reason ?? null },
+      metadata: { paymentId: updated.paymentId, invoiceId: updated.invoiceId },
     });
 
     return updated;

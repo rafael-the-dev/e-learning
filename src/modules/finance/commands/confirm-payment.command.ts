@@ -10,6 +10,8 @@ import {
   recordWalletCredit,
 } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { eventPublisher } from "@/server/events/event-publisher";
@@ -314,6 +316,7 @@ export class ConfirmPaymentCommand extends BaseCommand<ConfirmPaymentInput, Paym
         studentId: payment.studentId,
         enrollmentId: payment.enrollmentId,
         actorId: this.context.userId,
+        occurredAt: payment.paymentDate,
       });
 
       // Wallet credit debited to settle invoice (if any)
@@ -366,6 +369,13 @@ export class ConfirmPaymentCommand extends BaseCommand<ConfirmPaymentInput, Paym
           paymentId: payment.id,
         },
       });
+      await financialAuditService.log(this.context, {
+        eventType: FinancialAuditEventType.WALLET_CREDIT_APPLIED,
+        entityType: "StudentWallet",
+        entityId: this.wallet!.id,
+        amount: walletCreditApplied,
+        metadata: { invoiceId: payment.invoiceId, paymentId: payment.id, studentId: payment.studentId },
+      });
     }
 
     if (overpaymentResult > 0 && overpaymentWalletId) {
@@ -379,7 +389,45 @@ export class ConfirmPaymentCommand extends BaseCommand<ConfirmPaymentInput, Paym
           studentId: payment.studentId,
         },
       });
+      await financialAuditService.log(this.context, {
+        eventType: FinancialAuditEventType.WALLET_OVERPAYMENT_CREDITED,
+        entityType: "StudentWallet",
+        entityId: overpaymentWalletId,
+        amount: overpaymentResult,
+        metadata: { paymentId: payment.id, paymentNumber: payment.paymentNumber, studentId: payment.studentId },
+      });
     }
+
+    // Allocation summary entry
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.PAYMENT_ALLOCATION_CREATED,
+      entityType: "Payment",
+      entityId: updated.id,
+      amount: updated.totalAmount,
+      metadata: {
+        invoiceId: payment.invoiceId,
+        walletCreditApplied: walletCreditApplied > 0 ? walletCreditApplied : null,
+        overpayment: overpaymentResult > 0 ? overpaymentResult : null,
+      },
+    });
+
+    // Payment confirmed
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.PAYMENT_CONFIRMED,
+      entityType: "Payment",
+      entityId: updated.id,
+      amount: updated.totalAmount,
+      beforeData: { status: "PENDING" },
+      afterData: { status: "CONFIRMED" },
+      metadata: {
+        paymentNumber: updated.paymentNumber,
+        invoiceId: updated.invoiceId ?? null,
+        studentId: updated.studentId ?? null,
+        enrollmentId: updated.enrollmentId ?? null,
+        walletCreditApplied: walletCreditApplied > 0 ? walletCreditApplied : null,
+        overpayment: overpaymentResult > 0 ? overpaymentResult : null,
+      },
+    });
 
     await eventPublisher.publish({
       organizationId: this.context.organizationId,

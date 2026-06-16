@@ -3,6 +3,8 @@ import { cancelInvoiceSchema, type CancelInvoiceInput } from "@/modules/finance/
 import { findInvoiceById } from "@/modules/finance/repositories/invoice.repository";
 import { recordInvoiceCancelled } from "@/modules/finance/ledger/services/financial-transaction.service";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import { financialAuditService } from "@/modules/finance/audit/services/financial-audit.service";
+import { FinancialAuditEventType } from "@/shared/types/common";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -57,6 +59,20 @@ export class CancelInvoiceCommand extends BaseCommand<CancelInvoiceInput, Invoic
       action: "CANCELLED",
       oldValues: { status: existing.status },
       newValues: { status: "CANCELLED", reason: this.input.reason },
+    });
+
+    await financialAuditService.log(this.context, {
+      eventType: FinancialAuditEventType.INVOICE_CANCELLED,
+      entityType: "Invoice",
+      entityId: updated.id,
+      amount: existing.totalAmount,
+      beforeData: { status: existing.status, balanceAmount: existing.balanceAmount },
+      afterData: { status: "CANCELLED", reason: this.input.reason ?? null },
+      metadata: {
+        invoiceNumber: existing.invoiceNumber,
+        studentId: existing.studentId ?? null,
+        enrollmentId: existing.enrollmentId ?? null,
+      },
     });
 
     return updated;
