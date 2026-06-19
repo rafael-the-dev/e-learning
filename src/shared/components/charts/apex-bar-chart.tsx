@@ -17,6 +17,7 @@ interface ApexBarChartProps {
   loading?: boolean;
   horizontal?: boolean;
   currency?: boolean;
+  stacked?: boolean;
 }
 
 export function ApexBarChart({
@@ -25,6 +26,7 @@ export function ApexBarChart({
   loading = false,
   horizontal = false,
   currency = false,
+  stacked = false,
 }: ApexBarChartProps) {
   if (loading) {
     return (
@@ -51,6 +53,7 @@ export function ApexBarChart({
   const options: ApexOptions = {
     chart: {
       type: "bar",
+      stacked,
       toolbar: { show: false },
       animations: { enabled: true },
       fontFamily: "inherit",
