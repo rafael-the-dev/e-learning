@@ -6,8 +6,14 @@ import { getStudentDebtReport } from "@/modules/reports/finance/services/financi
 import type { StudentDebtFilters } from "@/modules/reports/finance/types";
 
 export async function GET(req: NextRequest) {
+  let context: Awaited<ReturnType<typeof requirePermission>>;
   try {
-    const context = await requirePermission(PERMISSIONS.FINANCIAL_REPORTS_VIEW);
+    context = await requirePermission(PERMISSIONS.FINANCIAL_REPORTS_VIEW);
+  } catch {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+
+  try {
     const { searchParams } = req.nextUrl;
 
     const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
@@ -39,7 +45,8 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json(report);
-  } catch {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  } catch (err) {
+    console.error("[student-debt] route error:", err);
+    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
   }
 }
