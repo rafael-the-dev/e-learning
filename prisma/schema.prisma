@@ -365,6 +365,7 @@ model Student {
   levelProgressionRequests   LevelProgressionRequest[]
   refunds                    Refund[]
 
+  @@index([organizationId, branchId])
   @@map("students")
 }
 
@@ -834,6 +835,9 @@ model AppliedDiscount {
   invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   discountRule DiscountRule @relation(fields: [discountRuleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([organizationId, createdAt], name: "applied_discounts_org_createdat_idx")
+  @@index([organizationId, discountRuleId, createdAt], name: "applied_discounts_org_rule_createdat_idx")
+  @@index([organizationId, invoiceId], name: "applied_discounts_org_invoice_idx")
   @@map("applied_discounts")
 }
 
@@ -909,6 +913,7 @@ model Enrollment {
   refunds                  Refund[]
 
   @@unique([organizationId, enrollmentNumber])
+  @@index([organizationId, courseId], name: "enrollments_org_course_idx")
   @@map("enrollments")
 }
 
@@ -1130,6 +1135,11 @@ model Invoice {
   refunds          Refund[]
 
   @@unique([organizationId, invoiceNumber])
+  @@index([organizationId, studentId, status], name: "invoices_org_student_status_idx")
+  @@index([organizationId, status, dueDate], name: "invoices_org_status_duedate_idx")
+  @@index([organizationId, status, issueDate], name: "invoices_org_status_issuedate_idx")
+  @@index([organizationId, branchId, status, issueDate], name: "invoices_org_branch_status_issuedate_idx")
+  @@index([organizationId, enrollmentId, status], name: "invoices_org_enrollment_status_idx")
   @@map("invoices")
 }
 
@@ -1194,6 +1204,8 @@ model Installment {
   paymentPlan PaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   payments    Payment[]
 
+  @@index([organizationId, status, dueDate], name: "installments_org_status_duedate_idx")
+  @@index([organizationId, invoiceId, status], name: "installments_org_invoice_status_idx")
   @@map("installments")
 }
 
@@ -1228,6 +1240,9 @@ model Payment {
   refunds            Refund[]
 
   @@unique([organizationId, paymentNumber])
+  @@index([organizationId, status, paymentDate], name: "payments_org_status_paymentdate_idx")
+  @@index([organizationId, branchId, status, paymentDate], name: "payments_org_branch_status_paymentdate_idx")
+  @@index([organizationId, invoiceId, status], name: "payments_org_invoice_status_idx")
   @@map("payments")
 }
 
@@ -1274,6 +1289,8 @@ model PaymentSplit {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   payment      Payment      @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([organizationId, method, createdAt], name: "payment_splits_org_method_createdat_idx")
+  @@index([paymentId, method], name: "payment_splits_payment_method_idx")
   @@map("payment_splits")
 }
 
@@ -1296,6 +1313,8 @@ model PaymentAllocation {
   invoice           Invoice            @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   invoiceItem       InvoiceItem        @relation(fields: [invoiceItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  // Reconciliation Report: SUM(amount) GROUP BY invoiceId vs Invoice.paidAmount
+  @@index([organizationId, invoiceId], name: "payment_allocations_org_invoice_idx")
   @@map("payment_allocations")
 }
 
@@ -1339,6 +1358,9 @@ model StudentWalletTransaction {
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   wallet       StudentWallet  @relation(fields: [studentWalletId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([studentWalletId, createdAt])
+  @@index([organizationId, type, createdAt])
+  @@index([organizationId, createdAt], name: "swt_org_createdat_idx")
   @@map("student_wallet_transactions")
 }
 
@@ -2434,6 +2456,10 @@ model Refund {
   invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([organizationId, refundNumber])
+  @@index([organizationId, status, createdAt], name: "refunds_org_status_createdat_idx")
+  @@index([organizationId, paymentId, status], name: "refunds_org_payment_status_idx")
+  @@index([organizationId, createdAt], name: "refunds_org_createdat_idx")
+  @@index([organizationId, status, completedAt], name: "refunds_org_status_completedat_idx")
   @@map("refunds")
 }
 
@@ -2483,6 +2509,9 @@ model FinancialTransaction {
   @@index([organizationId, studentId])
   @@index([organizationId, occurredAt])
   @@index([organizationId, transactionType])
+  @@index([organizationId, transactionType, occurredAt], name: "financial_tx_org_type_occurredat_idx")
+  @@index([organizationId, sourceType, sourceId], name: "financial_tx_org_source_ref_idx")
+  @@index([organizationId, studentId, occurredAt], name: "financial_tx_org_student_occurredat_idx")
   @@map("financial_transactions")
 }
 
@@ -2527,6 +2556,8 @@ model FinancialIntegrityIssue {
   @@index([organizationId, category])
   @@index([organizationId, status, detectedAt])
   @@index([organizationId, entityType, entityId])
+  @@index([organizationId, status, severity], name: "fii_org_status_severity_idx")
+  @@index([organizationId, category, status], name: "fii_org_category_status_idx")
   @@map("financial_integrity_issues")
 }
 
