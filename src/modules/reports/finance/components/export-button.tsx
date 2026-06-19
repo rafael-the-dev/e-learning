@@ -6,7 +6,7 @@ import { Button } from "@/shared/components/ui/button";
 import { useToast } from "@/shared/hooks/use-toast";
 
 interface ExportButtonProps {
-  reportType: "accounts-receivable" | "aging" | "payments" | "refunds" | "student-debt" | "collections" | "branch-revenue" | "wallets" | "course-revenue";
+  reportType: "accounts-receivable" | "aging" | "payments" | "refunds" | "student-debt" | "collections" | "branch-revenue" | "wallets" | "course-revenue" | "reconciliation" | "closing" | "revenue-trend" | "wallet-liability" | "taxes" | "discounts" | "payment-methods" | "refund-analysis";
   filters?: Record<string, string | undefined>;
   label?: string;
 }

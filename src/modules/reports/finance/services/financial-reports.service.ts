@@ -24,6 +24,21 @@ import {
   listWalletActivityRows,
 } from "../repositories/wallet-activity.repository";
 import { getCourseRevenueReport as _getCourseRevenueReport } from "../repositories/course-revenue.repository";
+import { getFinancialReconciliationReport as _getFinancialReconciliationReport } from "./financial-reconciliation-report.service";
+import { getFinancialClosingReport as _getFinancialClosingReport } from "./financial-closing-report.service";
+import { getRevenueTrendReport as _getRevenueTrendReport } from "./revenue-trend-report.service";
+import { getWalletLiabilityReport as _getWalletLiabilityReport } from "./wallet-liability-report.service";
+import {
+  getTaxKPIs,
+  getTaxByRule,
+  getTaxByBranch,
+  getTaxMonthlyTrend,
+  listTaxRows,
+  hasCriticalTaxIntegrityIssue,
+} from "../repositories/tax.repository";
+import { getDiscountReport as _getDiscountReport } from "./discount-report.service";
+import { getPaymentMethodMixReport as _getPaymentMethodMixReport } from "./payment-method-report.service";
+import { getRefundAnalysisReport as _getRefundAnalysisReport } from "./refund-analysis-report.service";
 import type {
   AccountsReceivableFilters,
   AccountsReceivableReport,
@@ -49,6 +64,22 @@ import type {
   WalletActivityReport,
   CourseRevenueFilters,
   CourseRevenueReport,
+  ReconciliationFilters,
+  ReconciliationReport,
+  ClosingFilters,
+  ClosingReport,
+  RevenueTrendFilters,
+  RevenueTrendReport,
+  WalletLiabilityFilters,
+  WalletLiabilityReport,
+  TaxReportFilters,
+  TaxReport,
+  DiscountReportFilters,
+  DiscountReport,
+  PaymentMethodMixFilters,
+  PaymentMethodMixReport,
+  RefundAnalysisFilters,
+  RefundAnalysisReport,
 } from "../types";
 
 // =============================================================================
@@ -278,6 +309,92 @@ export async function getCourseRevenueReport(
   filters: CourseRevenueFilters
 ): Promise<CourseRevenueReport> {
   return _getCourseRevenueReport(filters);
+}
+
+// =============================================================================
+// FINANCIAL RECONCILIATION REPORT
+// =============================================================================
+
+export async function getFinancialReconciliationReport(
+  filters: ReconciliationFilters
+): Promise<ReconciliationReport> {
+  return _getFinancialReconciliationReport(filters);
+}
+
+// =============================================================================
+// FINANCIAL CLOSING DASHBOARD
+// =============================================================================
+
+export async function getFinancialClosingReport(filters: ClosingFilters): Promise<ClosingReport> {
+  return _getFinancialClosingReport(filters);
+}
+
+// =============================================================================
+// REVENUE TREND REPORT
+// =============================================================================
+
+export async function getRevenueTrendReport(filters: RevenueTrendFilters): Promise<RevenueTrendReport> {
+  return _getRevenueTrendReport(filters);
+}
+
+// =============================================================================
+// WALLET LIABILITY REPORT
+// =============================================================================
+
+export async function getWalletLiabilityReport(filters: WalletLiabilityFilters): Promise<WalletLiabilityReport> {
+  return _getWalletLiabilityReport(filters);
+}
+
+// =============================================================================
+// TAX REPORT
+// =============================================================================
+
+export async function getTaxReport(filters: TaxReportFilters): Promise<TaxReport> {
+  const [kpis, byRule, byBranch, monthlyTrend, { rows, total }, hasCriticalIntegrityIssue] = await Promise.all([
+    getTaxKPIs(filters),
+    getTaxByRule(filters),
+    getTaxByBranch(filters),
+    getTaxMonthlyTrend(filters),
+    listTaxRows(filters),
+    hasCriticalTaxIntegrityIssue(filters.organizationId),
+  ]);
+
+  return {
+    kpis,
+    byRule,
+    byBranch,
+    monthlyTrend,
+    rows,
+    total,
+    page: filters.page,
+    pageSize: filters.pageSize,
+    totalPages: Math.ceil(total / filters.pageSize),
+    hasCriticalIntegrityIssue,
+  };
+}
+
+// =============================================================================
+// DISCOUNT & REVENUE LEAKAGE REPORT
+// =============================================================================
+
+export async function getDiscountReport(filters: DiscountReportFilters): Promise<DiscountReport> {
+  return _getDiscountReport(filters);
+}
+
+// =============================================================================
+// PAYMENT METHOD MIX REPORT
+// =============================================================================
+
+export async function getPaymentMethodMixReport(filters: PaymentMethodMixFilters): Promise<PaymentMethodMixReport> {
+  return _getPaymentMethodMixReport(filters);
+}
+
+// =============================================================================
+// REFUND ANALYSIS REPORT
+// =============================================================================
+
+export async function getRefundAnalysisReport(filters: RefundAnalysisFilters): Promise<RefundAnalysisReport> {
+  return _getRefundAnalysisReport(filters);
 }
 
 // =============================================================================

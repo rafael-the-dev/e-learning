@@ -402,6 +402,8 @@ export const PERMISSIONS = {
   FINANCIAL_REPORTS_EXPORT:           "financialReports.export",
   FINANCIAL_REPORTS_STUDENT_STATEMENT: "financialReports.studentStatement.view",
   FINANCIAL_REPORTS_INTEGRITY:        "financialReports.integrity.view",
+  FINANCIAL_REPORTS_RECONCILIATION:   "financialReports.reconciliation.view",
+  FINANCIAL_REPORTS_CLOSING_VIEW:     "financialReports.closing.view",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

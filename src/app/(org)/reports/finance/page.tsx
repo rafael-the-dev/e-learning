@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
   FileText, Clock, CreditCard, RefreshCcw, User, Wallet, TrendingUp, ShieldAlert,
-  Users, ListChecks, GitBranch, BookOpen,
+  Users, ListChecks, GitBranch, BookOpen, Scale, ClipboardCheck, BarChart3, PiggyBank, Receipt, TrendingDown, Banknote, Activity,
 } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -107,6 +107,48 @@ export default async function FinanceReportsHomePage() {
       available: true,
     },
     {
+      title: "Passivo de Carteiras",
+      description: "Crédito acumulado em carteiras de alunos e exposição financeira da organização.",
+      href: "/reports/finance/wallet-liability",
+      icon: <PiggyBank className="size-5" />,
+      available: true,
+    },
+    {
+      title: "Tendência de Receita",
+      description: "Evolução mensal entre facturação, cobrança e reembolsos — crescimento e lacunas de cobrança.",
+      href: "/reports/finance/revenue-trend",
+      icon: <BarChart3 className="size-5" />,
+      available: true,
+    },
+    {
+      title: "Relatório de Impostos",
+      description: "Imposto cobrado e exposição fiscal por período, regra fiscal, filial e fatura.",
+      href: "/reports/finance/taxes",
+      icon: <Receipt className="size-5" />,
+      available: true,
+    },
+    {
+      title: "Descontos e Fuga de Receita",
+      description: "Análise de descontos aplicados, receita sacrificada e impacto por curso, filial e regra.",
+      href: "/reports/finance/discounts",
+      icon: <TrendingDown className="size-5" />,
+      available: true,
+    },
+    {
+      title: "Mix de Métodos de Pagamento",
+      description: "Como o dinheiro entra na organização — por método, filial e mês. Identifica filiais dependentes de numerário.",
+      href: "/reports/finance/payment-methods",
+      icon: <Banknote className="size-5" />,
+      available: true,
+    },
+    {
+      title: "Análise de Reembolsos",
+      description: "Tendências, exposição financeira e desempenho operacional dos reembolsos.",
+      href: "/reports/finance/refund-analysis",
+      icon: <Activity className="size-5" />,
+      available: true,
+    },
+    {
       title: "Fluxo de Caixa",
       description: "Entradas e saídas de caixa por período. Baseado no livro-razão financeiro.",
       href: "/reports/finance/cash-flow",
@@ -119,6 +161,20 @@ export default async function FinanceReportsHomePage() {
       href: "/reports/finance/integrity",
       icon: <ShieldAlert className="size-5" />,
       badge: criticalCount > 0 ? `${criticalCount} crítico${criticalCount > 1 ? "s" : ""}` : undefined,
+      available: true,
+    },
+    {
+      title: "Reconciliação Financeira",
+      description: "Compara o livro-razão com as entidades de origem e calcula divergências, em tempo real, para auditoria.",
+      href: "/reports/finance/reconciliation",
+      icon: <Scale className="size-5" />,
+      available: true,
+    },
+    {
+      title: "Fecho Financeiro",
+      description: "Visão executiva de integridade, reconciliação, caixa, recebíveis e passivos financeiros.",
+      href: "/reports/finance/closing",
+      icon: <ClipboardCheck className="size-5" />,
       available: true,
     },
   ];
