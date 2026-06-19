@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import type {
   WalletActivityFilters,
@@ -7,28 +8,54 @@ import type {
   WalletMonthlyPoint,
 } from "../types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Dec = { toNumber(): number };
 function n(v: Dec | number | null | undefined): number {
   if (v == null) return 0;
   return typeof v === "object" ? v.toNumber() : v;
 }
 
-function buildDateFilter(filters: WalletActivityFilters) {
-  if (!filters.dateFrom && !filters.dateTo) return {};
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const createdAt: any = {};
-  if (filters.dateFrom) createdAt.gte = new Date(filters.dateFrom);
-  if (filters.dateTo) createdAt.lte = new Date(filters.dateTo);
-  return { createdAt };
+// ── Sort whitelist ────────────────────────────────────────────────────────────
+const SORT_EXPRESSIONS: Record<string, string> = {
+  currentBalance:      "currentBalance",
+  totalCredits:        "totalCredits",
+  totalDebits:         "totalDebits",
+  lastTransactionDate: "lastTransactionDate",
+  studentName:         "s.firstName",
+};
+
+function resolveOrderBy(sortBy?: string, sortDir?: string): Prisma.Sql {
+  if (!sortBy || !SORT_EXPRESSIONS[sortBy]) {
+    return Prisma.raw("currentBalance DESC");
+  }
+  const dir = sortDir === "asc" ? "ASC" : "DESC";
+  return Prisma.raw(`${SORT_EXPRESSIONS[sortBy]} ${dir}`);
 }
 
+// ── Raw row shape ─────────────────────────────────────────────────────────────
+interface RawWalletRow {
+  walletId:            string;
+  studentId:           string;
+  firstName:           string | null;
+  lastName:            string | null;
+  studentCode:         string | null;
+  currentBalance:      number;
+  totalCredits:        number;
+  totalDebits:         number;
+  transactionCount:    number | bigint;
+  lastTransactionDate: Date | null;
+  lastTransactionType: string | null;
+}
+
+// ── KPIs ──────────────────────────────────────────────────────────────────────
 export async function getWalletActivityKPIs(
   filters: WalletActivityFilters
 ): Promise<WalletActivityKPIs> {
   const db = await getDb();
   const orgFilter = { organizationId: filters.organizationId };
-  const dateFilter = buildDateFilter(filters);
+
+  const dateFilter: { createdAt?: { gte?: Date; lte?: Date } } = {};
+  if (filters.dateFrom) dateFilter.createdAt = { ...dateFilter.createdAt, gte: new Date(filters.dateFrom) };
+  if (filters.dateTo)   dateFilter.createdAt = { ...dateFilter.createdAt, lte: new Date(filters.dateTo) };
 
   const [allBalances, creditsAgg, debitsAgg, creditAppliedAgg, refundAgg] = await Promise.all([
     db.studentWalletTransaction.groupBy({
@@ -48,9 +75,6 @@ export async function getWalletActivityKPIs(
       where: { ...orgFilter, ...dateFilter, type: "CREDIT_APPLIED" },
       _sum: { amount: true },
     }),
-    // Only positive REFUND entries — payment refunds credited INTO the wallet.
-    // Negative REFUND entries (RefundWalletCommand cash disbursements) are
-    // already captured by debitsThisPeriod (amount: { lt: 0 }).
     db.studentWalletTransaction.aggregate({
       where: { ...orgFilter, ...dateFilter, type: "REFUND", amount: { gt: 0 } },
       _sum: { amount: true },
@@ -63,18 +87,22 @@ export async function getWalletActivityKPIs(
   return {
     totalWalletBalance,
     studentsWithPositiveBalance,
-    creditsThisPeriod: n(creditsAgg._sum.amount as Dec),
-    debitsThisPeriod: Math.abs(n(debitsAgg._sum.amount as Dec)),
+    creditsThisPeriod:      n(creditsAgg._sum.amount as Dec),
+    debitsThisPeriod:       Math.abs(n(debitsAgg._sum.amount as Dec)),
     creditAppliedThisPeriod: Math.abs(n(creditAppliedAgg._sum.amount as Dec)),
     walletRefundsThisPeriod: n(refundAgg._sum.amount as Dec),
   };
 }
 
+// ── Type breakdown ────────────────────────────────────────────────────────────
 export async function getWalletTypeBreakdown(
   filters: WalletActivityFilters
 ): Promise<WalletTransactionTypePoint[]> {
   const db = await getDb();
-  const dateFilter = buildDateFilter(filters);
+  const dateFilter: { createdAt?: { gte?: Date; lte?: Date } } = {};
+  if (filters.dateFrom) dateFilter.createdAt = { ...dateFilter.createdAt, gte: new Date(filters.dateFrom) };
+  if (filters.dateTo)   dateFilter.createdAt = { ...dateFilter.createdAt, lte: new Date(filters.dateTo) };
+
   const groups = await db.studentWalletTransaction.groupBy({
     by: ["type"],
     where: { organizationId: filters.organizationId, ...dateFilter },
@@ -87,126 +115,141 @@ export async function getWalletTypeBreakdown(
     .sort((a, b) => b.totalAmount - a.totalAmount);
 }
 
+// ── Monthly trend — DB-aggregated ─────────────────────────────────────────────
 export async function getWalletMonthlyTrend(
   filters: WalletActivityFilters
 ): Promise<WalletMonthlyPoint[]> {
   const db = await getDb();
-  const dateFilter = buildDateFilter(filters);
 
-  // Default to last 12 months if no date filter set
-  const effectiveDateFilter = Object.keys(dateFilter).length > 0 ? dateFilter : {
-    createdAt: { gte: new Date(new Date().setFullYear(new Date().getFullYear() - 1)) },
-  };
+  const dateFrom = filters.dateFrom
+    ? new Date(filters.dateFrom)
+    : new Date(new Date().setFullYear(new Date().getFullYear() - 1));
+  const dateTo = filters.dateTo ? new Date(filters.dateTo) : new Date();
 
-  const txList = await db.studentWalletTransaction.findMany({
-    where: { organizationId: filters.organizationId, ...effectiveDateFilter },
-    select: { amount: true, createdAt: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const rows = await db.$queryRaw<{ month: string; credits: number; debits: number }[]>(Prisma.sql`
+    SELECT
+      CONVERT(VARCHAR(7), t.createdAt, 120)                                             AS month,
+      ISNULL(SUM(CASE WHEN CAST(t.amount AS FLOAT) >= 0
+        THEN CAST(t.amount AS FLOAT) ELSE 0 END), 0)                                   AS credits,
+      ABS(ISNULL(SUM(CASE WHEN CAST(t.amount AS FLOAT) < 0
+        THEN CAST(t.amount AS FLOAT) ELSE 0 END), 0))                                  AS debits
+    FROM student_wallet_transactions t
+    WHERE t.organizationId = ${filters.organizationId}
+      AND t.createdAt >= ${dateFrom}
+      AND t.createdAt <= ${dateTo}
+    GROUP BY CONVERT(VARCHAR(7), t.createdAt, 120)
+    ORDER BY month ASC
+  `);
 
-  const monthMap = new Map<string, { credits: number; debits: number }>();
-  for (const tx of txList) {
-    const monthKey = `${tx.createdAt.getFullYear()}-${String(tx.createdAt.getMonth() + 1).padStart(2, "0")}`;
-    const entry = monthMap.get(monthKey) ?? { credits: 0, debits: 0 };
-    const amt = n(tx.amount as Dec);
-    if (amt >= 0) entry.credits += amt;
-    else entry.debits += Math.abs(amt);
-    monthMap.set(monthKey, entry);
-  }
-
-  return Array.from(monthMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, { credits, debits }]) => ({ month, credits, debits }));
+  return rows.map((r) => ({ month: r.month, credits: r.credits, debits: r.debits }));
 }
 
+// ── Paginated wallet activity list — fully DB-side ────────────────────────────
 export async function listWalletActivityRows(
   filters: WalletActivityFilters
 ): Promise<{ rows: WalletActivityRow[]; total: number }> {
   const db = await getDb();
+  const { page, pageSize } = filters;
+  const skip = (page - 1) * pageSize;
 
-  // Build wallet where clause
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const conditions: any[] = [{ organizationId: filters.organizationId }];
-  if (filters.branchId) conditions.push({ student: { branchId: filters.branchId } });
-  if (filters.studentId) conditions.push({ studentId: filters.studentId });
+  // ── Wallet-level WHERE filters ──
+  const walletClauses: Prisma.Sql[] = [
+    Prisma.sql`w.organizationId = ${filters.organizationId}`,
+  ];
+
+  if (filters.studentId) walletClauses.push(Prisma.sql`w.studentId = ${filters.studentId}`);
+  if (filters.branchId)  walletClauses.push(Prisma.sql`s.branchId = ${filters.branchId}`);
+
   if (filters.search) {
-    conditions.push({
-      OR: [
-        { student: { firstName: { contains: filters.search } } },
-        { student: { lastName: { contains: filters.search } } },
-        { student: { code: { contains: filters.search } } },
-      ],
-    });
+    const escaped = filters.search.replace(/[%_[\]]/g, "\\$&");
+    const term = `%${escaped}%`;
+    walletClauses.push(Prisma.sql`(
+      s.firstName LIKE ${term} ESCAPE '\\'
+      OR s.lastName  LIKE ${term} ESCAPE '\\'
+      OR s.code      LIKE ${term} ESCAPE '\\'
+    )`);
   }
-  const walletWhere = conditions.length === 1 ? conditions[0] : { AND: conditions };
 
-  const wallets = await db.studentWallet.findMany({
-    where: walletWhere,
-    select: {
-      id: true,
-      studentId: true,
-      student: { select: { firstName: true, lastName: true, code: true } },
-    },
-  });
+  const whereFragment = Prisma.sql`WHERE ${Prisma.join(walletClauses, " AND ")}`;
 
-  if (wallets.length === 0) return { rows: [], total: 0 };
+  // ── Period condition — applied to credits/debits/count but NOT currentBalance ──
+  const periodClauses: Prisma.Sql[] = [];
+  if (filters.dateFrom)        periodClauses.push(Prisma.sql`t.createdAt >= ${new Date(filters.dateFrom)}`);
+  if (filters.dateTo)          periodClauses.push(Prisma.sql`t.createdAt <= ${new Date(filters.dateTo)}`);
+  if (filters.transactionType) periodClauses.push(Prisma.sql`t.type = ${filters.transactionType}`);
 
-  const walletIds = wallets.map((w) => w.id);
-  const txWhere = { organizationId: filters.organizationId, studentWalletId: { in: walletIds } };
+  const periodCond = periodClauses.length > 0
+    ? Prisma.sql`AND ${Prisma.join(periodClauses, " AND ")}`
+    : Prisma.sql``;
 
-  const [balanceGroups, creditGroups, debitGroups, lastTxList] = await Promise.all([
-    db.studentWalletTransaction.groupBy({
-      by: ["studentWalletId"],
-      where: txWhere,
-      _sum: { amount: true },
-      _count: { id: true },
-    }),
-    db.studentWalletTransaction.groupBy({
-      by: ["studentWalletId"],
-      where: { ...txWhere, amount: { gt: 0 } },
-      _sum: { amount: true },
-    }),
-    db.studentWalletTransaction.groupBy({
-      by: ["studentWalletId"],
-      where: { ...txWhere, amount: { lt: 0 } },
-      _sum: { amount: true },
-    }),
-    db.studentWalletTransaction.findMany({
-      where: txWhere,
-      orderBy: { createdAt: "desc" },
-      distinct: ["studentWalletId"],
-      select: { studentWalletId: true, type: true, createdAt: true },
-    }),
+  // ── Minimum balance HAVING clause ──
+  const havingClause = filters.minBalance != null
+    ? Prisma.sql`HAVING ISNULL(SUM(CAST(t.amount AS FLOAT)), 0) >= ${filters.minBalance}`
+    : Prisma.sql``;
+
+  const orderByExpr = resolveOrderBy(filters.sortBy, filters.sortDir);
+
+  const [rawRows, countResult] = await Promise.all([
+    db.$queryRaw<RawWalletRow[]>(Prisma.sql`
+      WITH LastTx AS (
+        SELECT
+          studentWalletId,
+          type,
+          ROW_NUMBER() OVER (PARTITION BY studentWalletId ORDER BY createdAt DESC) AS rn
+        FROM student_wallet_transactions
+        WHERE organizationId = ${filters.organizationId}
+      )
+      SELECT
+        w.id                                                                         AS walletId,
+        w.studentId,
+        s.firstName,
+        s.lastName,
+        s.code                                                                       AS studentCode,
+        ISNULL(SUM(CAST(t.amount AS FLOAT)), 0)                                     AS currentBalance,
+        ISNULL(SUM(CASE WHEN CAST(t.amount AS FLOAT) > 0 ${periodCond}
+          THEN CAST(t.amount AS FLOAT) ELSE 0 END), 0)                              AS totalCredits,
+        ABS(ISNULL(SUM(CASE WHEN CAST(t.amount AS FLOAT) < 0 ${periodCond}
+          THEN CAST(t.amount AS FLOAT) ELSE 0 END), 0))                             AS totalDebits,
+        COUNT(CASE WHEN 1=1 ${periodCond} THEN t.id END)                            AS transactionCount,
+        MAX(t.createdAt)                                                             AS lastTransactionDate,
+        lt.type                                                                      AS lastTransactionType
+      FROM student_wallets w
+      LEFT JOIN students s             ON s.id = w.studentId
+      LEFT JOIN student_wallet_transactions t ON t.studentWalletId = w.id
+      LEFT JOIN LastTx lt              ON lt.studentWalletId = w.id AND lt.rn = 1
+      ${whereFragment}
+      GROUP BY w.id, w.studentId, s.firstName, s.lastName, s.code, lt.type
+      ${havingClause}
+      ORDER BY ${orderByExpr}
+      OFFSET ${skip} ROWS FETCH NEXT ${pageSize} ROWS ONLY
+    `),
+    db.$queryRaw<[{ total: bigint }]>(Prisma.sql`
+      SELECT COUNT(*) AS total FROM (
+        SELECT w.id
+        FROM student_wallets w
+        LEFT JOIN students s ON s.id = w.studentId
+        LEFT JOIN student_wallet_transactions t ON t.studentWalletId = w.id
+        ${whereFragment}
+        GROUP BY w.id
+        ${havingClause}
+      ) AS cnt
+    `),
   ]);
 
-  const balanceMap = new Map(balanceGroups.map((g) => [g.studentWalletId, g]));
-  const creditMap = new Map(creditGroups.map((g) => [g.studentWalletId, n(g._sum.amount as Dec)]));
-  const debitMap = new Map(debitGroups.map((g) => [g.studentWalletId, Math.abs(n(g._sum.amount as Dec))]));
-  const lastTxMap = new Map(lastTxList.map((t) => [t.studentWalletId, t]));
+  const total = Number(countResult[0]?.total ?? 0);
 
-  let allRows: WalletActivityRow[] = wallets.map((w) => {
-    const agg = balanceMap.get(w.id);
-    return {
-      walletId: w.id,
-      studentId: w.studentId,
-      studentName: `${w.student.firstName} ${w.student.lastName}`,
-      studentCode: w.student.code,
-      currentBalance: n(agg?._sum.amount as Dec),
-      totalCredits: creditMap.get(w.id) ?? 0,
-      totalDebits: debitMap.get(w.id) ?? 0,
-      transactionCount: agg?._count.id ?? 0,
-      lastTransactionDate: lastTxMap.get(w.id)?.createdAt ?? null,
-      lastTransactionType: lastTxMap.get(w.id)?.type ?? null,
-    };
-  });
+  const rows: WalletActivityRow[] = rawRows.map((r) => ({
+    walletId:            r.walletId,
+    studentId:           r.studentId,
+    studentName:         `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim(),
+    studentCode:         r.studentCode,
+    currentBalance:      r.currentBalance,
+    totalCredits:        r.totalCredits,
+    totalDebits:         r.totalDebits,
+    transactionCount:    Number(r.transactionCount),
+    lastTransactionDate: r.lastTransactionDate,
+    lastTransactionType: r.lastTransactionType,
+  }));
 
-  if (filters.minBalance != null) {
-    allRows = allRows.filter((r) => r.currentBalance >= (filters.minBalance ?? 0));
-  }
-
-  allRows.sort((a, b) => b.currentBalance - a.currentBalance);
-
-  const total = allRows.length;
-  const skip = (filters.page - 1) * filters.pageSize;
-  return { rows: allRows.slice(skip, skip + filters.pageSize), total };
+  return { rows, total };
 }

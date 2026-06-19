@@ -27,7 +27,6 @@ const walletSelect = {
   updatedAt: true,
   createdBy: true,
   student: { select: { id: true, firstName: true, lastName: true, code: true } },
-  transactions: { select: { amount: true } },
 } as const;
 
 type WalletRow = {
@@ -39,11 +38,9 @@ type WalletRow = {
   updatedAt: Date;
   createdBy: string | null;
   student: { id: string; firstName: string; lastName: string; code: string | null } | null;
-  transactions: { amount: DecimalLike }[];
 };
 
-function mapToWallet(row: WalletRow): StudentWallet {
-  const balance = row.transactions.reduce((sum, t) => sum + t.amount.toNumber(), 0);
+function mapToWallet(row: WalletRow, balance: number): StudentWallet {
   return {
     id: row.id,
     organizationId: row.organizationId,
@@ -129,7 +126,23 @@ export async function findWalletsByOrganization(
     db.studentWallet.count({ where }),
   ]);
 
-  return buildPaginationMeta(rows.map(mapToWallet), total, params);
+  const walletIds = rows.map((r) => r.id);
+  const balanceSums = walletIds.length > 0
+    ? await db.studentWalletTransaction.groupBy({
+        by: ["studentWalletId"],
+        where: { studentWalletId: { in: walletIds } },
+        _sum: { amount: true },
+      })
+    : [];
+  const balanceMap = new Map(
+    balanceSums.map((g) => [g.studentWalletId, (g._sum.amount as DecimalLike | null)?.toNumber() ?? 0])
+  );
+
+  return buildPaginationMeta(
+    rows.map((row) => mapToWallet(row, balanceMap.get(row.id) ?? 0)),
+    total,
+    params
+  );
 }
 
 export async function findWalletById(
@@ -141,7 +154,9 @@ export async function findWalletById(
     where: { id, organizationId },
     select: walletSelect,
   });
-  return row ? mapToWallet(row) : null;
+  if (!row) return null;
+  const balance = await getWalletBalance(id);
+  return mapToWallet(row, balance);
 }
 
 export async function findWalletByStudentId(
@@ -153,7 +168,9 @@ export async function findWalletByStudentId(
     where: { studentId, organizationId },
     select: walletSelect,
   });
-  return row ? mapToWallet(row) : null;
+  if (!row) return null;
+  const balance = await getWalletBalance(row.id);
+  return mapToWallet(row, balance);
 }
 
 export async function getWalletBalance(walletId: string): Promise<number> {
