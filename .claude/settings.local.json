@@ -46,13 +46,17 @@
       "Bash(git commit -m ' *)",
       "Bash(Get-ChildItem -Path \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\modules\\\\payments\" -Recurse -Force)",
       "Bash(Select-Object FullName)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(mkdir -p \"c:/salc/web/mine/e-learning/src/app/api/reports/finance/integrity/[issueId]/resolve\")",
+      "Bash(node -e \"const pkg = require\\('./package.json'\\); console.log\\('next:', pkg.dependencies?.next\\)\")",
+      "Read(//tmp/**)"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]",
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\teachers\\[teacherId]",
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\courses\\[courseId]",
-      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\courses\\[courseId]\\levels"
+      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\courses\\[courseId]\\levels",
+      "c:\\salc\\web\\mine\\e-learning\\src\\app\\api\\reports\\finance\\integrity\\[issueId]"
     ]
   }
 }
