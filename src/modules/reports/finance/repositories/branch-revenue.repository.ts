@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import type {
   BranchRevenueFilters,
@@ -100,7 +101,6 @@ export async function getBranchRevenueReport(
           : {}),
       },
       select: { branchId: true, invoiceId: true, totalAmount: true, paymentDate: true },
-      orderBy: { paymentDate: "asc" },
     }),
     db.invoice.findMany({
       where: invoiceWhere,
@@ -195,27 +195,49 @@ export async function getBranchRevenueReport(
   // Monthly trend — top 5 branches by collected, using payment dates for time axis.
   // Payment.totalAmount (gross) is used here since Invoice.paidAmount has no event date.
   // PARTIALLY_REFUNDED and REFUNDED payments are included — they represent real cash received.
-  const top5Keys = new Set(rows.slice(0, 5).map((r) => k(r.branchId)));
-  const monthBranchMap = new Map<string, Map<string, number>>();
-  for (const p of rawPayments) {
-    const effectiveBranchId = p.branchId ?? (p.invoiceId ? invoiceBranchMap.get(p.invoiceId) ?? null : null);
-    const bk2 = k(effectiveBranchId);
-    if (!top5Keys.has(bk2)) continue;
-    if (filters.branchId && effectiveBranchId !== filters.branchId) continue;
-    const monthKey = `${p.paymentDate.getFullYear()}-${String(p.paymentDate.getMonth() + 1).padStart(2, "0")}`;
-    if (!monthBranchMap.has(monthKey)) monthBranchMap.set(monthKey, new Map());
-    const mb = monthBranchMap.get(monthKey)!;
-    mb.set(bk2, (mb.get(bk2) ?? 0) + n(p.totalAmount as Dec));
-  }
+  // Pushed to SQL so it never loads raw payment rows just to bucket them by month/branch.
+  const top5BranchIds = rows.slice(0, 5).map((r) => r.branchId);
+  const nonNullTop5 = top5BranchIds.filter((id): id is string => id !== null);
+  const includeNullBranch = top5BranchIds.includes(null);
 
-  const monthlyTrend: BranchRevenueMonthlyPoint[] = [];
-  for (const [month, mb] of Array.from(monthBranchMap.entries()).sort(([a], [b]) => a.localeCompare(b))) {
-    for (const [bk2, collected] of mb.entries()) {
-      const row = rows.find((r) => k(r.branchId) === bk2);
-      if (row && collected > 0) {
-        monthlyTrend.push({ month, branchId: row.branchId, branchName: row.branchName, collected });
-      }
+  let monthlyTrend: BranchRevenueMonthlyPoint[] = [];
+  if (top5BranchIds.length > 0) {
+    const branchMatchClauses: Prisma.Sql[] = [];
+    if (nonNullTop5.length > 0) {
+      branchMatchClauses.push(Prisma.sql`COALESCE(p.branchId, inv.branchId) IN (${Prisma.join(nonNullTop5)})`);
     }
+    if (includeNullBranch) {
+      branchMatchClauses.push(Prisma.sql`COALESCE(p.branchId, inv.branchId) IS NULL`);
+    }
+
+    const trendClauses: Prisma.Sql[] = [
+      Prisma.sql`p.organizationId = ${filters.organizationId}`,
+      Prisma.sql`p.status NOT IN ('PENDING', 'CANCELLED')`,
+      Prisma.sql`(${Prisma.join(branchMatchClauses, " OR ")})`,
+    ];
+    if (filters.branchId) {
+      trendClauses.push(Prisma.sql`COALESCE(p.branchId, inv.branchId) = ${filters.branchId}`);
+    }
+    if (filters.dateFrom) trendClauses.push(Prisma.sql`p.paymentDate >= ${new Date(filters.dateFrom)}`);
+    if (filters.dateTo) trendClauses.push(Prisma.sql`p.paymentDate <= ${new Date(filters.dateTo)}`);
+
+    const trendRows = await db.$queryRaw<{ month: string; branchId: string | null; collected: number }[]>(Prisma.sql`
+      SELECT
+        CONVERT(VARCHAR(7), p.paymentDate, 120) AS month,
+        COALESCE(p.branchId, inv.branchId)      AS branchId,
+        SUM(CAST(p.totalAmount AS FLOAT))       AS collected
+      FROM payments p
+      LEFT JOIN invoices inv ON inv.id = p.invoiceId
+      WHERE ${Prisma.join(trendClauses, " AND ")}
+      GROUP BY CONVERT(VARCHAR(7), p.paymentDate, 120), COALESCE(p.branchId, inv.branchId)
+      HAVING SUM(CAST(p.totalAmount AS FLOAT)) > 0
+      ORDER BY month ASC
+    `);
+
+    monthlyTrend = trendRows.flatMap((r) => {
+      const row = rows.find((rr) => k(rr.branchId) === k(r.branchId));
+      return row ? [{ month: r.month, branchId: row.branchId, branchName: row.branchName, collected: r.collected }] : [];
+    });
   }
 
   return { kpis, rows, monthlyTrend };

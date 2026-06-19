@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import type {
   CashFlowFilters,
@@ -36,16 +37,53 @@ function buildWhere(filters: CashFlowFilters) {
   return where;
 }
 
+// Monthly trend — SQL-side GROUP BY so it never loads raw transaction rows just to
+// bucket them by month. PAYMENT_RECEIVED is cash-in; PAYMENT_CANCELLED and
+// REFUND_DISBURSED are cash-out — same split as the KPI loop below.
+export async function getCashFlowMonthlyTrend(filters: CashFlowFilters): Promise<CashFlowMonthlyPoint[]> {
+  const db = await getDb();
+
+  const clauses: Prisma.Sql[] = [
+    Prisma.sql`t.organizationId = ${filters.organizationId}`,
+    Prisma.sql`t.transactionType IN (${Prisma.join([...CASH_FLOW_INCLUDED_TYPES])})`,
+  ];
+  if (filters.studentId) clauses.push(Prisma.sql`t.studentId = ${filters.studentId}`);
+  if (filters.dateFrom) clauses.push(Prisma.sql`t.occurredAt >= ${new Date(filters.dateFrom)}`);
+  if (filters.dateTo) {
+    const end = new Date(filters.dateTo);
+    end.setHours(23, 59, 59, 999);
+    clauses.push(Prisma.sql`t.occurredAt <= ${end}`);
+  }
+
+  const rows = await db.$queryRaw<{ month: string; cashIn: number; cashOut: number }[]>(Prisma.sql`
+    SELECT
+      CONVERT(VARCHAR(7), t.occurredAt, 120) AS month,
+      ISNULL(SUM(CASE WHEN t.transactionType = 'PAYMENT_RECEIVED'
+        THEN CAST(t.amount AS FLOAT) ELSE 0 END), 0) AS cashIn,
+      ISNULL(SUM(CASE WHEN t.transactionType IN ('PAYMENT_CANCELLED', 'REFUND_DISBURSED')
+        THEN CAST(t.amount AS FLOAT) ELSE 0 END), 0) AS cashOut
+    FROM financial_transactions t
+    WHERE ${Prisma.join(clauses, " AND ")}
+    GROUP BY CONVERT(VARCHAR(7), t.occurredAt, 120)
+    ORDER BY month ASC
+  `);
+
+  return rows.map((r) => ({ month: r.month, cashIn: r.cashIn, cashOut: r.cashOut, net: r.cashIn - r.cashOut }));
+}
+
 export async function getCashFlowKPIs(
   filters: CashFlowFilters
 ): Promise<{ kpis: CashFlowKPIs; monthlyTrend: CashFlowMonthlyPoint[] }> {
   const db = await getDb();
   const where = buildWhere(filters);
 
-  const entries = await db.financialTransaction.findMany({
-    where,
-    select: { transactionType: true, amount: true, occurredAt: true },
-  });
+  const [entries, monthlyTrend] = await Promise.all([
+    db.financialTransaction.findMany({
+      where,
+      select: { transactionType: true, amount: true, occurredAt: true },
+    }),
+    getCashFlowMonthlyTrend(filters),
+  ]);
 
   let totalCashIn = 0;
   let totalCancellations = 0;
@@ -54,28 +92,19 @@ export async function getCashFlowKPIs(
   let cancellationCount = 0;
   let refundCount = 0;
 
-  const monthMap = new Map<string, { cashIn: number; cashOut: number }>();
-
   for (const e of entries) {
     const amt = toNum(e.amount as DecimalLike);
-    const monthKey = `${e.occurredAt.getFullYear()}-${String(e.occurredAt.getMonth() + 1).padStart(2, "0")}`;
-    const month = monthMap.get(monthKey) ?? { cashIn: 0, cashOut: 0 };
 
     if (e.transactionType === "PAYMENT_RECEIVED") {
       totalCashIn += amt;
       paymentCount++;
-      month.cashIn += amt;
     } else if (e.transactionType === "PAYMENT_CANCELLED") {
       totalCancellations += amt;
       cancellationCount++;
-      month.cashOut += amt;
     } else if (e.transactionType === "REFUND_DISBURSED") {
       totalRefunds += amt;
       refundCount++;
-      month.cashOut += amt;
     }
-
-    monthMap.set(monthKey, month);
   }
 
   const kpis: CashFlowKPIs = {
@@ -87,15 +116,6 @@ export async function getCashFlowKPIs(
     cancellationCount,
     refundCount,
   };
-
-  const monthlyTrend: CashFlowMonthlyPoint[] = Array.from(monthMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, { cashIn, cashOut }]) => ({
-      month,
-      cashIn,
-      cashOut,
-      net: cashIn - cashOut,
-    }));
 
   return { kpis, monthlyTrend };
 }

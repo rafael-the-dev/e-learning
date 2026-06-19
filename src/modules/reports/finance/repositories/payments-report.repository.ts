@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import type {
   PaymentsReportFilters,
@@ -48,25 +49,84 @@ function buildPaymentWhere(
   return where;
 }
 
+// Monthly trend — SQL-side GROUP BY so it never loads raw payment rows just to bucket
+// them by month. Mirrors buildPaymentWhere(), including the method-filtered gross
+// amount logic, so totals reconcile with getPaymentsReportKPIs for the same filters.
+export async function getPaymentsMonthlyTrend(
+  filters: Omit<PaymentsReportFilters, "page" | "pageSize">
+): Promise<PaymentMonthlyPoint[]> {
+  const db = await getDb();
+
+  const clauses: Prisma.Sql[] = [
+    Prisma.sql`p.organizationId = ${filters.organizationId}`,
+    Prisma.sql`p.status = 'CONFIRMED'`,
+  ];
+  if (filters.branchId) clauses.push(Prisma.sql`p.branchId = ${filters.branchId}`);
+  if (filters.studentId) clauses.push(Prisma.sql`p.studentId = ${filters.studentId}`);
+  if (filters.dateFrom) clauses.push(Prisma.sql`p.paymentDate >= ${new Date(filters.dateFrom)}`);
+  if (filters.dateTo) clauses.push(Prisma.sql`p.paymentDate <= ${new Date(filters.dateTo)}`);
+  if (filters.paymentMethod) {
+    clauses.push(Prisma.sql`EXISTS (
+      SELECT 1 FROM payment_splits ps WHERE ps.paymentId = p.id AND ps.method = ${filters.paymentMethod}
+    )`);
+  }
+  if (filters.search) {
+    const escaped = filters.search.replace(/[%_[\]]/g, "\\$&");
+    const term = `%${escaped}%`;
+    clauses.push(Prisma.sql`(
+      p.paymentNumber LIKE ${term} ESCAPE '\\'
+      OR st.firstName LIKE ${term} ESCAPE '\\'
+      OR st.lastName  LIKE ${term} ESCAPE '\\'
+      OR i.invoiceNumber LIKE ${term} ESCAPE '\\'
+    )`);
+  }
+
+  // When a method filter is active, sum only the matching splits — same rule as the
+  // KPI's per-payment `gross` calculation — so the chart total matches totalReceived.
+  const amountExpr = filters.paymentMethod
+    ? Prisma.sql`ISNULL((
+        SELECT SUM(CAST(ps2.amount AS FLOAT)) FROM payment_splits ps2
+        WHERE ps2.paymentId = p.id AND ps2.method = ${filters.paymentMethod}
+      ), 0)`
+    : Prisma.sql`CAST(p.totalAmount AS FLOAT)`;
+
+  const rows = await db.$queryRaw<{ month: string; count: number | bigint; total: number }[]>(Prisma.sql`
+    SELECT
+      CONVERT(VARCHAR(7), p.paymentDate, 120) AS month,
+      COUNT(*)                                AS count,
+      ISNULL(SUM(${amountExpr}), 0)           AS total
+    FROM payments p
+    LEFT JOIN students st ON st.id = p.studentId
+    LEFT JOIN invoices i  ON i.id = p.invoiceId
+    WHERE ${Prisma.join(clauses, " AND ")}
+    GROUP BY CONVERT(VARCHAR(7), p.paymentDate, 120)
+    ORDER BY month ASC
+  `);
+
+  return rows.map((r) => ({ month: r.month, count: Number(r.count), totalAmount: r.total }));
+}
+
 export async function getPaymentsReportKPIs(
   filters: Omit<PaymentsReportFilters, "page" | "pageSize">
 ): Promise<{ kpis: PaymentsReportKPIs; methodBreakdown: PaymentMethodBreakdown[]; monthlyTrend: PaymentMonthlyPoint[] }> {
   const db = await getDb();
   const where = buildPaymentWhere(filters);
 
-  const payments = await db.payment.findMany({
-    where,
-    select: {
-      id: true,
-      totalAmount: true,
-      paymentDate: true,
-      splits: { select: { method: true, amount: true } },
-      refunds: {
-        where: { status: "COMPLETED" },
-        select: { amount: true },
+  const [payments, monthlyTrend] = await Promise.all([
+    db.payment.findMany({
+      where,
+      select: {
+        id: true,
+        totalAmount: true,
+        splits: { select: { method: true, amount: true } },
+        refunds: {
+          where: { status: "COMPLETED" },
+          select: { amount: true },
+        },
       },
-    },
-  });
+    }),
+    getPaymentsMonthlyTrend(filters),
+  ]);
 
   let totalReceived = 0;
   let cashReceived = 0;
@@ -75,7 +135,6 @@ export async function getPaymentsReportKPIs(
   let refundedTotal = 0;
 
   const methodMap = new Map<string, { count: number; total: number }>();
-  const monthMap = new Map<string, { count: number; total: number }>();
 
   for (const p of payments) {
     const refunded = p.refunds.reduce((s, r) => s + toNum(r.amount as DecimalLike), 0);
@@ -105,13 +164,6 @@ export async function getPaymentsReportKPIs(
       existing.total += amt;
       methodMap.set(m, existing);
     }
-
-    // Monthly aggregation (YYYY-MM)
-    const monthKey = `${p.paymentDate.getFullYear()}-${String(p.paymentDate.getMonth() + 1).padStart(2, "0")}`;
-    const monthEntry = monthMap.get(monthKey) ?? { count: 0, total: 0 };
-    monthEntry.count++;
-    monthEntry.total += gross;
-    monthMap.set(monthKey, monthEntry);
   }
 
   const kpis: PaymentsReportKPIs = {
@@ -128,10 +180,6 @@ export async function getPaymentsReportKPIs(
   const methodBreakdown: PaymentMethodBreakdown[] = Array.from(methodMap.entries()).map(
     ([method, { count, total }]) => ({ method, count, totalAmount: total })
   );
-
-  const monthlyTrend: PaymentMonthlyPoint[] = Array.from(monthMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, { count, total }]) => ({ month, count, totalAmount: total }));
 
   return { kpis, methodBreakdown, monthlyTrend };
 }

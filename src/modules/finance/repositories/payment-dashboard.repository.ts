@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import type {
   PaymentDashboardKPIs,
@@ -155,27 +156,20 @@ export async function getPaymentMonthlyTrend(
   cutoff.setDate(1);
   cutoff.setHours(0, 0, 0, 0);
 
-  const rows = await db.payment.findMany({
-    where: { organizationId, status: "CONFIRMED", paymentDate: { gte: cutoff } },
-    select: { paymentDate: true, totalAmount: true },
-    orderBy: { paymentDate: "asc" },
-  });
+  const rows = await db.$queryRaw<{ month: string; count: number | bigint; totalAmount: number }[]>(Prisma.sql`
+    SELECT
+      CONVERT(VARCHAR(7), paymentDate, 120)      AS month,
+      COUNT(*)                                   AS count,
+      ISNULL(SUM(CAST(totalAmount AS FLOAT)), 0) AS totalAmount
+    FROM payments
+    WHERE organizationId = ${organizationId}
+      AND status = 'CONFIRMED'
+      AND paymentDate >= ${cutoff}
+    GROUP BY CONVERT(VARCHAR(7), paymentDate, 120)
+    ORDER BY month ASC
+  `);
 
-  const map = new Map<string, { count: number; totalAmount: number }>();
-  for (const row of rows) {
-    const key = `${row.paymentDate.getFullYear()}-${String(row.paymentDate.getMonth() + 1).padStart(2, "0")}`;
-    const existing = map.get(key) ?? { count: 0, totalAmount: 0 };
-    map.set(key, {
-      count: existing.count + 1,
-      totalAmount: existing.totalAmount + (row.totalAmount as DecimalLike).toNumber(),
-    });
-  }
-
-  return Array.from(map.entries()).map(([month, data]) => ({
-    month,
-    count: data.count,
-    totalAmount: data.totalAmount,
-  }));
+  return rows.map((r) => ({ month: r.month, count: Number(r.count), totalAmount: r.totalAmount }));
 }
 
 export async function getPaymentBranchDistribution(

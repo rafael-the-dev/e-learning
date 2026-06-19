@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import type {
   AccountsReceivableFilters,
@@ -6,195 +7,268 @@ import type {
   AgingBucket,
 } from "../types";
 
+// ── Numeric coercion ────────────────────────────────────────────────────────
 type DecimalLike = { toNumber(): number };
 
 function toNum(v: DecimalLike | number | null | undefined): number {
   if (v == null) return 0;
-  return typeof v === "object" ? v.toNumber() : v;
+  return typeof v === "object" && "toNumber" in v ? v.toNumber() : (v as number);
 }
 
-function calcAgingBucket(dueDate: Date | null, today: Date): AgingBucket {
-  if (!dueDate) return "current";
-  const days = Math.floor((today.getTime() - dueDate.getTime()) / 86_400_000);
-  if (days <= 0) return "current";
-  if (days <= 30) return "1-30";
-  if (days <= 60) return "31-60";
-  if (days <= 90) return "61-90";
-  return "90+";
+// ── Sort whitelist ───────────────────────────────────────────────────────────
+const SORT_EXPRESSIONS: Record<string, string> = {
+  dueDate: "i.dueDate",
+  balanceAmount: "CAST(i.balanceAmount AS FLOAT)",
+  daysOverdue: "CASE WHEN i.dueDate IS NULL OR i.dueDate >= GETDATE() THEN 0 ELSE DATEDIFF(day, i.dueDate, GETDATE()) END",
+  studentName: "s.firstName",
+  invoiceNumber: "i.invoiceNumber",
+};
+
+function resolveOrderBy(sortBy?: string, sortDir?: string): Prisma.Sql {
+  if (!sortBy || !SORT_EXPRESSIONS[sortBy]) {
+    return Prisma.raw("i.dueDate ASC, CAST(i.balanceAmount AS FLOAT) DESC");
+  }
+  const expr = SORT_EXPRESSIONS[sortBy];
+  const dir = sortDir === "desc" ? "DESC" : "ASC";
+  return Prisma.raw(`${expr} ${dir}`);
 }
 
-function calcDaysOverdue(dueDate: Date | null, today: Date): number {
-  if (!dueDate) return 0;
-  const days = Math.floor((today.getTime() - dueDate.getTime()) / 86_400_000);
-  return Math.max(0, days);
+// ── Aging bucket SQL CASE expression ────────────────────────────────────────
+const AGING_BUCKET_CASE = `
+  CASE
+    WHEN i.dueDate IS NULL THEN 'current'
+    WHEN i.dueDate >= CAST(GETDATE() AS date) THEN 'current'
+    WHEN DATEDIFF(day, i.dueDate, GETDATE()) BETWEEN 1 AND 30 THEN '1-30'
+    WHEN DATEDIFF(day, i.dueDate, GETDATE()) BETWEEN 31 AND 60 THEN '31-60'
+    WHEN DATEDIFF(day, i.dueDate, GETDATE()) BETWEEN 61 AND 90 THEN '61-90'
+    ELSE '90+'
+  END`;
+
+// ── Bucket value → SQL predicate ────────────────────────────────────────────
+function agingBucketClause(bucket: string): Prisma.Sql {
+  switch (bucket) {
+    case "current":
+      return Prisma.sql`(i.dueDate IS NULL OR i.dueDate >= CAST(GETDATE() AS date))`;
+    case "1-30":
+      return Prisma.sql`(i.dueDate IS NOT NULL AND DATEDIFF(day, i.dueDate, GETDATE()) BETWEEN 1 AND 30)`;
+    case "31-60":
+      return Prisma.sql`(i.dueDate IS NOT NULL AND DATEDIFF(day, i.dueDate, GETDATE()) BETWEEN 31 AND 60)`;
+    case "61-90":
+      return Prisma.sql`(i.dueDate IS NOT NULL AND DATEDIFF(day, i.dueDate, GETDATE()) BETWEEN 61 AND 90)`;
+    case "90+":
+      return Prisma.sql`(i.dueDate IS NOT NULL AND DATEDIFF(day, i.dueDate, GETDATE()) > 90)`;
+    default:
+      return Prisma.sql`1=1`;
+  }
 }
 
-export async function getAccountsReceivableKPIs(
-  filters: Pick<AccountsReceivableFilters, "organizationId" | "branchId" | "courseId" | "studentId" | "dueDateFrom" | "dueDateTo" | "dateFrom" | "dateTo" | "academicYearId" | "academicTermId">
-): Promise<AccountsReceivableKPIs> {
-  const db = await getDb();
-  const today = new Date();
+// ── WHERE builder ────────────────────────────────────────────────────────────
+type ArWhereFilters = Pick<
+  AccountsReceivableFilters,
+  | "organizationId" | "branchId" | "courseId" | "studentId"
+  | "dueDateFrom" | "dueDateTo" | "dateFrom" | "dateTo"
+  | "academicYearId" | "academicTermId" | "invoiceStatus" | "agingBucket" | "search"
+>;
 
-  const where = buildInvoiceWhere(filters);
+function buildArWhere(filters: Partial<ArWhereFilters> & Pick<ArWhereFilters, "organizationId">): Prisma.Sql {
+  const clauses: Prisma.Sql[] = [
+    Prisma.sql`i.organizationId = ${filters.organizationId}`,
+    Prisma.sql`i.deletedAt IS NULL`,
+    Prisma.sql`CAST(i.balanceAmount AS FLOAT) > 0`,
+  ];
 
-  const [rows, studentCount] = await Promise.all([
-    db.invoice.findMany({
-      where,
-      select: {
-        balanceAmount: true,
-        dueDate: true,
-        status: true,
-        studentId: true,
-      },
-    }),
-    db.invoice.groupBy({
-      by: ["studentId"],
-      where,
-      _count: { studentId: true },
-    }),
-  ]);
-
-  let totalReceivable = 0;
-  let overdueReceivable = 0;
-  let dueSoon = 0;
-  let partiallyPaid = 0;
-
-  for (const row of rows) {
-    const bal = toNum(row.balanceAmount as DecimalLike);
-    totalReceivable += bal;
-    const daysOverdue = calcDaysOverdue(row.dueDate, today);
-    if (daysOverdue > 0) overdueReceivable += bal;
-    else if (row.dueDate) {
-      const daysUntilDue = Math.floor((row.dueDate.getTime() - today.getTime()) / 86_400_000);
-      if (daysUntilDue <= 7) dueSoon += bal;
-    }
-    if (row.status === "PARTIALLY_PAID") partiallyPaid++;
+  if (filters.invoiceStatus) {
+    clauses.push(Prisma.sql`i.status = ${filters.invoiceStatus}`);
+  } else {
+    clauses.push(Prisma.sql`i.status NOT IN ('CANCELLED', 'PAID')`);
   }
 
-  return {
-    totalReceivable,
-    overdueReceivable,
-    dueSoon,
-    partiallyPaid,
-    studentsWithDebt: studentCount.filter((r) => r.studentId !== null).length,
-    invoiceCount: rows.length,
-  };
-}
+  if (filters.studentId) clauses.push(Prisma.sql`i.studentId = ${filters.studentId}`);
+  if (filters.branchId) clauses.push(Prisma.sql`i.branchId = ${filters.branchId}`);
+  if (filters.dateFrom) clauses.push(Prisma.sql`i.issueDate >= ${new Date(filters.dateFrom)}`);
+  if (filters.dateTo) clauses.push(Prisma.sql`i.issueDate <= ${new Date(filters.dateTo)}`);
+  if (filters.dueDateFrom) clauses.push(Prisma.sql`i.dueDate >= ${new Date(filters.dueDateFrom)}`);
+  if (filters.dueDateTo) clauses.push(Prisma.sql`i.dueDate <= ${new Date(filters.dueDateTo)}`);
 
-function buildInvoiceWhere(
-  filters: Pick<AccountsReceivableFilters, "organizationId" | "branchId" | "courseId" | "studentId" | "dueDateFrom" | "dueDateTo" | "dateFrom" | "dateTo" | "academicYearId" | "academicTermId" | "invoiceStatus" | "agingBucket" | "search">
-) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {
-    organizationId: filters.organizationId,
-    balanceAmount: { gt: 0 },
-    status: { notIn: ["CANCELLED", "PAID"] },
-    deletedAt: null,
-  };
-
-  if (filters.branchId) where.branchId = filters.branchId;
-  if (filters.studentId) where.studentId = filters.studentId;
-  if (filters.invoiceStatus) where.status = filters.invoiceStatus;
-
-  if (filters.dateFrom || filters.dateTo) {
-    where.issueDate = {};
-    if (filters.dateFrom) where.issueDate.gte = new Date(filters.dateFrom);
-    if (filters.dateTo) where.issueDate.lte = new Date(filters.dateTo);
+  if (filters.courseId) {
+    clauses.push(Prisma.sql`EXISTS (
+      SELECT 1 FROM enrollments e
+      WHERE e.id = i.enrollmentId AND e.courseId = ${filters.courseId} AND e.deletedAt IS NULL
+    )`);
+  }
+  if (filters.academicYearId) {
+    clauses.push(Prisma.sql`EXISTS (
+      SELECT 1 FROM enrollments e
+      WHERE e.id = i.enrollmentId AND e.academicYearId = ${filters.academicYearId} AND e.deletedAt IS NULL
+    )`);
+  }
+  if (filters.academicTermId) {
+    clauses.push(Prisma.sql`EXISTS (
+      SELECT 1 FROM enrollments e
+      WHERE e.id = i.enrollmentId AND e.academicTermId = ${filters.academicTermId} AND e.deletedAt IS NULL
+    )`);
   }
 
-  if (filters.dueDateFrom || filters.dueDateTo) {
-    where.dueDate = {};
-    if (filters.dueDateFrom) where.dueDate.gte = new Date(filters.dueDateFrom);
-    if (filters.dueDateTo) where.dueDate.lte = new Date(filters.dueDateTo);
+  if (filters.agingBucket) {
+    clauses.push(agingBucketClause(filters.agingBucket));
   }
-
-  // Invoice.enrollment is a nullable to-one relation — use direct field filters, not `some`.
-  const enrollmentFilter: Record<string, unknown> = {};
-  if (filters.courseId) enrollmentFilter.courseId = filters.courseId;
-  if (filters.academicYearId) enrollmentFilter.academicYearId = filters.academicYearId;
-  if (filters.academicTermId) enrollmentFilter.academicTermId = filters.academicTermId;
-  if (Object.keys(enrollmentFilter).length > 0) where.enrollment = enrollmentFilter;
 
   if (filters.search) {
-    where.OR = [
-      { invoiceNumber: { contains: filters.search } },
-      { student: { firstName: { contains: filters.search } } },
-      { student: { lastName: { contains: filters.search } } },
-    ];
+    const escaped = filters.search.replace(/[%_[\]]/g, "\\$&");
+    const term = `%${escaped}%`;
+    clauses.push(Prisma.sql`(
+      i.invoiceNumber LIKE ${term} ESCAPE '\\'
+      OR s.firstName LIKE ${term} ESCAPE '\\'
+      OR s.lastName  LIKE ${term} ESCAPE '\\'
+    )`);
   }
 
-  return where;
+  return Prisma.sql`WHERE ${Prisma.join(clauses, " AND ")}`;
 }
 
-const AR_INVOICE_SELECT = {
-  id: true,
-  invoiceNumber: true,
-  issueDate: true,
-  dueDate: true,
-  totalAmount: true,
-  paidAmount: true,
-  balanceAmount: true,
-  status: true,
-  studentId: true,
-  branchId: true,
-  enrollmentId: true,
-  student: { select: { firstName: true, lastName: true } },
-  branch: { select: { name: true } },
-  enrollment: {
-    select: {
-      enrollmentNumber: true,
-      id: true,
-      course: { select: { id: true, name: true } },
-    },
-  },
-} as const;
+// ── Raw row shapes ───────────────────────────────────────────────────────────
+interface RawArRow {
+  id: string;
+  invoiceNumber: string;
+  issueDate: Date;
+  dueDate: Date | null;
+  totalAmount: number;
+  paidAmount: number;
+  balanceAmount: number;
+  status: string;
+  studentId: string | null;
+  branchId: string | null;
+  enrollmentId: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  branchName: string | null;
+  enrollmentNumber: string | null;
+  courseId: string | null;
+  courseName: string | null;
+  daysOverdue: number;
+  agingBucket: string;
+}
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapArRow(r: any, today: Date): AccountsReceivableRow {
+interface RawArKpiRow {
+  totalReceivable: number;
+  overdueReceivable: number;
+  dueSoon: number;
+  partiallyPaid: number | bigint;
+  studentsWithDebt: number | bigint;
+  invoiceCount: number | bigint;
+}
+
+// ── KPIs ─────────────────────────────────────────────────────────────────────
+export async function getAccountsReceivableKPIs(
+  filters: Pick<
+    AccountsReceivableFilters,
+    "organizationId" | "branchId" | "courseId" | "studentId"
+    | "dueDateFrom" | "dueDateTo" | "dateFrom" | "dateTo"
+    | "academicYearId" | "academicTermId"
+  >
+): Promise<AccountsReceivableKPIs> {
+  const db = await getDb();
+  const whereFragment = buildArWhere(filters);
+
+  const [kpiRow] = await db.$queryRaw<RawArKpiRow[]>(Prisma.sql`
+    SELECT
+      ISNULL(SUM(CAST(i.balanceAmount AS FLOAT)), 0)                                                  AS totalReceivable,
+      ISNULL(SUM(CASE WHEN i.dueDate < GETDATE()
+                      THEN CAST(i.balanceAmount AS FLOAT) ELSE 0 END), 0)                            AS overdueReceivable,
+      ISNULL(SUM(CASE WHEN i.dueDate >= GETDATE() AND i.dueDate <= DATEADD(day, 7, GETDATE())
+                      THEN CAST(i.balanceAmount AS FLOAT) ELSE 0 END), 0)                            AS dueSoon,
+      COUNT(CASE WHEN i.status = 'PARTIALLY_PAID' THEN 1 END)                                        AS partiallyPaid,
+      COUNT(DISTINCT i.studentId)                                                                     AS studentsWithDebt,
+      COUNT(i.id)                                                                                     AS invoiceCount
+    FROM invoices i
+    LEFT JOIN students s ON s.id = i.studentId AND s.deletedAt IS NULL
+    ${whereFragment}
+  `);
+
   return {
-    invoiceId: r.id,
-    invoiceNumber: r.invoiceNumber,
-    studentId: r.studentId,
-    studentName: r.student ? `${r.student.firstName} ${r.student.lastName}` : null,
-    enrollmentId: r.enrollmentId,
-    enrollmentNumber: r.enrollment?.enrollmentNumber ?? null,
-    courseId: r.enrollment?.course?.id ?? null,
-    courseName: r.enrollment?.course?.name ?? null,
-    branchId: r.branchId,
-    branchName: r.branch?.name ?? null,
-    issueDate: r.issueDate,
-    dueDate: r.dueDate,
-    totalAmount: toNum(r.totalAmount as DecimalLike),
-    paidAmount: toNum(r.paidAmount as DecimalLike),
-    balanceAmount: toNum(r.balanceAmount as DecimalLike),
-    status: r.status,
-    daysOverdue: calcDaysOverdue(r.dueDate, today),
-    agingBucket: calcAgingBucket(r.dueDate, today),
+    totalReceivable:   toNum(kpiRow?.totalReceivable),
+    overdueReceivable: toNum(kpiRow?.overdueReceivable),
+    dueSoon:           toNum(kpiRow?.dueSoon),
+    partiallyPaid:     Number(kpiRow?.partiallyPaid ?? 0),
+    studentsWithDebt:  Number(kpiRow?.studentsWithDebt ?? 0),
+    invoiceCount:      Number(kpiRow?.invoiceCount ?? 0),
   };
 }
 
+// ── Paginated row list ────────────────────────────────────────────────────────
 export async function listAccountsReceivable(
   filters: AccountsReceivableFilters
 ): Promise<{ rows: AccountsReceivableRow[]; total: number }> {
   const db = await getDb();
-  const today = new Date();
-  const where = buildInvoiceWhere(filters);
-  const skip = (filters.page - 1) * filters.pageSize;
-  const orderBy = [{ dueDate: "asc" as const }, { balanceAmount: "desc" as const }];
+  const { page, pageSize } = filters;
+  const skip = (page - 1) * pageSize;
+  const whereFragment = buildArWhere(filters);
+  const orderByExpr = resolveOrderBy(filters.sortBy, filters.sortDir);
 
-  if (filters.agingBucket) {
-    // Aging bucket is computed from dueDate at runtime — cannot be pushed to the DB query.
-    // Fetch all matching rows, apply bucket filter in memory, then slice for the requested page.
-    const allRaw = await db.invoice.findMany({ where, orderBy, select: AR_INVOICE_SELECT });
-    const allMapped = allRaw.map((r) => mapArRow(r, today));
-    const filtered = allMapped.filter((r) => r.agingBucket === filters.agingBucket);
-    return { rows: filtered.slice(skip, skip + filters.pageSize), total: filtered.length };
-  }
-
-  const [rawRows, total] = await Promise.all([
-    db.invoice.findMany({ where, skip, take: filters.pageSize, orderBy, select: AR_INVOICE_SELECT }),
-    db.invoice.count({ where }),
+  const [rawRows, countResult] = await Promise.all([
+    db.$queryRaw<RawArRow[]>(Prisma.sql`
+      SELECT
+        i.id,
+        i.invoiceNumber,
+        i.issueDate,
+        i.dueDate,
+        CAST(i.totalAmount   AS FLOAT) AS totalAmount,
+        CAST(i.paidAmount    AS FLOAT) AS paidAmount,
+        CAST(i.balanceAmount AS FLOAT) AS balanceAmount,
+        i.status,
+        i.studentId,
+        i.branchId,
+        i.enrollmentId,
+        s.firstName,
+        s.lastName,
+        b.name                         AS branchName,
+        e.enrollmentNumber,
+        c.id                           AS courseId,
+        c.name                         AS courseName,
+        CASE
+          WHEN i.dueDate IS NULL OR i.dueDate >= GETDATE() THEN 0
+          ELSE DATEDIFF(day, i.dueDate, GETDATE())
+        END                            AS daysOverdue,
+        ${Prisma.raw(AGING_BUCKET_CASE)} AS agingBucket
+      FROM invoices i
+      LEFT JOIN students    s ON s.id = i.studentId    AND s.deletedAt IS NULL
+      LEFT JOIN branches    b ON b.id = i.branchId
+      LEFT JOIN enrollments e ON e.id = i.enrollmentId AND e.deletedAt IS NULL
+      LEFT JOIN courses     c ON c.id = e.courseId
+      ${whereFragment}
+      ORDER BY ${orderByExpr}
+      OFFSET ${skip} ROWS FETCH NEXT ${pageSize} ROWS ONLY
+    `),
+    db.$queryRaw<[{ total: bigint }]>(Prisma.sql`
+      SELECT COUNT(*) AS total
+      FROM invoices i
+      LEFT JOIN students s ON s.id = i.studentId AND s.deletedAt IS NULL
+      ${whereFragment}
+    `),
   ]);
 
-  return { rows: rawRows.map((r) => mapArRow(r, today)), total };
+  const total = Number(countResult[0]?.total ?? 0);
+
+  const rows: AccountsReceivableRow[] = rawRows.map((r) => ({
+    invoiceId:        r.id,
+    invoiceNumber:    r.invoiceNumber,
+    studentId:        r.studentId,
+    studentName:      r.firstName ? `${r.firstName} ${r.lastName ?? ""}`.trim() : null,
+    enrollmentId:     r.enrollmentId,
+    enrollmentNumber: r.enrollmentNumber ?? null,
+    courseId:         r.courseId ?? null,
+    courseName:       r.courseName ?? null,
+    branchId:         r.branchId,
+    branchName:       r.branchName ?? null,
+    issueDate:        r.issueDate,
+    dueDate:          r.dueDate,
+    totalAmount:      r.totalAmount,
+    paidAmount:       r.paidAmount,
+    balanceAmount:    r.balanceAmount,
+    status:           r.status,
+    daysOverdue:      r.daysOverdue,
+    agingBucket:      r.agingBucket as AgingBucket,
+  }));
+
+  return { rows, total };
 }

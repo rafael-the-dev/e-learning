@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import type {
   InvoiceDashboardKPIs,
@@ -232,28 +233,20 @@ export async function getInvoiceMonthlyTrend(
   const now = new Date();
   const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
 
-  const rows = await db.invoice.findMany({
-    where: {
-      organizationId,
-      deletedAt: null,
-      status: { not: "CANCELLED" },
-      issueDate: { gte: startDate },
-    },
-    select: { issueDate: true, totalAmount: true },
-  });
+  const rows = await db.$queryRaw<{ month: string; count: number | bigint; totalAmount: number }[]>(Prisma.sql`
+    SELECT
+      CONVERT(VARCHAR(7), issueDate, 120)        AS month,
+      COUNT(*)                                   AS count,
+      ISNULL(SUM(CAST(totalAmount AS FLOAT)), 0) AS totalAmount
+    FROM invoices
+    WHERE organizationId = ${organizationId}
+      AND deletedAt IS NULL
+      AND status <> 'CANCELLED'
+      AND issueDate >= ${startDate}
+    GROUP BY CONVERT(VARCHAR(7), issueDate, 120)
+  `);
 
-  const map = new Map<string, { count: number; totalAmount: number }>();
-  for (const row of rows) {
-    const key = `${row.issueDate.getFullYear()}-${String(row.issueDate.getMonth() + 1).padStart(2, "0")}`;
-    const amount = (row.totalAmount as DecimalLike).toNumber();
-    const existing = map.get(key);
-    if (existing) {
-      existing.count++;
-      existing.totalAmount += amount;
-    } else {
-      map.set(key, { count: 1, totalAmount: amount });
-    }
-  }
+  const map = new Map(rows.map((r) => [r.month, { count: Number(r.count), totalAmount: r.totalAmount }]));
 
   const result: InvoiceMonthlyTrend[] = [];
   for (let i = 0; i < months; i++) {

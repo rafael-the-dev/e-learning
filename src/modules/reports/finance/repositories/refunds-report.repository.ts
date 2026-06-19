@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import type {
   RefundsReportFilters,
@@ -44,16 +45,62 @@ function buildRefundWhere(filters: Omit<RefundsReportFilters, "page" | "pageSize
   return where;
 }
 
+// Monthly trend — SQL-side GROUP BY so it never loads raw refund rows just to bucket
+// them by month. Always restricted to COMPLETED refunds (refundStatus filter is ignored)
+// to match the KPI's totalRefunded basis, using createdAt as the date axis.
+export async function getRefundsMonthlyTrend(
+  filters: Omit<RefundsReportFilters, "page" | "pageSize">
+): Promise<RefundMonthlyPoint[]> {
+  const db = await getDb();
+
+  const clauses: Prisma.Sql[] = [
+    Prisma.sql`r.organizationId = ${filters.organizationId}`,
+    Prisma.sql`r.deletedAt IS NULL`,
+    Prisma.sql`r.status = 'COMPLETED'`,
+  ];
+  if (filters.refundMethod) clauses.push(Prisma.sql`r.refundMethod = ${filters.refundMethod}`);
+  if (filters.studentId) clauses.push(Prisma.sql`r.studentId = ${filters.studentId}`);
+  if (filters.branchId) clauses.push(Prisma.sql`r.branchId = ${filters.branchId}`);
+  if (filters.dateFrom) clauses.push(Prisma.sql`r.createdAt >= ${new Date(filters.dateFrom)}`);
+  if (filters.dateTo) clauses.push(Prisma.sql`r.createdAt <= ${new Date(filters.dateTo)}`);
+  if (filters.search) {
+    const escaped = filters.search.replace(/[%_[\]]/g, "\\$&");
+    const term = `%${escaped}%`;
+    clauses.push(Prisma.sql`(
+      r.refundNumber LIKE ${term} ESCAPE '\\'
+      OR st.firstName LIKE ${term} ESCAPE '\\'
+      OR st.lastName  LIKE ${term} ESCAPE '\\'
+    )`);
+  }
+
+  const rows = await db.$queryRaw<{ month: string; count: number | bigint; total: number }[]>(Prisma.sql`
+    SELECT
+      CONVERT(VARCHAR(7), r.createdAt, 120)   AS month,
+      COUNT(*)                                AS count,
+      ISNULL(SUM(CAST(r.amount AS FLOAT)), 0) AS total
+    FROM refunds r
+    LEFT JOIN students st ON st.id = r.studentId
+    WHERE ${Prisma.join(clauses, " AND ")}
+    GROUP BY CONVERT(VARCHAR(7), r.createdAt, 120)
+    ORDER BY month ASC
+  `);
+
+  return rows.map((r) => ({ month: r.month, count: Number(r.count), totalAmount: r.total }));
+}
+
 export async function getRefundsReportKPIs(
   filters: Omit<RefundsReportFilters, "page" | "pageSize">
 ): Promise<{ kpis: RefundsReportKPIs; methodBreakdown: Array<{ method: string; count: number; totalAmount: number }>; monthlyTrend: RefundMonthlyPoint[] }> {
   const db = await getDb();
   const baseWhere = buildRefundWhere({ ...filters, refundStatus: undefined });
 
-  const all = await db.refund.findMany({
-    where: baseWhere,
-    select: { status: true, refundMethod: true, amount: true, createdAt: true, completedAt: true },
-  });
+  const [all, monthlyTrend] = await Promise.all([
+    db.refund.findMany({
+      where: baseWhere,
+      select: { status: true, refundMethod: true, amount: true, createdAt: true, completedAt: true },
+    }),
+    getRefundsMonthlyTrend(filters),
+  ]);
 
   let totalRefunded = 0;
   let refundCount = 0;
@@ -63,7 +110,6 @@ export async function getRefundsReportKPIs(
   let walletCreditRefunds = 0;
 
   const methodMap = new Map<string, { count: number; total: number }>();
-  const monthMap = new Map<string, { count: number; total: number }>();
 
   for (const r of all) {
     const amt = toNum(r.amount as DecimalLike);
@@ -78,14 +124,6 @@ export async function getRefundsReportKPIs(
       existing.count++;
       existing.total += amt;
       methodMap.set(r.refundMethod, existing);
-
-      // Monthly trend uses createdAt (same axis as the KPI date filter) so that
-      // the chart totals reconcile against the KPI totalRefunded for any given period.
-      const monthKey = `${r.createdAt.getFullYear()}-${String(r.createdAt.getMonth() + 1).padStart(2, "0")}`;
-      const monthEntry = monthMap.get(monthKey) ?? { count: 0, total: 0 };
-      monthEntry.count++;
-      monthEntry.total += amt;
-      monthMap.set(monthKey, monthEntry);
     } else if (r.status === "REQUESTED") {
       pendingRefunds++;
     } else if (r.status === "APPROVED") {
@@ -107,10 +145,6 @@ export async function getRefundsReportKPIs(
     count,
     totalAmount: total,
   }));
-
-  const monthlyTrend = Array.from(monthMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, { count, total }]) => ({ month, count, totalAmount: total }));
 
   return { kpis, methodBreakdown, monthlyTrend };
 }

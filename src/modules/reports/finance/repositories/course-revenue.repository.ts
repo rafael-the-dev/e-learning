@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import type {
   CourseRevenueFilters,
@@ -63,7 +64,6 @@ export async function getCourseRevenueReport(
     invoiceGroups,
     overdueGroups,
     enrollmentCounts,
-    monthlyInvoices,
     unassignedAgg,
     unassignedOverdueAgg,
   ] = await Promise.all([
@@ -91,11 +91,6 @@ export async function getCourseRevenueReport(
       by: ["courseId"],
       where: buildEnrollmentWhere(filters),
       _count: { id: true },
-    }),
-    db.invoice.findMany({
-      where: { ...invoiceWhere, enrollmentId: { not: null } },
-      select: { enrollmentId: true, totalAmount: true, issueDate: true },
-      orderBy: { issueDate: "asc" },
     }),
     db.invoice.aggregate({
       where: { ...invoiceWhere, enrollmentId: null },
@@ -200,26 +195,52 @@ export async function getCourseRevenueReport(
     worstDebtCourseName: worstDebtCourse?.courseName ?? null,
   };
 
-  // Monthly trend — top 5 courses by collected
-  const top5Ids = new Set(rows.slice(0, 5).map((r) => r.courseId));
-  const monthCourseMap = new Map<string, Map<string | null, number>>();
-  for (const inv of monthlyInvoices) {
-    const courseId = enrollmentCourseMap.get(inv.enrollmentId!) ?? null;
-    if (courseId && !top5Ids.has(courseId)) continue;
-    const monthKey = `${inv.issueDate.getFullYear()}-${String(inv.issueDate.getMonth() + 1).padStart(2, "0")}`;
-    if (!monthCourseMap.has(monthKey)) monthCourseMap.set(monthKey, new Map());
-    const mc = monthCourseMap.get(monthKey)!;
-    mc.set(courseId, (mc.get(courseId) ?? 0) + n(inv.totalAmount as Dec));
-  }
+  // Monthly trend — top 5 courses by collected. Pushed to SQL so it never loads raw
+  // invoice rows just to bucket them by month/course.
+  const top5CourseIds = rows.slice(0, 5).map((r) => r.courseId);
+  const nonNullTop5Courses = top5CourseIds.filter((id): id is string => id !== null);
+  const includeNullCourse = top5CourseIds.includes(null);
 
-  const monthlyTrend: CourseRevenueMonthlyPoint[] = [];
-  for (const [month, mc] of Array.from(monthCourseMap.entries()).sort(([a], [b]) => a.localeCompare(b))) {
-    for (const [courseId, invoiced] of mc.entries()) {
-      const row = rows.find((r) => r.courseId === courseId);
-      if (row && invoiced > 0) {
-        monthlyTrend.push({ month, courseId, courseName: row.courseName, invoiced });
-      }
+  let monthlyTrend: CourseRevenueMonthlyPoint[] = [];
+  if (top5CourseIds.length > 0) {
+    const courseMatchClauses: Prisma.Sql[] = [];
+    if (nonNullTop5Courses.length > 0) {
+      courseMatchClauses.push(Prisma.sql`e.courseId IN (${Prisma.join(nonNullTop5Courses)})`);
     }
+    if (includeNullCourse) {
+      courseMatchClauses.push(Prisma.sql`e.courseId IS NULL`);
+    }
+
+    const trendClauses: Prisma.Sql[] = [
+      Prisma.sql`i.organizationId = ${filters.organizationId}`,
+      Prisma.sql`i.deletedAt IS NULL`,
+      Prisma.sql`i.status <> 'CANCELLED'`,
+      Prisma.sql`i.enrollmentId IS NOT NULL`,
+      Prisma.sql`(${Prisma.join(courseMatchClauses, " OR ")})`,
+    ];
+    if (filters.branchId) trendClauses.push(Prisma.sql`i.branchId = ${filters.branchId}`);
+    if (filters.dateFrom) trendClauses.push(Prisma.sql`i.issueDate >= ${new Date(filters.dateFrom)}`);
+    if (filters.dateTo) trendClauses.push(Prisma.sql`i.issueDate <= ${new Date(filters.dateTo)}`);
+    if (filters.academicYearId) trendClauses.push(Prisma.sql`e.academicYearId = ${filters.academicYearId}`);
+    if (filters.academicTermId) trendClauses.push(Prisma.sql`e.academicTermId = ${filters.academicTermId}`);
+
+    const trendRows = await db.$queryRaw<{ month: string; courseId: string | null; invoiced: number }[]>(Prisma.sql`
+      SELECT
+        CONVERT(VARCHAR(7), i.issueDate, 120) AS month,
+        e.courseId                            AS courseId,
+        SUM(CAST(i.totalAmount AS FLOAT))     AS invoiced
+      FROM invoices i
+      LEFT JOIN enrollments e ON e.id = i.enrollmentId
+      WHERE ${Prisma.join(trendClauses, " AND ")}
+      GROUP BY CONVERT(VARCHAR(7), i.issueDate, 120), e.courseId
+      HAVING SUM(CAST(i.totalAmount AS FLOAT)) > 0
+      ORDER BY month ASC
+    `);
+
+    monthlyTrend = trendRows.flatMap((r) => {
+      const row = rows.find((rr) => rr.courseId === r.courseId);
+      return row ? [{ month: r.month, courseId: row.courseId, courseName: row.courseName, invoiced: r.invoiced }] : [];
+    });
   }
 
   return { kpis, rows, monthlyTrend };
