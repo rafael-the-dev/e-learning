@@ -914,6 +914,7 @@ model Enrollment {
 
   @@unique([organizationId, enrollmentNumber])
   @@index([organizationId, courseId], name: "enrollments_org_course_idx")
+  @@index([organizationId, enrollmentDate], name: "enrollments_org_enrollmentdate_idx")
   @@map("enrollments")
 }
 
@@ -975,6 +976,7 @@ model AttendanceSession {
 
   @@index([organizationId, classGroupId, sessionDate])
   @@index([organizationId, status])
+  @@index([organizationId, status, sessionDate], name: "attendance_sessions_org_status_sessiondate_idx")
   @@map("attendance_sessions")
 }
 
@@ -1853,6 +1855,7 @@ model StudentTimelineEvent {
   @@index([organizationId, studentId, occurredAt])
   @@index([organizationId, studentId, eventType])
   @@index([sourceEventId])
+  @@index([organizationId, occurredAt], name: "student_timeline_events_org_occurredat_idx")
   @@map("student_timeline_events")
 }
 
@@ -2065,6 +2068,7 @@ model AssessmentResult {
   @@unique([assessmentId, studentId])
   @@index([organizationId, studentId])
   @@index([organizationId, assessmentId, status])
+  @@index([organizationId, status, gradedAt], name: "assessment_results_org_status_gradedat_idx")
   @@map("assessment_results")
 }
 
@@ -2109,6 +2113,8 @@ model StudentSubjectProgress {
   @@unique([enrollmentId, levelSubjectId])
   @@index([organizationId, studentId])
   @@index([organizationId, levelSubjectId])
+  @@index([organizationId, attendancePercentage], name: "student_subject_progress_org_attendance_idx")
+  @@index([organizationId, status], name: "student_subject_progress_org_status_idx")
   @@map("student_subject_progress")
 }
 
@@ -2241,6 +2247,7 @@ model StudentLevelProgress {
   @@unique([enrollmentId, courseLevelId])
   @@index([organizationId, studentId])
   @@index([organizationId, courseLevelId])
+  @@index([organizationId, status], name: "student_level_progress_org_status_idx")
   @@map("student_level_progress")
 }
 
@@ -2267,6 +2274,7 @@ model StudentCourseProgress {
 
   @@index([organizationId, studentId])
   @@index([organizationId, courseId])
+  @@index([organizationId, status], name: "student_course_progress_org_status_idx")
   @@map("student_course_progress")
 }
 
