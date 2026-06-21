@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   History,
 } from "lucide-react";
+import { resolveCurrentEnrollmentLevel } from "@/modules/students/student-360/services/student-360.service";
 import type { Student360Core } from "@/modules/students/student-360/services/student-360.service";
 
 function formatCurrency(value: number): string {
@@ -22,6 +23,7 @@ function formatCurrency(value: number): string {
 
 export function StudentOverviewTab({ core }: { core: Student360Core }) {
   const { student, currentEnrollment, statement, subjectProgress, levelProgress, attendanceSubjects, recentTimeline, documentCount } = core;
+  const currentLevel = resolveCurrentEnrollmentLevel(currentEnrollment);
 
   const passed = subjectProgress.filter((p) => p.status === "PASSED").length;
   const failed = subjectProgress.filter((p) => p.status === "FAILED").length;
@@ -86,7 +88,7 @@ export function StudentOverviewTab({ core }: { core: Student360Core }) {
           ) : (
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <Row label="Curso" value={currentEnrollment.courseName ?? "—"} />
-              <Row label="Nível" value={currentEnrollment.courseLevelName ?? "—"} />
+              <Row label="Nível Atual" value={currentLevel.name ?? "—"} />
               <Row label="Turma" value={currentEnrollment.classGroupName ?? "—"} />
               <Row label="Ano Letivo" value={currentEnrollment.academicYearName ?? "—"} />
               <Row label="Período" value={currentEnrollment.academicTermName ?? "—"} />

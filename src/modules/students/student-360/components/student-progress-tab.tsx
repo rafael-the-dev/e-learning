@@ -27,6 +27,7 @@ interface StudentProgressTabProps {
   levelProgress: StudentLevelProgress[];
   subjectProgress: StudentSubjectProgress[];
   eligibility: SubjectEligibilityRow[];
+  hasResolvedLevel: boolean;
 }
 
 export function StudentProgressTab({
@@ -34,6 +35,7 @@ export function StudentProgressTab({
   levelProgress,
   subjectProgress,
   eligibility,
+  hasResolvedLevel,
 }: StudentProgressTabProps) {
   return (
     <div className="space-y-6">
@@ -130,7 +132,11 @@ export function StudentProgressTab({
             <EmptyState
               icon={<Lock className="size-8" />}
               title="Sem dados de elegibilidade"
-              description="Este aluno não tem uma matrícula ativa com nível definido."
+              description={
+                hasResolvedLevel
+                  ? "O nível atual não possui disciplinas ativas."
+                  : "Este aluno não tem uma matrícula ativa com nível definido."
+              }
             />
           ) : (
             <div className="space-y-3">

@@ -34,6 +34,7 @@ const enrollmentSelect = {
   studentId: true,
   courseId: true,
   courseLevelId: true,
+  currentLevelId: true,
   classGroupId: true,
   academicYearId: true,
   academicTermId: true,
@@ -51,6 +52,7 @@ const enrollmentSelect = {
   student: { select: { id: true, firstName: true, lastName: true, code: true } },
   course: { select: { id: true, name: true } },
   courseLevel: { select: { id: true, name: true } },
+  currentLevel: { select: { id: true, name: true, code: true } },
   classGroup: { select: { id: true, name: true } },
   branch: { select: { id: true, name: true } },
   academicYear: { select: { id: true, name: true } },
@@ -75,6 +77,7 @@ function mapToEnrollment(row: {
   studentId: string;
   courseId: string;
   courseLevelId: string | null;
+  currentLevelId: string | null;
   classGroupId: string | null;
   academicYearId: string;
   academicTermId: string | null;
@@ -92,6 +95,7 @@ function mapToEnrollment(row: {
   student: { id: string; firstName: string; lastName: string; code: string | null };
   course: { id: string; name: string };
   courseLevel: { id: string; name: string } | null;
+  currentLevel: { id: string; name: string; code: string | null } | null;
   classGroup: { id: string; name: string } | null;
   branch: { id: string; name: string } | null;
   academicYear: { id: string; name: string };
@@ -105,6 +109,7 @@ function mapToEnrollment(row: {
     studentId: row.studentId,
     courseId: row.courseId,
     courseLevelId: row.courseLevelId,
+    currentLevelId: row.currentLevelId,
     classGroupId: row.classGroupId,
     academicYearId: row.academicYearId,
     academicTermId: row.academicTermId,
@@ -123,6 +128,8 @@ function mapToEnrollment(row: {
     studentCode: row.student.code,
     courseName: row.course.name,
     courseLevelName: row.courseLevel?.name ?? null,
+    currentLevelName: row.currentLevel?.name ?? null,
+    currentLevelCode: row.currentLevel?.code ?? null,
     classGroupName: row.classGroup?.name ?? null,
     branchName: row.branch?.name ?? null,
     academicYearName: row.academicYear.name,

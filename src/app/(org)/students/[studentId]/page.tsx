@@ -12,6 +12,7 @@ import {
   getProgressTabData,
   getDocumentsTabData,
   getTimelineTabData,
+  resolveCurrentEnrollmentLevel,
 } from "@/modules/students/student-360/services/student-360.service";
 import { calculateHealthScore } from "@/modules/students/student-360/services/student-health.service";
 import { computeStudentAlerts } from "@/modules/students/student-360/services/student-alerts.service";
@@ -223,12 +224,14 @@ async function ActiveTabPanel({
 
     case "progress": {
       const { eligibility } = await getProgressTabData(organizationId, core.currentEnrollment);
+      const hasResolvedLevel = resolveCurrentEnrollmentLevel(core.currentEnrollment).id != null;
       return (
         <StudentProgressTab
           courseProgress={core.courseProgress}
           levelProgress={core.levelProgress}
           subjectProgress={core.subjectProgress}
           eligibility={eligibility}
+          hasResolvedLevel={hasResolvedLevel}
         />
       );
     }

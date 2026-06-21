@@ -1,3 +1,5 @@
+"use client";
+
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { ExecutiveKpiGrid } from "@/shared/components/layout/executive-dashboard";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/components/ui/card";

@@ -9,6 +9,7 @@ export interface Enrollment {
   studentId: string;
   courseId: string;
   courseLevelId: string | null;
+  currentLevelId: string | null;
   classGroupId: string | null;
   academicYearId: string;
   academicTermId: string | null;
@@ -28,6 +29,11 @@ export interface Enrollment {
   studentCode?: string | null;
   courseName?: string;
   courseLevelName?: string | null;
+  // currentLevelId/currentLevelName reflect the student's level after progression
+  // (level-progression.engine.ts only updates currentLevelId, never courseLevelId,
+  // which stays frozen at the original enrollment level)
+  currentLevelName?: string | null;
+  currentLevelCode?: string | null;
   classGroupName?: string | null;
   branchName?: string | null;
   academicYearName?: string;

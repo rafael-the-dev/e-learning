@@ -84,7 +84,7 @@ export async function getStudentStatementKPIs(
     }),
     // StudentWallet has no stored balance column — compute from signed transaction sum
     db.studentWalletTransaction.aggregate({
-      where: { organizationId, studentWallet: { studentId } },
+      where: { organizationId, wallet: { studentId } },
       _sum: { amount: true },
     }),
     // Wallet credits applied directly to invoices (no Payment record created)

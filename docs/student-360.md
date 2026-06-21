@@ -56,11 +56,31 @@ The page reads `?tab=` and `?page=` from the URL. `Student360TabsNav` is a thin 
 - **Per-tab data** — only fetched for whichever tab is active:
   - Attendance: paginated raw attendance records (`findAttendanceRecordsByStudent`, real `skip/take`) + paginated justifications.
   - Grades: paginated assessment results (`findStudentAssessmentResults`, real pagination).
-  - Progress: level-subjects of the current enrollment's level + eligibility evaluation per subject (`evaluateSubjectEligibility`), bounded by curriculum size (typically <20 subjects).
+  - Progress: level-subjects of the *resolved* current level (see "Current Level Resolution" below) + batched eligibility evaluation via `evaluateEligibilityForAllSubjects`, bounded by curriculum size (typically <20 subjects).
   - Documents: full document list for the student (typically a handful of rows).
   - Timeline: paginated timeline events (`getStudentTimeline`, real pagination), 20/page.
 
 **Finance is the one exception to "real server pagination":** the Finance tab renders the *entire* `getStudentFinancialStatement()` result (invoices/payments/receipts/refunds), paginated client-side over the already-fetched array (`PaginatedTable`). This is intentional — the spec calls for reusing the Student Financial Statement service verbatim rather than recomputing finance figures, and the array is inherently bounded (one student's financial history, not the whole tenant's), so no N+1 or unbounded query is introduced.
+
+---
+
+## Current Level Resolution
+
+`Enrollment.courseLevelId` is the level the student was originally enrolled at — it never changes after creation. `Enrollment.currentLevelId` is the only field `level-progression.engine.ts` writes on promotion (`promoteStudentToNextLevel`); it stays `null` until the student is promoted at least once.
+
+Student 360 resolves the student's real academic level as:
+
+```
+resolvedLevelId   = enrollment.currentLevelId ?? enrollment.courseLevelId
+resolvedLevelName = enrollment.currentLevelName ?? enrollment.courseLevelName
+```
+
+via `resolveCurrentEnrollmentLevel()` in `student-360.service.ts`. This is the same fallback `subject-eligibility.engine.ts`'s `evaluateEligibilityForAllSubjects()` already used internally — Student 360 now reuses that engine instead of duplicating the resolution logic:
+
+- **Overview tab** displays the resolved level under "Nível Atual", not the frozen `courseLevelName`.
+- **Progress tab** (`getProgressTabData`) fetches level-subjects for the resolved level and evaluates eligibility via `evaluateEligibilityForAllSubjects(enrollmentId, organizationId)` — the per-subject manual loop calling `evaluateSubjectEligibility()` directly was removed in favor of this single batched call.
+
+Without this resolution, a promoted student would see their original (stale) level and have eligibility evaluated against the wrong level's curriculum.
 
 ---
 
@@ -178,6 +198,7 @@ Route: `src/app/(org)/students/[studentId]/page.tsx` (existing route, rewritten 
 
 - **Teacher scoping is not implemented.** No module in this codebase currently restricts a TEACHER role to their own assigned class groups/subjects, so this page doesn't either. The spec explicitly allows this ("if teacher scoping is implemented"). A TEACHER with `STUDENTS_READ` sees the full Student 360 for any student in the organization, same as today's behavior everywhere else.
 - **Documents are metadata-only.** No binary file storage exists anywhere in the app; `StudentDocument.fileUrl` is a pasted link, identical to how `LessonAttachment` already works. "Upload Document" does not handle actual file bytes.
-- **Finance tables are not server-paginated.** See "Data loading strategy" above — acceptable because the dataset is bounded per student, not per tenant.
+- **Finance tab reuses `getStudentFinancialStatement()` verbatim and paginates client-side** over the already-fetched array (`PaginatedTable`) rather than via server-side `skip/take` — see "Data loading strategy" above. Acceptable because the dataset is bounded per student, not per tenant.
+- **Inherited N+1 patterns**: attendance summary is computed per active enrollment with a class group (`Promise.all` over a small list, not a single batched query), and eligibility evaluation in the Progress tab runs one query set per level-subject inside `evaluateEligibilityForAllSubjects`. Both are bounded by realistic per-student cardinality (a handful of enrollments, <20 subjects per level) and were not optimized as part of this fix — flagged for awareness, not a regression.
 - **Health score coefficients are a v1 judgment call**, not a contractually specified formula — see "Health Score" above.
 - **Export/Print was deferred**, per the spec's explicit instruction not to block the first version on it.

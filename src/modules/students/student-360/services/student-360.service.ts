@@ -8,7 +8,7 @@ import { findStudentAssessmentResults } from "@/modules/grades/repositories/stud
 import { getRecentTimelineEvents, getStudentTimeline } from "@/modules/student-timeline/services/student-timeline.service";
 import { getStudentDocuments, getStudentDocumentCount } from "@/modules/student-documents/services/student-document.service";
 import { getLevelSubjectsByLevel } from "@/modules/courses/services/course.service";
-import { evaluateSubjectEligibility } from "@/modules/prerequisites/engines/subject-eligibility.engine";
+import { evaluateEligibilityForAllSubjects } from "@/modules/prerequisites/engines/subject-eligibility.engine";
 import { getWalletByStudentId, getRecentTransactions } from "@/modules/wallets/services/wallet.service";
 import {
   findAttendanceRecordsByStudent,
@@ -25,6 +25,7 @@ import type { Student } from "@/modules/students/types";
 import type { Enrollment } from "@/modules/enrollments/types";
 import type { StudentFinancialStatement } from "@/modules/reports/finance/types";
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
+import { SUBJECT_ELIGIBILITY_STATUS } from "@/modules/prerequisites/types";
 import type { StudentLevelProgress, StudentCourseProgress, SubjectEligibilityResult } from "@/modules/prerequisites/types";
 import type { StudentSubjectAttendance } from "@/modules/attendance/types";
 import type { StudentTimelineEvent } from "@/modules/student-timeline/types";
@@ -212,21 +213,51 @@ export interface SubjectEligibilityRow {
   eligibility: SubjectEligibilityResult;
 }
 
+export interface ResolvedEnrollmentLevel {
+  id: string | null;
+  name: string | null;
+}
+
+// level-progression.engine.ts only ever writes currentLevelId on promotion — courseLevelId
+// stays frozen at the original enrollment level. currentLevelId is the source of truth
+// whenever it's set; courseLevelId is the fallback for a student who hasn't progressed yet.
+export function resolveCurrentEnrollmentLevel(enrollment: Enrollment | null): ResolvedEnrollmentLevel {
+  if (!enrollment) return { id: null, name: null };
+  return {
+    id: enrollment.currentLevelId ?? enrollment.courseLevelId ?? null,
+    name: enrollment.currentLevelName ?? enrollment.courseLevelName ?? null,
+  };
+}
+
 export async function getProgressTabData(
   organizationId: string,
   currentEnrollment: Enrollment | null
 ): Promise<{ levelSubjects: LevelSubject[]; eligibility: SubjectEligibilityRow[] }> {
-  if (!currentEnrollment?.courseLevelId) {
+  const resolvedLevelId = resolveCurrentEnrollmentLevel(currentEnrollment).id;
+  if (!currentEnrollment || !resolvedLevelId) {
     return { levelSubjects: [], eligibility: [] };
   }
-  const levelSubjects = await getLevelSubjectsByLevel(currentEnrollment.courseLevelId, organizationId);
-  const eligibility = await Promise.all(
-    levelSubjects.map(async (levelSubject) => ({
-      levelSubject,
-      eligibility: await evaluateSubjectEligibility(currentEnrollment.id, levelSubject.id, organizationId),
-    }))
-  );
-  return { levelSubjects, eligibility };
+
+  const [levelSubjects, eligibilityMap] = await Promise.all([
+    getLevelSubjectsByLevel(resolvedLevelId, organizationId),
+    evaluateEligibilityForAllSubjects(currentEnrollment.id, organizationId),
+  ]);
+
+  // evaluateEligibilityForAllSubjects only evaluates ACTIVE level-subjects of the
+  // resolved level — filter the display list to match so every row has a real result.
+  const activeLevelSubjects = levelSubjects.filter((ls) => ls.status === "ACTIVE");
+  const eligibility: SubjectEligibilityRow[] = activeLevelSubjects.map((levelSubject) => ({
+    levelSubject,
+    eligibility:
+      eligibilityMap.get(levelSubject.id) ?? {
+        status: SUBJECT_ELIGIBILITY_STATUS.BLOCKED,
+        levelSubjectId: levelSubject.id,
+        missingPrerequisites: [],
+        isEligible: false,
+      },
+  }));
+
+  return { levelSubjects: activeLevelSubjects, eligibility };
 }
 
 export async function getDocumentsTabData(studentId: string, organizationId: string) {
