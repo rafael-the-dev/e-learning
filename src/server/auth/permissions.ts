@@ -316,6 +316,12 @@ export const PERMISSIONS = {
   STUDENT_TIMELINE_CREATE_NOTE: "studentTimeline.createNote",
   STUDENT_TIMELINE_DELETE_NOTE: "studentTimeline.deleteNote",
 
+  // Student Documents
+  STUDENT_DOCUMENTS_VIEW: "studentDocuments.view",
+  STUDENT_DOCUMENTS_UPLOAD: "studentDocuments.upload",
+  STUDENT_DOCUMENTS_DELETE: "studentDocuments.delete",
+  STUDENT_DOCUMENTS_VERIFY: "studentDocuments.verify",
+
   // Assessment Policies
   ASSESSMENT_POLICIES_VIEW: "assessmentPolicies.view",
   ASSESSMENT_POLICIES_CREATE: "assessmentPolicies.create",
@@ -455,6 +461,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.STUDENTS_READ,
     PERMISSIONS.STUDENTS_UPDATE,
     PERMISSIONS.STUDENTS_SUSPEND,
+    PERMISSIONS.STUDENT_DOCUMENTS_VIEW,
+    PERMISSIONS.STUDENT_DOCUMENTS_UPLOAD,
+    PERMISSIONS.STUDENT_DOCUMENTS_VERIFY,
     PERMISSIONS.TEACHERS_CREATE,
     PERMISSIONS.TEACHERS_READ,
     PERMISSIONS.TEACHERS_UPDATE,

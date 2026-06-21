@@ -107,6 +107,7 @@ model Organization {
   financialTransactions      FinancialTransaction[]
   financialIntegrityIssues   FinancialIntegrityIssue[]
   financialAuditLogs         FinancialAuditLog[]
+  studentDocuments           StudentDocument[]
 
   @@map("organizations")
 }
@@ -364,6 +365,7 @@ model Student {
   prerequisiteWaivers        PrerequisiteWaiver[]
   levelProgressionRequests   LevelProgressionRequest[]
   refunds                    Refund[]
+  documents                  StudentDocument[]
 
   @@index([organizationId, branchId])
   @@map("students")
@@ -2597,4 +2599,34 @@ model FinancialAuditLog {
   @@index([organizationId, performedAt])
   @@index([organizationId, performedBy])
   @@map("financial_audit_logs")
+}
+
+// =============================================================================
+// STUDENT DOCUMENTS
+// =============================================================================
+
+model StudentDocument {
+  id             String    @id @default(cuid())
+  organizationId String
+  studentId      String
+  // StudentDocumentType: IDENTIFICATION | PASSPORT | CERTIFICATE | CONTRACT | PAYMENT_PROOF | PHOTO | OTHER
+  documentType   String
+  fileName       String
+  fileUrl        String    @db.NVarChar(Max)
+  fileSize       Int?
+  // StudentDocumentStatus: PENDING | VERIFIED | REJECTED
+  status         String    @default("PENDING")
+  notes          String?   @db.NVarChar(Max)
+  uploadedBy     String?
+  verifiedBy     String?
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, studentId])
+  @@map("student_documents")
 }

@@ -1,42 +1,65 @@
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
-import { PageHeader } from "@/shared/components/layout/page-header";
-import { Button } from "@/shared/components/ui/button";
-import { StatusBadge } from "@/shared/components/data/status-badge";
-import { Separator } from "@/shared/components/ui/separator";
 import { requirePermission } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
-import { getStudentById } from "@/modules/students/services/student.service";
-import { StudentDetailActions } from "@/modules/students/components/student-detail-actions";
 import { NotFoundError } from "@/shared/lib/command";
-import { GENDER_LABELS, ID_TYPE_LABELS } from "@/modules/students/types";
-import { getWalletByStudentId, getRecentTransactions } from "@/modules/wallets/services/wallet.service";
-import { StudentWalletCard } from "@/modules/wallets/components/student-wallet-card";
-import { getRecentTimelineEvents } from "@/modules/student-timeline/services/student-timeline.service";
-import { StudentTimelinePreview } from "@/modules/student-timeline/components/student-timeline-preview";
-import { getDb } from "@/server/db";
-import { calculateEnrollmentAttendanceSummary } from "@/modules/attendance/services/attendance-calculator.service";
-import type { StudentSubjectAttendance } from "@/modules/attendance/types";
-import { findStudentAssessmentResults } from "@/modules/grades/repositories/student-assessment-result.repository";
-import { StudentGradesPanel } from "@/modules/grades/components/student-grades-panel";
 import {
-  Mail,
-  Phone,
-  MapPin,
-  Calendar,
-  CreditCard,
-  Building2,
-  Pencil,
+  getStudent360Core,
+  buildHealthScoreInput,
+  buildAlertsInput,
+  buildSummaryCards,
+  getAttendanceTabData,
+  getGradesTabData,
+  getProgressTabData,
+  getDocumentsTabData,
+  getTimelineTabData,
+} from "@/modules/students/student-360/services/student-360.service";
+import { calculateHealthScore } from "@/modules/students/student-360/services/student-health.service";
+import { computeStudentAlerts } from "@/modules/students/student-360/services/student-alerts.service";
+import {
+  getStudent360TabAccess,
+  resolveActiveStudent360Tab,
+} from "@/modules/students/student-360/services/student-360-access.service";
+import { StudentProfileHeader } from "@/modules/students/student-360/components/student-profile-header";
+import { StudentHealthCard } from "@/modules/students/student-360/components/student-health-card";
+import { StudentAlertsPanel } from "@/modules/students/student-360/components/student-alerts-panel";
+import { StudentSummaryCards } from "@/modules/students/student-360/components/student-summary-cards";
+import { Student360TabsNav } from "@/modules/students/student-360/components/student-360-tabs-nav";
+import { StudentOverviewTab } from "@/modules/students/student-360/components/student-overview-tab";
+import { StudentEnrollmentsTab } from "@/modules/students/student-360/components/student-enrollments-tab";
+import { StudentFinanceTab } from "@/modules/students/student-360/components/student-finance-tab";
+import { StudentAttendanceTab } from "@/modules/students/student-360/components/student-attendance-tab";
+import { StudentGradesTab } from "@/modules/students/student-360/components/student-grades-tab";
+import { StudentProgressTab } from "@/modules/students/student-360/components/student-progress-tab";
+import { StudentDocumentsTab } from "@/modules/students/student-360/components/student-documents-tab";
+import { StudentTimelineTab } from "@/modules/students/student-360/components/student-timeline-tab";
+import {
+  LayoutDashboard,
   GraduationCap,
+  CircleDollarSign,
   ClipboardList,
   BookOpen,
+  TrendingUp,
+  FileText,
+  History,
 } from "lucide-react";
 import type { AuthContext } from "@/server/auth/context";
+import type { Student360TabDef } from "@/modules/students/student-360/components/student-360-tabs-nav";
 
-export default async function StudentDetailPage({
+export async function generateMetadata({
   params,
 }: {
   params: Promise<{ studentId: string }>;
+}) {
+  const { studentId } = await params;
+  return { title: `Aluno ${studentId}` };
+}
+
+export default async function StudentDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ studentId: string }>;
+  searchParams: Promise<{ tab?: string; page?: string }>;
 }) {
   let context: AuthContext;
   try {
@@ -46,306 +69,200 @@ export default async function StudentDetailPage({
   }
 
   const { studentId } = await params;
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
 
-  let student;
+  let core;
   try {
-    student = await getStudentById(studentId, context.organizationId);
+    core = await getStudent360Core(studentId, context.organizationId);
   } catch (e) {
     if (e instanceof NotFoundError) notFound();
     throw e;
   }
 
-  const canViewAttendance = context.ability.can(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
-  const canViewGrades = context.ability.can(PERMISSIONS.GRADES_VIEW);
+  const tabAccess = getStudent360TabAccess((permission) => context.ability.can(permission));
+  const activeTab = resolveActiveStudent360Tab(sp.tab, tabAccess);
+  const visible = new Set(tabAccess.filter((t) => t.visible).map((t) => t.key));
 
-  const [wallet, recentTimeline] = await Promise.all([
-    getWalletByStudentId(studentId, context.organizationId),
-    context.ability.can(PERMISSIONS.STUDENT_TIMELINE_VIEW)
-      ? getRecentTimelineEvents(studentId, context.organizationId, 5)
-      : Promise.resolve([]),
-  ]);
-  const recentWalletTxs = wallet
-    ? await getRecentTransactions(wallet.id, context.organizationId, 3)
-    : [];
-  const canManageWallet = context.ability.can(PERMISSIONS.WALLET_TRANSACTIONS_DEPOSIT);
+  const health = calculateHealthScore(buildHealthScoreInput(core));
+  const alerts = computeStudentAlerts(buildAlertsInput(core));
+  const summary = buildSummaryCards(core, alerts.length);
 
-  type EnrollmentAttendance = {
-    enrollmentId: string;
-    classGroupName: string;
-    subjects: StudentSubjectAttendance[];
-  };
-  let attendanceByEnrollment: EnrollmentAttendance[] = [];
-  if (canViewAttendance) {
-    const db = await getDb();
-    const enrollments = await db.enrollment.findMany({
-      where: { studentId, organizationId: context.organizationId, status: "ACTIVE", deletedAt: null },
-      select: {
-        id: true,
-        classGroupId: true,
-        classGroup: { select: { name: true } },
-      },
+  const tabs: Student360TabDef[] = [
+    { key: "overview", label: "Visão Geral", icon: <LayoutDashboard className="size-3.5" /> },
+  ];
+  if (visible.has("enrollments")) {
+    tabs.push({
+      key: "enrollments",
+      label: "Matrículas",
+      icon: <GraduationCap className="size-3.5" />,
+      count: core.enrollments.length,
     });
-    attendanceByEnrollment = (
-      await Promise.all(
-        enrollments
-          .filter((e) => e.classGroupId)
-          .map(async (e) => ({
-            enrollmentId: e.id,
-            classGroupName: e.classGroup?.name ?? "",
-            subjects: await calculateEnrollmentAttendanceSummary(
-              studentId,
-              e.id,
-              e.classGroupId!,
-              context.organizationId
-            ).catch(() => []),
-          }))
-      )
-    ).filter((e) => e.subjects.length > 0);
   }
-
-  // Build grade groups by subject
-  let gradeGroups: {
-    subjectId: string;
-    subjectName: string;
-    progress: null;
-    results: Awaited<ReturnType<typeof findStudentAssessmentResults>>["data"];
-  }[] = [];
-
-  if (canViewGrades) {
-    const gradeResults = await findStudentAssessmentResults(context.organizationId, {
-      studentId,
-      pageSize: 100,
+  if (visible.has("finance")) {
+    tabs.push({ key: "finance", label: "Financeiro", icon: <CircleDollarSign className="size-3.5" /> });
+  }
+  if (visible.has("attendance")) {
+    tabs.push({ key: "attendance", label: "Presenças", icon: <ClipboardList className="size-3.5" /> });
+  }
+  if (visible.has("grades")) {
+    tabs.push({ key: "grades", label: "Notas", icon: <BookOpen className="size-3.5" /> });
+  }
+  if (visible.has("progress")) {
+    tabs.push({ key: "progress", label: "Progresso", icon: <TrendingUp className="size-3.5" /> });
+  }
+  if (visible.has("documents")) {
+    tabs.push({
+      key: "documents",
+      label: "Documentos",
+      icon: <FileText className="size-3.5" />,
+      count: core.documentCount,
     });
-    const bySubject = new Map<string, typeof gradeGroups[0]>();
-    for (const r of gradeResults.data) {
-      if (!bySubject.has(r.subjectId)) {
-        bySubject.set(r.subjectId, {
-          subjectId: r.subjectId,
-          subjectName: r.subjectName ?? r.subjectId,
-          progress: null,
-          results: [],
-        });
-      }
-      bySubject.get(r.subjectId)!.results.push(r);
-    }
-    gradeGroups = Array.from(bySubject.values());
   }
-
-  const breadcrumb = (
-    <nav className="flex items-center gap-2 text-muted-foreground">
-      <Link href="/students" className="hover:text-foreground transition-colors">
-        Alunos
-      </Link>
-      <span>/</span>
-      <span className="text-foreground">{student.fullName}</span>
-    </nav>
-  );
+  if (visible.has("timeline")) {
+    tabs.push({ key: "timeline", label: "Timeline", icon: <History className="size-3.5" /> });
+  }
 
   return (
     <>
-      <PageHeader
-        title={student.fullName}
-        description={student.email ?? student.phone ?? ""}
-        breadcrumb={breadcrumb}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/students/${student.id}/edit`}>
-                <Pencil className="size-4 mr-1.5" />
-                Editar
-              </Link>
-            </Button>
-            <StudentDetailActions student={student} />
-          </div>
-        }
+      <StudentProfileHeader
+        student={core.student}
+        canEdit={context.ability.can(PERMISSIONS.STUDENTS_UPDATE)}
+        canCreateEnrollment={context.ability.can(PERMISSIONS.ENROLLMENTS_CREATE)}
+        canCreateInvoice={context.ability.can(PERMISSIONS.INVOICES_CREATE)}
+        canCreatePayment={context.ability.can(PERMISSIONS.PAYMENTS_CREATE)}
+        canUploadDocument={context.ability.can(PERMISSIONS.STUDENT_DOCUMENTS_UPLOAD)}
       />
 
-      <div className="p-8 space-y-6 max-w-2xl">
-        {/* Status + branch */}
-        <div className="flex flex-wrap items-center gap-3">
-          <StatusBadge status={student.status} />
-          {student.branch && (
-            <span className="text-sm border rounded-full px-2.5 py-0.5 flex items-center gap-1.5">
-              <Building2 className="size-3" />
-              {student.branch.name}
-            </span>
-          )}
-          {student.code && (
-            <span className="text-sm border rounded-full px-2.5 py-0.5 font-mono">
-              #{student.code}
-            </span>
-          )}
-        </div>
-
-        <Separator />
-
-        {/* Contact info */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <h3 className="text-sm font-semibold">Informações de Contacto</h3>
-          <dl className="space-y-2 text-sm">
-            <DetailRow icon={<Phone className="size-3.5" />} label="Telefone" value={student.phone ?? "—"} />
-            <DetailRow icon={<Mail className="size-3.5" />} label="E-mail" value={student.email ?? "—"} />
-            <DetailRow icon={<MapPin className="size-3.5" />} label="Morada" value={student.address ?? "—"} />
-          </dl>
-        </div>
-
-        {/* Personal info */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <h3 className="text-sm font-semibold">Informação Pessoal</h3>
-          <dl className="space-y-2 text-sm">
-            <DetailRow
-              icon={<Calendar className="size-3.5" />}
-              label="Data de Nasc."
-              value={
-                student.dateOfBirth
-                  ? new Date(student.dateOfBirth).toLocaleDateString("pt-PT")
-                  : "—"
-              }
-            />
-            <DetailRow
-              label="Género"
-              value={student.gender ? (GENDER_LABELS[student.gender] ?? student.gender) : "—"}
-            />
-            <DetailRow
-              icon={<CreditCard className="size-3.5" />}
-              label="Documento"
-              value={
-                student.idNumber
-                  ? `${student.idType ? (ID_TYPE_LABELS[student.idType] ?? student.idType) + " · " : ""}${student.idNumber}`
-                  : "—"
-              }
-            />
-          </dl>
-        </div>
-
-        {/* Timestamps */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <h3 className="text-sm font-semibold">Registo</h3>
-          <dl className="space-y-2 text-sm">
-            <DetailRow
-              icon={<Calendar className="size-3.5" />}
-              label="Registado a"
-              value={new Date(student.createdAt).toLocaleDateString("pt-PT")}
-            />
-            <DetailRow
-              icon={<Calendar className="size-3.5" />}
-              label="Atualizado a"
-              value={new Date(student.updatedAt).toLocaleDateString("pt-PT")}
-            />
-          </dl>
-        </div>
-
-        {/* Enrollments */}
-        <div className="rounded-xl border p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <GraduationCap className="size-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Matrículas</h3>
-            </div>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/enrollments?studentId=${studentId}`}>
-                Ver matrículas
-              </Link>
-            </Button>
+      <div className="p-4 sm:p-8 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <StudentHealthCard health={health} />
           </div>
+          <StudentAlertsPanel alerts={alerts} />
         </div>
 
-        {/* Grades */}
-        {canViewGrades && (
-          <div className="rounded-xl border p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BookOpen className="size-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Notas</h3>
-              </div>
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/grades?studentId=${studentId}`}>
-                  Ver todas
-                </Link>
-              </Button>
-            </div>
-            <StudentGradesPanel groups={gradeGroups} />
-          </div>
-        )}
+        <StudentSummaryCards summary={summary} />
 
-        {/* Wallet */}
-        <StudentWalletCard
-          wallet={wallet}
-          recentTransactions={recentWalletTxs}
-          canDeposit={canManageWallet}
+        <Student360TabsNav active={activeTab} tabs={tabs} />
+
+        <ActiveTabPanel
+          activeTab={activeTab}
           studentId={studentId}
+          organizationId={context.organizationId}
+          page={page}
+          core={core}
+          canDeleteDocument={context.ability.can(PERMISSIONS.STUDENT_DOCUMENTS_DELETE)}
+          canVerifyDocument={context.ability.can(PERMISSIONS.STUDENT_DOCUMENTS_VERIFY)}
+          canUploadDocument={context.ability.can(PERMISSIONS.STUDENT_DOCUMENTS_UPLOAD)}
+          canDeposit={context.ability.can(PERMISSIONS.WALLET_TRANSACTIONS_DEPOSIT)}
+          canCreateNote={context.ability.can(PERMISSIONS.STUDENT_TIMELINE_CREATE_NOTE)}
+          canDeleteNote={context.ability.can(PERMISSIONS.STUDENT_TIMELINE_DELETE_NOTE)}
         />
-
-        {/* Timeline preview */}
-        {context.ability.can(PERMISSIONS.STUDENT_TIMELINE_VIEW) && (
-          <StudentTimelinePreview events={recentTimeline} studentId={studentId} />
-        )}
-
-        {/* Attendance summary */}
-        {canViewAttendance && (
-          <div className="rounded-xl border p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ClipboardList className="size-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Presenças</h3>
-              </div>
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/attendance/sessions?studentId=${studentId}`}>
-                  Ver sessões
-                </Link>
-              </Button>
-            </div>
-            {attendanceByEnrollment.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nenhum registo de presença disponível.</p>
-            ) : (
-              attendanceByEnrollment.map((enrollment) => (
-                <div key={enrollment.enrollmentId} className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">{enrollment.classGroupName}</p>
-                  <div className="space-y-1.5">
-                    {enrollment.subjects.map((s) => (
-                      <div key={s.levelSubjectId} className="flex items-center justify-between text-xs">
-                        <span className="truncate max-w-[55%]">{s.subjectName}</span>
-                        <span className={
-                          s.status === "BELOW_REQUIRED"
-                            ? "text-destructive font-semibold"
-                            : s.status === "AT_RISK"
-                            ? "text-yellow-600 font-semibold"
-                            : "text-green-600 font-semibold"
-                        }>
-                          {s.attendancePercentage.toFixed(1)}%
-                          {s.minimumAttendancePercentage != null && (
-                            <span className="text-muted-foreground font-normal ml-1">
-                              (mín. {s.minimumAttendancePercentage}%)
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
       </div>
     </>
   );
 }
 
-function DetailRow({
-  icon,
-  label,
-  value,
+async function ActiveTabPanel({
+  activeTab,
+  studentId,
+  organizationId,
+  page,
+  core,
+  canDeleteDocument,
+  canVerifyDocument,
+  canUploadDocument,
+  canDeposit,
+  canCreateNote,
+  canDeleteNote,
 }: {
-  icon?: React.ReactNode;
-  label: string;
-  value: string;
+  activeTab: string;
+  studentId: string;
+  organizationId: string;
+  page: number;
+  core: Awaited<ReturnType<typeof getStudent360Core>>;
+  canDeleteDocument: boolean;
+  canVerifyDocument: boolean;
+  canUploadDocument: boolean;
+  canDeposit: boolean;
+  canCreateNote: boolean;
+  canDeleteNote: boolean;
 }) {
-  return (
-    <div className="flex items-start gap-2">
-      {icon && <span className="mt-0.5 text-muted-foreground">{icon}</span>}
-      <dt className="w-28 shrink-0 text-muted-foreground">{label}</dt>
-      <dd className="font-medium break-words">{value}</dd>
-    </div>
-  );
+  switch (activeTab) {
+    case "enrollments":
+      return <StudentEnrollmentsTab enrollments={core.enrollments} />;
+
+    case "finance":
+      return (
+        <StudentFinanceTab
+          statement={core.statement}
+          wallet={core.wallet}
+          recentWalletTransactions={core.recentWalletTransactions}
+          canDeposit={canDeposit}
+          studentId={studentId}
+        />
+      );
+
+    case "attendance": {
+      const { records, justifications } = await getAttendanceTabData(studentId, organizationId, page, 10);
+      return (
+        <StudentAttendanceTab
+          subjects={core.attendanceSubjects}
+          records={records}
+          justifications={justifications}
+          pendingJustificationCount={core.pendingJustificationCount}
+        />
+      );
+    }
+
+    case "grades": {
+      const { assessments } = await getGradesTabData(studentId, organizationId, page, 10);
+      return <StudentGradesTab assessments={assessments} subjectProgress={core.subjectProgress} />;
+    }
+
+    case "progress": {
+      const { eligibility } = await getProgressTabData(organizationId, core.currentEnrollment);
+      return (
+        <StudentProgressTab
+          courseProgress={core.courseProgress}
+          levelProgress={core.levelProgress}
+          subjectProgress={core.subjectProgress}
+          eligibility={eligibility}
+        />
+      );
+    }
+
+    case "documents": {
+      const documents = await getDocumentsTabData(studentId, organizationId);
+      return (
+        <StudentDocumentsTab
+          studentId={studentId}
+          documents={documents}
+          canUpload={canUploadDocument}
+          canDelete={canDeleteDocument}
+          canVerify={canVerifyDocument}
+        />
+      );
+    }
+
+    case "timeline": {
+      const { events, total, pageSize } = await getTimelineTabData(studentId, organizationId, page, 20);
+      return (
+        <StudentTimelineTab
+          studentId={studentId}
+          events={events}
+          total={total}
+          page={page}
+          pageSize={pageSize}
+          canCreateNote={canCreateNote}
+          canDeleteNote={canDeleteNote}
+        />
+      );
+    }
+
+    case "overview":
+    default:
+      return <StudentOverviewTab core={core} />;
+  }
 }

@@ -24,6 +24,7 @@ export interface ListEnrollmentsParams extends PaginationParams {
   academicYearId?: string;
   academicTermId?: string;
   financialStatus?: string;
+  studentId?: string;
 }
 
 const enrollmentSelect = {
@@ -153,6 +154,7 @@ export async function findEnrollmentsByOrganization(
   const where = {
     organizationId,
     deletedAt: null,
+    ...(params.studentId && { studentId: params.studentId }),
     ...(params.status && { status: params.status }),
     ...(params.courseId && { courseId: params.courseId }),
     ...(params.branchId && { branchId: params.branchId }),
