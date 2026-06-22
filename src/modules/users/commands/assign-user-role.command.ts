@@ -33,6 +33,10 @@ export class AssignUserRoleCommand extends BaseCommand<AssignRoleSchema, void> {
       });
     }
 
+    if (role.status === "ARCHIVED") {
+      throw new BusinessRuleError("Não é possível atribuir um papel arquivado");
+    }
+
     // Prevent downgrading the last ORG_ADMIN to a non-admin role
     const isTargetCurrentAdmin = user.roles.some((r) => r.name === "ORG_ADMIN");
     if (isTargetCurrentAdmin && role.name !== "ORG_ADMIN") {
@@ -79,6 +83,13 @@ export class AssignUserRoleCommand extends BaseCommand<AssignRoleSchema, void> {
       action: "UPDATED",
       oldValues: { roles: previousRoles },
       newValues: { roles: [role?.name] },
+    });
+
+    await auditService.log(this.context, {
+      entity: "Role",
+      entityId: this.input.roleId,
+      action: "role.user.assigned",
+      newValues: { userId: this.input.userId, previousRoles },
     });
   }
 }

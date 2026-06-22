@@ -9,6 +9,7 @@ import { DisableOrganizationUserCommand } from "@/modules/users/commands/disable
 import { EnableOrganizationUserCommand } from "@/modules/users/commands/enable-org-user.command";
 import { AssignUserRoleCommand } from "@/modules/users/commands/assign-user-role.command";
 import { RemoveUserFromOrganizationCommand } from "@/modules/users/commands/remove-user-from-org.command";
+import { RemoveUserRoleCommand } from "@/modules/users/commands/remove-user-role.command";
 import type { CreateUserSchema, UpdateUserSchema } from "@/modules/users/schemas/user.schema";
 import type { ActionResult } from "@/shared/types/common";
 import type { OrgUser } from "@/modules/users/types";
@@ -76,6 +77,8 @@ export async function assignUserRoleAction(
     await cmd.run();
     revalidatePath("/users");
     revalidatePath(`/users/${userId}`);
+    revalidatePath("/settings/roles");
+    revalidatePath(`/settings/roles/${roleId}`);
   });
 }
 
@@ -87,5 +90,17 @@ export async function removeUserFromOrgAction(
     const cmd = new RemoveUserFromOrganizationCommand({ userId }, context);
     await cmd.run();
     revalidatePath("/users");
+  });
+}
+
+export async function removeUserRoleAction(
+  userId: string
+): Promise<ActionResult<void>> {
+  return runAction(async () => {
+    const context = await requireOrganization();
+    const cmd = new RemoveUserRoleCommand({ userId }, context);
+    await cmd.run();
+    revalidatePath("/users");
+    revalidatePath("/settings/roles");
   });
 }

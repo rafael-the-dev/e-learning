@@ -226,7 +226,7 @@ export async function findAssignableRoles(
     where: {
       OR: [
         { isSystem: true, name: { not: "SUPER_ADMIN" } },
-        { organizationId, isSystem: false },
+        { organizationId, isSystem: false, status: "ACTIVE" },
       ],
     },
     select: { id: true, name: true, isSystem: true },

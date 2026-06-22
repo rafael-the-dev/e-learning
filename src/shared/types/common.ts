@@ -388,6 +388,12 @@ export const SubjectStatus = {
 export type SubjectStatus =
   (typeof SubjectStatus)[keyof typeof SubjectStatus];
 
+export const RoleStatus = {
+  ACTIVE: "ACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type RoleStatus = (typeof RoleStatus)[keyof typeof RoleStatus];
+
 export const CourseCategoryStatus = {
   ACTIVE: "ACTIVE",
   INACTIVE: "INACTIVE",

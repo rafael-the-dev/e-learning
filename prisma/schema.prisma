@@ -261,8 +261,11 @@ model Role {
   id             String   @id @default(cuid())
   organizationId String?
   name           String
+  code           String?
   description    String?
   isSystem       Boolean  @default(false)
+  // RoleStatus: ACTIVE | ARCHIVED
+  status         String   @default("ACTIVE")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -271,6 +274,7 @@ model Role {
   userRoles       UserRole[]
 
   @@unique([organizationId, name])
+  @@unique([organizationId, code])
   @@map("roles")
 }
 

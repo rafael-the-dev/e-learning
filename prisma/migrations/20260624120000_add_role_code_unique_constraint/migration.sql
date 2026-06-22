@@ -1,0 +1,19 @@
+BEGIN TRY
+
+BEGIN TRAN;
+
+-- CreateIndex
+ALTER TABLE [dbo].[roles] ADD CONSTRAINT [roles_organizationId_code_key] UNIQUE NONCLUSTERED ([organizationId], [code]);
+
+COMMIT TRAN;
+
+END TRY
+BEGIN CATCH
+
+IF @@TRANCOUNT > 0
+BEGIN
+    ROLLBACK TRAN;
+END;
+THROW
+
+END CATCH

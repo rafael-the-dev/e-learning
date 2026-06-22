@@ -13,6 +13,7 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:backfill-role-codes": "tsx prisma/backfill-role-codes.ts",
     "db:studio": "prisma studio"
   },
   "prisma": {

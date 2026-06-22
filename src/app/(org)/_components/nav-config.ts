@@ -253,6 +253,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         requiredPermission: "billingPolicies.view",
       },
       {
+        href: "/settings/roles",
+        label: "Roles e Permissões",
+        iconName: "Users",
+        requiredPermission: "organizationRoles.view",
+      },
+      {
         href: "/assessment-policies",
         label: "Políticas de Avaliação",
         iconName: "SlidersHorizontal",

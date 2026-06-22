@@ -35,6 +35,14 @@ export const PERMISSIONS = {
   ROLES_DELETE: "roles.delete",
   ROLES_ASSIGN: "roles.assign",
 
+  // Organization Roles (custom role management UI)
+  ORGANIZATION_ROLES_VIEW: "organizationRoles.view",
+  ORGANIZATION_ROLES_CREATE: "organizationRoles.create",
+  ORGANIZATION_ROLES_UPDATE: "organizationRoles.update",
+  ORGANIZATION_ROLES_ARCHIVE: "organizationRoles.archive",
+  ORGANIZATION_ROLES_ASSIGN_USERS: "organizationRoles.assignUsers",
+  ORGANIZATION_ROLES_MANAGE_PERMISSIONS: "organizationRoles.managePermissions",
+
   // Students
   STUDENTS_CREATE: "students.create",
   STUDENTS_READ: "students.read",
