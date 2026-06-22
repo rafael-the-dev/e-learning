@@ -32,7 +32,9 @@ export type NavIconName =
   | "Users"
   | "Activity"
   | "PenLine"
-  | "TrendingUp";
+  | "TrendingUp"
+  | "Upload"
+  | "History";
 
 export interface NavigationItem {
   href: string;
@@ -137,6 +139,55 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         label: "Professores",
         iconName: "BookUser",
         requiredPermission: "teachers.read",
+      },
+    ],
+  },
+
+  // ── Imports ─────────────────────────────────────────────────────────────────
+  // Platform-level operational area, not a one-off settings item.
+  // Group itself only renders when at least one item permission resolves
+  // (see NavLinks server component) — future rows below reference permission
+  // codes ("teachers.import" etc.) that don't exist in the catalog yet, so
+  // they stay invisible to everyone until each import is actually built.
+  {
+    id: "imports",
+    label: "Importações",
+    items: [
+      {
+        href: "/settings/import-jobs",
+        label: "Histórico de Importações",
+        iconName: "History",
+        requiredPermission: "imports.jobs.view",
+      },
+      {
+        href: "/students/import",
+        label: "Importar Alunos",
+        iconName: "Upload",
+        requiredPermission: "students.import",
+      },
+      {
+        href: "/teachers/import",
+        label: "Importar Professores",
+        iconName: "Upload",
+        requiredPermission: "teachers.import",
+      },
+      {
+        href: "/class-groups/import",
+        label: "Importar Turmas",
+        iconName: "Upload",
+        requiredPermission: "classGroups.import",
+      },
+      {
+        href: "/enrollments/import",
+        label: "Importar Matrículas",
+        iconName: "Upload",
+        requiredPermission: "enrollments.import",
+      },
+      {
+        href: "/courses/import",
+        label: "Importar Cursos",
+        iconName: "Upload",
+        requiredPermission: "courses.import",
       },
     ],
   },
