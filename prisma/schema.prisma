@@ -82,6 +82,7 @@ model Organization {
   classroomBookings        ClassroomBooking[]
   domainEvents             DomainEvent[]
   domainEventHandlerLogs   DomainEventHandlerLog[]
+  importJobs               ImportJob[]
   studentTimelineEvents    StudentTimelineEvent[]
   attendanceSessions       AttendanceSession[]
   attendanceRecords        AttendanceRecord[]
@@ -193,6 +194,7 @@ model User {
   userRoles         UserRole[]
   notifications     Notification[]
   auditLogs         AuditLog[]         @relation("AuditActor")
+  importJobs        ImportJob[]
 
   @@map("users")
 }
@@ -1917,6 +1919,39 @@ model DomainEventHandlerLog {
   @@index([organizationId, eventId])
   @@index([organizationId, handlerName, status])
   @@map("domain_event_handler_logs")
+}
+
+// =============================================================================
+// IMPORT JOBS
+// =============================================================================
+
+model ImportJob {
+  id               String    @id @default(cuid())
+  organizationId   String
+  // ImportJobType: STUDENTS | TEACHERS | ENROLLMENTS | CLASS_GROUPS | COURSES | SUBJECTS
+  type             String    @default("STUDENTS")
+  // ImportJobStatus: PENDING | VALIDATED | PROCESSING | COMPLETED | FAILED
+  status           String    @default("PENDING")
+  uploadedFileName String
+  totalRows        Int       @default(0)
+  successRows      Int       @default(0)
+  failedRows       Int       @default(0)
+  rowsData         String?   @db.NVarChar(Max)
+  resultData       String?   @db.NVarChar(Max)
+  validationSummary String?  @db.NVarChar(Max)
+  executionSummary  String?  @db.NVarChar(Max)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  uploadedById     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  uploadedBy   User?        @relation(fields: [uploadedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@map("import_jobs")
 }
 
 // =============================================================================

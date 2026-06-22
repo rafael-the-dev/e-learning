@@ -220,6 +220,19 @@ export async function findStudentByIdNumber(
   return row ? mapToStudent(row) : null;
 }
 
+export async function findExistingIdNumbers(
+  organizationId: string,
+  idNumbers: string[]
+): Promise<Set<string>> {
+  if (idNumbers.length === 0) return new Set();
+  const db = await getDb();
+  const rows = await db.student.findMany({
+    where: { organizationId, deletedAt: null, idNumber: { in: idNumbers } },
+    select: { idNumber: true },
+  });
+  return new Set(rows.map((r) => r.idNumber).filter((v): v is string => v !== null));
+}
+
 export async function listActiveBranches(organizationId: string): Promise<StudentBranch[]> {
   const db = await getDb();
   return db.branch.findMany({

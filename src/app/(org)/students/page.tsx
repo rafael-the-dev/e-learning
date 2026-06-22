@@ -48,6 +48,7 @@ import {
   AlertTriangle,
   ShieldAlert,
   Users,
+  Upload,
 } from "lucide-react";
 import type { AuthContext } from "@/server/auth/context";
 
@@ -87,6 +88,7 @@ export default async function StudentsPage({
   const perms = await getUserPermissions(context.userId, context.organizationId);
   const ability = createAbility(perms);
   const canCreateStudents = ability.can(PERMISSIONS.STUDENTS_CREATE);
+  const canImportStudents = ability.can(PERMISSIONS.STUDENTS_IMPORT);
   const canCreateEnrollments = ability.can(PERMISSIONS.ENROLLMENTS_CREATE);
   const canViewEnrollments = ability.can(PERMISSIONS.ENROLLMENTS_VIEW);
   const canViewPayments = ability.can(PERMISSIONS.PAYMENTS_VIEW);
@@ -157,6 +159,14 @@ export default async function StudentsPage({
                 <Link href="/enrollments/new">
                   <ClipboardList className="size-4 mr-1.5" />
                   Nova Matrícula
+                </Link>
+              </Button>
+            )}
+            {canImportStudents && (
+              <Button asChild size="sm" variant="outline">
+                <Link href="/students/import">
+                  <Upload className="size-4 mr-1.5" />
+                  Importar
                 </Link>
               </Button>
             )}
