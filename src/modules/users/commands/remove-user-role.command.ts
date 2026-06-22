@@ -49,13 +49,15 @@ export class RemoveUserRoleCommand extends BaseCommand<RemoveUserRoleInput, void
       newValues: { roles: [] },
     });
 
-    for (const role of previousRoles) {
-      await auditService.log(this.context, {
-        entity: "Role",
-        entityId: role.id,
-        action: "role.user.removed",
-        oldValues: { userId: this.input.userId },
-      });
-    }
+    await Promise.all(
+      previousRoles.map((role) =>
+        auditService.log(this.context, {
+          entity: "Role",
+          entityId: role.id,
+          action: "role.user.removed",
+          oldValues: { userId: this.input.userId },
+        })
+      )
+    );
   }
 }

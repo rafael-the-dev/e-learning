@@ -20,7 +20,7 @@ export class AssignUserRoleCommand extends BaseCommand<AssignRoleSchema, void> {
     if (!user) throw new NotFoundError("Utilizador", this.input.userId);
 
     const role = await findRoleById(this.input.roleId);
-    if (!role) {
+    if (!role || (!role.isSystem && role.organizationId !== this.context.organizationId)) {
       throw new ValidationError("Dados inválidos", {
         roleId: ["Papel não encontrado"],
       });

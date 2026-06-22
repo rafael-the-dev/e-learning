@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import type { ActionResult } from "@/shared/types/common";
 import {
   AuthorizationError,
@@ -35,7 +36,10 @@ export async function runAction<T>(
     if (error instanceof BusinessRuleError) {
       return { success: false, error: error.message };
     }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { success: false, error: "Já existe um registo com estes dados" };
+    }
     console.error("[action-error]", error);
-    return { success: false, error: "An unexpected error occurred" };
+    return { success: false, error: "Ocorreu um erro inesperado" };
   }
 }

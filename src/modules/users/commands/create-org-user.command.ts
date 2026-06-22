@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { BaseCommand, AuthorizationError, ValidationError } from "@/shared/lib/command";
+import { BaseCommand, AuthorizationError, ValidationError, BusinessRuleError } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
@@ -41,7 +41,7 @@ export class CreateOrganizationUserCommand extends BaseCommand<
     }
 
     const role = await findRoleById(this.input.roleId);
-    if (!role) {
+    if (!role || (!role.isSystem && role.organizationId !== this.context.organizationId)) {
       throw new ValidationError("Dados inválidos", {
         roleId: ["Papel não encontrado"],
       });
@@ -50,6 +50,9 @@ export class CreateOrganizationUserCommand extends BaseCommand<
       throw new ValidationError("Dados inválidos", {
         roleId: ["Não é permitido atribuir o papel de Super Admin"],
       });
+    }
+    if (role.status === "ARCHIVED") {
+      throw new BusinessRuleError("Não é possível atribuir um papel arquivado");
     }
   }
 

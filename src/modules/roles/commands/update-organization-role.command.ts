@@ -20,6 +20,8 @@ import {
 type Input = UpdateOrganizationRoleSchema & { roleId: string };
 
 export class UpdateOrganizationRoleCommand extends BaseCommand<Input, void> {
+  private before: Awaited<ReturnType<typeof findOrganizationRoleById>> = null;
+
   async validate(): Promise<void> {
     const result = updateOrganizationRoleSchema.safeParse(this.input);
     if (!result.success) {
@@ -39,6 +41,7 @@ export class UpdateOrganizationRoleCommand extends BaseCommand<Input, void> {
     if (role.status === "ARCHIVED") {
       throw new BusinessRuleError("Não é possível editar uma role arquivada");
     }
+    this.before = role;
   }
 
   async authorize(): Promise<void> {
@@ -49,7 +52,7 @@ export class UpdateOrganizationRoleCommand extends BaseCommand<Input, void> {
   }
 
   async execute(): Promise<void> {
-    const before = await findOrganizationRoleById(this.input.roleId, this.context.organizationId);
+    const before = this.before;
     const role = await updateOrganizationRole(this.input.roleId, {
       name: this.input.name,
       description: this.input.description ?? null,

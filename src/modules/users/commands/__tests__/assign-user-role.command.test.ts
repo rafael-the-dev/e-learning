@@ -43,7 +43,13 @@ describe("AssignUserRoleCommand — validation", () => {
 
   it("blocks assigning SUPER_ADMIN", async () => {
     (findUserInOrganization as Mock).mockResolvedValue(makeUser());
-    (findRoleById as Mock).mockResolvedValue({ id: "role-super", name: "SUPER_ADMIN", status: "ACTIVE" });
+    (findRoleById as Mock).mockResolvedValue({
+      id: "role-super",
+      name: "SUPER_ADMIN",
+      status: "ACTIVE",
+      isSystem: true,
+      organizationId: null,
+    });
     const cmd = new AssignUserRoleCommand({ userId: "user-1", roleId: "role-super" }, CTX);
     await expect(cmd.validate()).rejects.toThrow("Dados inválidos");
   });
@@ -54,6 +60,8 @@ describe("AssignUserRoleCommand — validation", () => {
       id: "role-1",
       name: "Recepcionista",
       status: "ARCHIVED",
+      isSystem: false,
+      organizationId: "org-1",
     });
     const cmd = new AssignUserRoleCommand({ userId: "user-1", roleId: "role-1" }, CTX);
     await expect(cmd.validate()).rejects.toThrow("Não é possível atribuir um papel arquivado");
@@ -63,7 +71,13 @@ describe("AssignUserRoleCommand — validation", () => {
     (findUserInOrganization as Mock).mockResolvedValue(
       makeUser([{ id: "role-admin", name: "ORG_ADMIN" }])
     );
-    (findRoleById as Mock).mockResolvedValue({ id: "role-teacher", name: "TEACHER", status: "ACTIVE" });
+    (findRoleById as Mock).mockResolvedValue({
+      id: "role-teacher",
+      name: "TEACHER",
+      status: "ACTIVE",
+      isSystem: true,
+      organizationId: null,
+    });
     (countOrgAdmins as Mock).mockResolvedValue(1);
     const cmd = new AssignUserRoleCommand({ userId: "user-1", roleId: "role-teacher" }, CTX);
     await expect(cmd.validate()).rejects.toThrow(
@@ -71,10 +85,42 @@ describe("AssignUserRoleCommand — validation", () => {
     );
   });
 
-  it("allows assigning an active, non-reserved role", async () => {
+  it("allows assigning an active, non-reserved role belonging to the actor's organization", async () => {
     (findUserInOrganization as Mock).mockResolvedValue(makeUser());
-    (findRoleById as Mock).mockResolvedValue({ id: "role-1", name: "Recepcionista", status: "ACTIVE" });
+    (findRoleById as Mock).mockResolvedValue({
+      id: "role-1",
+      name: "Recepcionista",
+      status: "ACTIVE",
+      isSystem: false,
+      organizationId: "org-1",
+    });
     const cmd = new AssignUserRoleCommand({ userId: "user-1", roleId: "role-1" }, CTX);
     await expect(cmd.validate()).resolves.not.toThrow();
+  });
+
+  it("allows assigning a system role regardless of organizationId", async () => {
+    (findUserInOrganization as Mock).mockResolvedValue(makeUser());
+    (findRoleById as Mock).mockResolvedValue({
+      id: "role-teacher",
+      name: "TEACHER",
+      status: "ACTIVE",
+      isSystem: true,
+      organizationId: null,
+    });
+    const cmd = new AssignUserRoleCommand({ userId: "user-1", roleId: "role-teacher" }, CTX);
+    await expect(cmd.validate()).resolves.not.toThrow();
+  });
+
+  it("blocks assigning a custom role that belongs to a different organization (cross-tenant)", async () => {
+    (findUserInOrganization as Mock).mockResolvedValue(makeUser());
+    (findRoleById as Mock).mockResolvedValue({
+      id: "role-other-org",
+      name: "Recepcionista",
+      status: "ACTIVE",
+      isSystem: false,
+      organizationId: "org-2",
+    });
+    const cmd = new AssignUserRoleCommand({ userId: "user-1", roleId: "role-other-org" }, CTX);
+    await expect(cmd.validate()).rejects.toThrow("Dados inválidos");
   });
 });
