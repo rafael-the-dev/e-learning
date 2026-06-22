@@ -399,7 +399,8 @@ model Teacher {
   idNumber       String?
   licenseNumber  String?
   specialization String?
-  // TeacherStatus: ACTIVE | INACTIVE | ON_LEAVE
+  hireDate       DateTime?
+  // TeacherStatus: ACTIVE | INACTIVE | SUSPENDED
   status         String    @default("ACTIVE")
   notes          String?   @db.NVarChar(Max)
   createdAt      DateTime  @default(now())

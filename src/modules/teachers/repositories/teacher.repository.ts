@@ -299,6 +299,32 @@ export async function findTeacherByLicenseNumber(
   return row ? mapToTeacher(row) : null;
 }
 
+export async function findExistingTeacherIdNumbers(
+  organizationId: string,
+  idNumbers: string[]
+): Promise<Set<string>> {
+  if (idNumbers.length === 0) return new Set();
+  const db = await getDb();
+  const rows = await db.teacher.findMany({
+    where: { organizationId, deletedAt: null, idNumber: { in: idNumbers } },
+    select: { idNumber: true },
+  });
+  return new Set(rows.map((r) => r.idNumber).filter((v): v is string => v !== null));
+}
+
+export async function findExistingTeacherEmails(
+  organizationId: string,
+  emails: string[]
+): Promise<Set<string>> {
+  if (emails.length === 0) return new Set();
+  const db = await getDb();
+  const rows = await db.teacher.findMany({
+    where: { organizationId, deletedAt: null, email: { in: emails } },
+    select: { email: true },
+  });
+  return new Set(rows.map((r) => r.email).filter((v): v is string => v !== null));
+}
+
 export async function listActiveBranches(organizationId: string): Promise<TeacherBranch[]> {
   const db = await getDb();
   return db.branch.findMany({

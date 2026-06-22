@@ -59,6 +59,7 @@ export const PERMISSIONS = {
   TEACHERS_DELETE: "teachers.delete",
   TEACHERS_SUSPEND: "teachers.suspend",
   TEACHERS_ASSIGN_SUBJECT: "teachers.assignSubject",
+  TEACHERS_IMPORT: "teachers.import",
 
   // Courses
   COURSES_CREATE: "courses.create",
@@ -480,6 +481,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.TEACHERS_READ,
     PERMISSIONS.TEACHERS_UPDATE,
     PERMISSIONS.TEACHERS_SUSPEND,
+    PERMISSIONS.TEACHERS_IMPORT,
     PERMISSIONS.COURSES_CREATE,
     PERMISSIONS.COURSES_READ,
     PERMISSIONS.COURSES_UPDATE,

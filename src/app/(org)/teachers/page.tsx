@@ -47,6 +47,7 @@ import {
   TrendingUp,
   ShieldAlert,
   UserPlus,
+  Upload,
 } from "lucide-react";
 import { TEACHER_STATUS_LABELS } from "@/modules/teachers/types";
 import type { AuthContext } from "@/server/auth/context";
@@ -86,6 +87,7 @@ export default async function TeachersPage({
   const canEdit = ability.can(PERMISSIONS.TEACHERS_UPDATE);
   const canSuspend = ability.can(PERMISSIONS.TEACHERS_SUSPEND);
   const canDelete = ability.can(PERMISSIONS.TEACHERS_DELETE);
+  const canImport = ability.can(PERMISSIONS.TEACHERS_IMPORT);
 
   const [
     kpis,
@@ -143,14 +145,24 @@ export default async function TeachersPage({
         title="Professores"
         description="Visão executiva do corpo docente, alocações, carga de trabalho e risco operacional."
         actions={
-          canCreate ? (
-            <Button asChild size="sm">
-              <Link href="/teachers/new">
-                <UserPlus className="size-4 mr-1.5" />
-                Novo Professor
-              </Link>
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {canImport && (
+              <Button asChild size="sm" variant="outline">
+                <Link href="/teachers/import">
+                  <Upload className="size-4 mr-1.5" />
+                  Importar
+                </Link>
+              </Button>
+            )}
+            {canCreate && (
+              <Button asChild size="sm">
+                <Link href="/teachers/new">
+                  <UserPlus className="size-4 mr-1.5" />
+                  Novo Professor
+                </Link>
+              </Button>
+            )}
+          </div>
         }
       />
 
