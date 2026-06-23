@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { findBillingPolicyById } from "@/modules/billing/repositories/billing-policy.repository";
@@ -18,12 +18,7 @@ export default async function BillingPolicyDetailPage({
 }: {
   params: Promise<{ policyId: string }>;
 }) {
-  let context;
-  try {
-    context = await requirePermission(PERMISSIONS.BILLING_POLICIES_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.BILLING_POLICIES_VIEW);
 
   const { policyId } = await params;
   const [policy, availableFees, perms] = await Promise.all([

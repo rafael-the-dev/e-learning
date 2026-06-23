@@ -1,12 +1,10 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getReceiptsByOrganization, getReceiptStats } from "@/modules/finance/services/receipt.service";
 import { ReceiptsTable } from "@/modules/finance/components/receipts-table";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Recibos" };
 
@@ -15,12 +13,7 @@ export default async function ReceiptsPage({
 }: {
   searchParams: Promise<{ page?: string; search?: string; status?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.RECEIPTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.RECEIPTS_VIEW);
 
   const { page, search, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

@@ -1,8 +1,8 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getWalletById, getTransactionsByWallet } from "@/modules/wallets/services/wallet.service";
 import { WalletTransactionsTable } from "@/modules/wallets/components/wallet-transactions-table";
@@ -12,7 +12,6 @@ import { AdjustmentDrawer } from "@/modules/wallets/components/adjustment-drawer
 import { WALLET_STATUS_LABELS } from "@/modules/wallets/types";
 import { findInvoicesByOrganization } from "@/modules/finance/repositories/invoice.repository";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Carteira" };
 
@@ -28,12 +27,7 @@ export default async function WalletDetailPage({
   params: Promise<{ walletId: string }>;
   searchParams: Promise<SearchParams>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.WALLETS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.WALLETS_VIEW);
 
   const { walletId } = await params;
   const wallet = await getWalletById(walletId, context.organizationId).catch(() => null);

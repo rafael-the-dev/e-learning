@@ -1,21 +1,14 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getActiveBranches } from "@/modules/students/services/student.service";
 import { CreateStudentForm } from "@/modules/students/components/student-form";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Novo Aluno" };
 
 export default async function NewStudentPage() {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.STUDENTS_CREATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.STUDENTS_CREATE);
 
   const branches = await getActiveBranches(context.organizationId);
 

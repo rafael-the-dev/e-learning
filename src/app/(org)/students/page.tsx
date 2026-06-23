@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
@@ -14,7 +13,7 @@ import {
   DashboardSideCard,
   DashboardInsightRow,
 } from "@/shared/components/layout/executive-dashboard";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -50,7 +49,6 @@ import {
   Users,
   Upload,
 } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Alunos" };
 
@@ -75,12 +73,7 @@ export default async function StudentsPage({
 }: {
   searchParams: Promise<{ page?: string; search?: string; status?: string; branchId?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.STUDENTS_READ);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.STUDENTS_READ);
 
   const { page, search, status, branchId } = await searchParams;
   const pagination = normalizePaginationParams(page);

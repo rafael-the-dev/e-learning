@@ -1,17 +1,15 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/layout/empty-state";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { findActiveComponentsByPolicy } from "@/modules/assessments/repositories/assessment-component.repository";
 import { findActivePolicyForLevelSubject } from "@/modules/assessments/repositories/assessment-policy.repository";
 import { findStudentAssessmentResults } from "@/modules/grades/repositories/student-assessment-result.repository";
 import { GradeEntryTable } from "@/modules/grades/components/grade-entry-table";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Lançamento de Notas" };
 
@@ -24,12 +22,7 @@ export default async function GradeEntryPage({
     componentId?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.GRADES_CREATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.GRADES_CREATE);
 
   const sp = await searchParams;
   const db = await getDb();

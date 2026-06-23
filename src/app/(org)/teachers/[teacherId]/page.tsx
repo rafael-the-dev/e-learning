@@ -1,10 +1,10 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { Separator } from "@/shared/components/ui/separator";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getTeacherWithSubjects } from "@/modules/teachers/services/teacher.service";
 import { TeacherDetailActions } from "@/modules/teachers/components/teacher-detail-actions";
@@ -23,19 +23,13 @@ import {
   ClipboardList,
   Award,
 } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export default async function TeacherDetailPage({
   params,
 }: {
   params: Promise<{ teacherId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.TEACHERS_READ);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.TEACHERS_READ);
 
   const { teacherId } = await params;
 

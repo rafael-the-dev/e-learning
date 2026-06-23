@@ -1,14 +1,12 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUsersByOrganization, getAssignableRoles } from "@/modules/users/services/user.service";
 import { UsersTable } from "@/modules/users/components/users-table";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { UserPlus } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Utilizadores" };
 
@@ -22,12 +20,7 @@ export default async function UsersPage({
     status?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.USERS_READ);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.USERS_READ);
 
   const { page, search, role, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

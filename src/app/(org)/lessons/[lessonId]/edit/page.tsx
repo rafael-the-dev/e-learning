@@ -1,10 +1,9 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getLessonById } from "@/modules/lessons/services/lesson.service";
 import { EditLessonForm } from "@/modules/lessons/components/lesson-form";
-import type { AuthContext } from "@/server/auth/context";
 
 export async function generateMetadata({
   params,
@@ -20,12 +19,7 @@ export default async function EditLessonPage({
 }: {
   params: Promise<{ lessonId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.LESSONS_UPDATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.LESSONS_UPDATE);
 
   const { lessonId } = await params;
   const lesson = await getLessonById(lessonId, context.organizationId).catch(() => null);

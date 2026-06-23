@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
@@ -24,12 +24,7 @@ export default async function RoleDetailPage({
   params: Promise<{ roleId: string }>;
   searchParams: Promise<{ usersPage?: string; auditPage?: string }>;
 }) {
-  let context;
-  try {
-    context = await requirePermission(PERMISSIONS.ORGANIZATION_ROLES_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ORGANIZATION_ROLES_VIEW);
 
   const { roleId } = await params;
   const { usersPage, auditPage } = await searchParams;

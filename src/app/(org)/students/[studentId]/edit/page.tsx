@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getStudentById,
@@ -9,7 +9,6 @@ import {
 } from "@/modules/students/services/student.service";
 import { EditStudentForm } from "@/modules/students/components/student-form";
 import { NotFoundError } from "@/shared/lib/command";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Editar Aluno" };
 
@@ -18,12 +17,7 @@ export default async function EditStudentPage({
 }: {
   params: Promise<{ studentId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.STUDENTS_UPDATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.STUDENTS_UPDATE);
 
   const { studentId } = await params;
 

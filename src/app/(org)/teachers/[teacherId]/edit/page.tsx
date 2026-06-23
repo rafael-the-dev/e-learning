@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getTeacherById,
@@ -9,7 +9,6 @@ import {
 } from "@/modules/teachers/services/teacher.service";
 import { EditTeacherForm } from "@/modules/teachers/components/teacher-form";
 import { NotFoundError } from "@/shared/lib/command";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Editar Professor" };
 
@@ -18,12 +17,7 @@ export default async function EditTeacherPage({
 }: {
   params: Promise<{ teacherId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.TEACHERS_UPDATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.TEACHERS_UPDATE);
 
   const { teacherId } = await params;
 

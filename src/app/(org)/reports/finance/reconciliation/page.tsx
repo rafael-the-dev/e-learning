@@ -7,7 +7,7 @@ import { StatCard } from "@/shared/components/layout/stat-card";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { getFinancialReconciliationReport } from "@/modules/reports/finance/services/financial-reports.service";
@@ -55,7 +55,7 @@ export default async function ReconciliationReportPage({
 }: {
   searchParams: Record<string, string | undefined>;
 }) {
-  const context = await requirePermission(PERMISSIONS.FINANCIAL_REPORTS_RECONCILIATION);
+  const context = await requirePermissionOrRedirect(PERMISSIONS.FINANCIAL_REPORTS_RECONCILIATION);
   const { organizationId } = context;
 
   const page = Math.max(1, parseInt(searchParams.page ?? "1", 10));

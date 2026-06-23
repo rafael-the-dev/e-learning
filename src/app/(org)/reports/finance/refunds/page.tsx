@@ -4,7 +4,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { getRefundsReportKPIs } from "@/modules/reports/finance/repositories/refunds-report.repository";
@@ -31,7 +31,7 @@ export default async function RefundsReportPage({
 }: {
   searchParams: Record<string, string | undefined>;
 }) {
-  const context = await requirePermission(PERMISSIONS.FINANCIAL_REPORTS_VIEW);
+  const context = await requirePermissionOrRedirect(PERMISSIONS.FINANCIAL_REPORTS_VIEW);
   const { organizationId } = context;
 
   const filters: RefundsReportFilters = {

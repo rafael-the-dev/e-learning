@@ -1,4 +1,4 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
 import { PageHeader } from "@/shared/components/layout/page-header";
@@ -6,7 +6,7 @@ import { Separator } from "@/shared/components/ui/separator";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getStudentById } from "@/modules/students/services/student.service";
@@ -16,7 +16,6 @@ import { TimelineFilters } from "@/modules/student-timeline/components/timeline-
 import { AddNoteButton } from "@/modules/student-timeline/components/add-note-button";
 import { NotFoundError } from "@/shared/lib/command";
 import { ChevronLeft, ChevronRight, History } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 import type { TimelineEventType, TimelineReferenceType } from "@/modules/student-timeline/types";
 
 export const metadata = { title: "Timeline do Aluno" };
@@ -35,12 +34,7 @@ export default async function StudentTimelinePage({
     page?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.STUDENT_TIMELINE_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.STUDENT_TIMELINE_VIEW);
 
   const { studentId } = await params;
 

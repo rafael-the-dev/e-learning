@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getUserInOrganization,
@@ -9,19 +9,13 @@ import {
 } from "@/modules/users/services/user.service";
 import { EditUserForm } from "@/modules/users/components/user-form";
 import { NotFoundError } from "@/shared/lib/command";
-import type { AuthContext } from "@/server/auth/context";
 
 export default async function EditUserPage({
   params,
 }: {
   params: Promise<{ userId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.USERS_UPDATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.USERS_UPDATE);
 
   const { userId } = await params;
 

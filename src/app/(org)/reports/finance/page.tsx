@@ -7,7 +7,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { IntegrityWarningBanner } from "@/modules/reports/finance/components/integrity-warning-banner";
@@ -31,7 +31,7 @@ async function getCriticalIntegrityCount(organizationId: string) {
 }
 
 export default async function FinanceReportsHomePage() {
-  const context = await requirePermission(PERMISSIONS.FINANCIAL_REPORTS_VIEW);
+  const context = await requirePermissionOrRedirect(PERMISSIONS.FINANCIAL_REPORTS_VIEW);
 
   const criticalCount = await getCriticalIntegrityCount(context.organizationId);
 

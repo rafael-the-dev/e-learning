@@ -1,10 +1,10 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { findAttendanceSessionById } from "@/modules/attendance/repositories/attendance-session.repository";
@@ -13,7 +13,6 @@ import { getSessionRecordsSummary } from "@/modules/attendance/services/attendan
 import { ATTENDANCE_RECORD_STATUS_LABELS, ATTENDANCE_RECORD_STATUS_COLORS } from "@/modules/attendance/types";
 import { ClipboardList, Calendar, Clock, User, Building } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Sessão de Presença" };
 
@@ -22,12 +21,7 @@ export default async function AttendanceSessionDetailPage({
 }: {
   params: Promise<{ sessionId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
 
   const { sessionId } = await params;
   const [session, records, summary] = await Promise.all([

@@ -1,8 +1,8 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -20,7 +20,6 @@ import {
   CLASSROOM_TYPE_LABELS,
   MEETING_PROVIDER_LABELS,
 } from "@/modules/classrooms/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Detalhe da Sala" };
 
@@ -29,12 +28,7 @@ export default async function ClassroomDetailPage({
 }: {
   params: Promise<{ classroomId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.CLASSROOMS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.CLASSROOMS_VIEW);
 
   const { classroomId } = await params;
 

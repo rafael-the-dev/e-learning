@@ -1,21 +1,14 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getActiveBranches } from "@/modules/teachers/services/teacher.service";
 import { CreateTeacherForm } from "@/modules/teachers/components/teacher-form";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Novo Professor" };
 
 export default async function NewTeacherPage() {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.TEACHERS_CREATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.TEACHERS_CREATE);
 
   const branches = await getActiveBranches(context.organizationId);
 

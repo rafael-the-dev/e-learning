@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   BookOpen, CheckCircle2, Clock, Users, AlertTriangle, XCircle,
@@ -21,7 +20,7 @@ import {
 import { ApexDonutChart, ApexLineChart } from "@/shared/components/charts";
 import { EnrollmentActionBar } from "@/modules/enrollments/components/enrollment-action-bar";
 import { EnrollmentTableFilters } from "@/modules/enrollments/components/enrollment-table-filters";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getEnrollmentsByOrganization } from "@/modules/enrollments/services/enrollment.service";
@@ -38,7 +37,6 @@ import { EnrollmentWatchlist } from "@/modules/enrollments/components/enrollment
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { getDb } from "@/server/db";
 import { ENROLLMENT_STATUS_LABELS } from "@/modules/enrollments/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Matrículas" };
 
@@ -68,12 +66,7 @@ export default async function EnrollmentsPage({
     branchId?: string; classGroupId?: string; yearId?: string; financialStatus?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ENROLLMENTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ENROLLMENTS_VIEW);
 
   const { page, search, status, courseId, branchId, classGroupId, yearId, financialStatus } = await searchParams;
   const pagination = normalizePaginationParams(page);

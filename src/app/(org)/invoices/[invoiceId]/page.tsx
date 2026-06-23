@@ -1,15 +1,14 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getInvoiceById } from "@/modules/finance/services/invoice.service";
 import { getPaymentPlanByInvoice } from "@/modules/finance/services/payment-plan.service";
 import { INVOICE_STATUS_LABELS, PAYMENT_PLAN_STATUS_LABELS, INSTALLMENT_STATUS_LABELS } from "@/modules/finance/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Detalhes da Fatura" };
 
@@ -18,12 +17,7 @@ export default async function InvoiceDetailPage({
 }: {
   params: Promise<{ invoiceId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.INVOICES_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.INVOICES_VIEW);
 
   const { invoiceId } = await params;
 

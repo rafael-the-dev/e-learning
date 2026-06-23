@@ -1,23 +1,16 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getSubjectsByOrganization } from "@/modules/courses/services/course.service";
 import { SubjectsTable } from "@/modules/courses/components/subjects-table";
-import type { AuthContext } from "@/server/auth/context";
 
 export async function generateMetadata() {
   return { title: "Disciplinas" };
 }
 
 export default async function SubjectsPage() {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.SUBJECTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.SUBJECTS_VIEW);
 
   const perms = await getUserPermissions(context.userId, context.organizationId);
   const ability = createAbility(perms);

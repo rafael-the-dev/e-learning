@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
@@ -16,7 +15,7 @@ import {
 } from "@/shared/components/layout/executive-dashboard";
 import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
@@ -50,7 +49,6 @@ import {
   ASSESSMENT_STATUS_LABELS,
   ASSESSMENT_PUBLICATION_STATUS_LABELS,
 } from "@/modules/assessments/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Avaliações" };
 
@@ -81,12 +79,7 @@ export default async function AssessmentsPage({
     classGroupId?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ASSESSMENTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENTS_VIEW);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);

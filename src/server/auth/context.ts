@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { getDb } from "@/server/db";
 import { AuthorizationError } from "@/shared/lib/command";
@@ -199,6 +200,31 @@ export async function requireRole(role: SystemRole): Promise<AuthContext> {
     throw new AuthorizationError(`Acesso restrito: papel '${role}' necessário`);
   }
   return context;
+}
+
+/**
+ * Page-level guard: same as requirePermission, but redirects to /forbidden
+ * instead of throwing. Use in Server Components (page.tsx/layout.tsx) so a
+ * missing permission never surfaces as an unhandled error/500.
+ */
+export async function requirePermissionOrRedirect(permission: Permission): Promise<AuthContext> {
+  try {
+    return await requirePermission(permission);
+  } catch {
+    redirect("/forbidden");
+  }
+}
+
+/**
+ * Page-level guard: same as requireRole, but redirects to /forbidden
+ * instead of throwing.
+ */
+export async function requireRoleOrRedirect(role: SystemRole): Promise<AuthContext> {
+  try {
+    return await requireRole(role);
+  } catch {
+    redirect("/forbidden");
+  }
 }
 
 /**

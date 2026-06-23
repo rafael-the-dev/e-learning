@@ -1,15 +1,14 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { findAssessmentById } from "@/modules/assessments/repositories/assessment.repository";
 import { findAllResultsByAssessment } from "@/modules/assessments/repositories/assessment-result.repository";
 import { AssessmentDetail } from "@/modules/assessments/components/assessment-detail";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Detalhes da Avaliação" };
 
@@ -18,12 +17,7 @@ export default async function AssessmentDetailPage({
 }: {
   params: Promise<{ assessmentId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ASSESSMENTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENTS_VIEW);
 
   const { assessmentId } = await params;
 

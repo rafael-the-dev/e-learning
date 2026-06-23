@@ -1,9 +1,9 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data/status-badge";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -38,7 +38,6 @@ import {
 } from "@/shared/components/ui/accordion";
 import { getEnrollmentAcademicProgress } from "@/modules/grades/services/academic-progress.service";
 import { getDb } from "@/server/db";
-import type { AuthContext } from "@/server/auth/context";
 
 const PROGRESS_STATUS_LABELS: Record<string, string> = {
   NOT_STARTED: "Por Iniciar",
@@ -101,12 +100,7 @@ export default async function EnrollmentDetailPage({
 }: {
   params: Promise<{ enrollmentId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ENROLLMENTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ENROLLMENTS_VIEW);
 
   const { enrollmentId } = await params;
 

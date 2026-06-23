@@ -1,10 +1,9 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getCalendarDashboardData,
@@ -14,17 +13,11 @@ import {
 } from "@/modules/academic-calendar/services/academic-calendar.service";
 import { ACADEMIC_STATUS_LABELS, ACADEMIC_EVENT_TYPE_LABELS } from "@/modules/academic-calendar/types";
 import { CalendarRange, CalendarClock, Palmtree, CalendarCheck, ArrowRight } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Calendário Académico" };
 
 export default async function AcademicCalendarPage() {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ACADEMIC_CALENDAR_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ACADEMIC_CALENDAR_VIEW);
 
   const [dashboard, yearsResult, holidaysResult, eventsResult] = await Promise.all([
     getCalendarDashboardData(context.organizationId),

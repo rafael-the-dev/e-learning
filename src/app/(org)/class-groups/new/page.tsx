@@ -1,21 +1,14 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { CreateClassGroupForm } from "@/modules/class-groups/components/class-group-form";
 import { getClassGroupFormReferenceData } from "@/modules/class-groups/services/class-group.service";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Nova Turma" };
 
 export default async function NewClassGroupPage() {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.CLASS_GROUPS_CREATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.CLASS_GROUPS_CREATE);
 
   const { courses, levels, teachers, branches, academicYears, terms } =
     await getClassGroupFormReferenceData(context.organizationId);

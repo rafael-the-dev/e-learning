@@ -1,8 +1,8 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getReceiptById } from "@/modules/finance/services/receipt.service";
 import { Wallet, ArrowRight } from "lucide-react";
@@ -12,7 +12,6 @@ import {
   INVOICE_ITEM_TYPE_LABELS,
   ALLOCATION_TYPE_LABELS,
 } from "@/modules/finance/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Recibo" };
 
@@ -21,12 +20,7 @@ export default async function ReceiptDetailPage({
 }: {
   params: Promise<{ receiptId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.RECEIPTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.RECEIPTS_VIEW);
 
   const { receiptId } = await params;
   const receipt = await getReceiptById(receiptId, context.organizationId).catch(() => null);

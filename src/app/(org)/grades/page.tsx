@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
@@ -16,7 +15,7 @@ import {
 } from "@/shared/components/layout/executive-dashboard";
 import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -46,7 +45,6 @@ import {
   ShieldAlert,
   Users,
 } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Desempenho Académico" };
 
@@ -79,12 +77,7 @@ export default async function GradesPage({
     status?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.GRADES_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.GRADES_VIEW);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);

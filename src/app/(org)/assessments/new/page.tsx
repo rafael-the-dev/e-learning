@@ -1,13 +1,11 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { findAssessmentPoliciesByOrganization } from "@/modules/assessments/repositories/assessment-policy.repository";
 import { findAssessmentPeriodsByOrganization } from "@/modules/assessments/repositories/assessment-period.repository";
 import { findActiveComponentsByPolicy } from "@/modules/assessments/repositories/assessment-component.repository";
 import { CreateAssessmentForm } from "@/modules/assessments/components/create-assessment-form";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Nova Avaliação" };
 
@@ -70,12 +68,7 @@ async function getFormDeps(organizationId: string) {
 }
 
 export default async function NewAssessmentPage() {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ASSESSMENTS_CREATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENTS_CREATE);
 
   const { policiesResult, periodsResult, classGroups, teachers, academicYears, academicTerms, policyLevelSubjectMap } =
     await getFormDeps(context.organizationId);

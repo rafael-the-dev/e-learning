@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, ListChecks, CheckCircle2, AlertTriangle, XCircle, Clock } from "lucide-react";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getImportJobDetail } from "@/modules/import-jobs/repositories/import-job.repository";
 import { getImportJobEventsTimeline } from "@/modules/import-jobs/services/import-job-history.service";
@@ -19,12 +19,7 @@ export default async function ImportJobDetailPage({
 }: {
   params: Promise<{ jobId: string }>;
 }) {
-  let context;
-  try {
-    context = await requirePermission(PERMISSIONS.IMPORT_JOBS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.IMPORT_JOBS_VIEW);
 
   const { jobId } = await params;
 

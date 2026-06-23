@@ -12,7 +12,7 @@ import { Button } from "@/shared/components/ui/button";
 import {
   Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetBody,
 } from "@/shared/components/ui/sheet";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { getFinancialClosingReport } from "@/modules/reports/finance/services/financial-reports.service";
@@ -51,7 +51,7 @@ export default async function FinancialClosingPage({
 }: {
   searchParams: Record<string, string | undefined>;
 }) {
-  const context = await requirePermission(PERMISSIONS.FINANCIAL_REPORTS_CLOSING_VIEW);
+  const context = await requirePermissionOrRedirect(PERMISSIONS.FINANCIAL_REPORTS_CLOSING_VIEW);
   const { organizationId } = context;
 
   const filters: ClosingFilters = {

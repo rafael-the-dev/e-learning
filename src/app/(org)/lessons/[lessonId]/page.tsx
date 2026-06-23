@@ -1,9 +1,9 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -20,7 +20,6 @@ import {
   LESSON_TYPE_LABELS,
 } from "@/modules/lessons/types";
 import { Pencil, Clock } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 import type { ProgressContext } from "@/modules/lessons/components/video/video-types";
 
 export async function generateMetadata({
@@ -39,12 +38,7 @@ export default async function LessonDetailPage({
   params: Promise<{ lessonId: string }>;
   searchParams: Promise<{ enrollmentId?: string; subjectId?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.LESSONS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.LESSONS_VIEW);
 
   const { lessonId } = await params;
   const sp = await searchParams;

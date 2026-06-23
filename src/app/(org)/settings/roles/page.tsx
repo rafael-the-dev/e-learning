@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
@@ -14,12 +13,7 @@ export default async function RolesPage({
 }: {
   searchParams: Promise<{ page?: string; search?: string; type?: string; status?: string }>;
 }) {
-  let context;
-  try {
-    context = await requirePermission(PERMISSIONS.ORGANIZATION_ROLES_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ORGANIZATION_ROLES_VIEW);
 
   const { page, search, type, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

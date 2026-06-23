@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import {
@@ -14,7 +13,6 @@ import { SessionsTable } from "@/modules/attendance/components/sessions-table";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { getDb } from "@/server/db";
 import { Plus } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Sessões de Presença" };
 
@@ -46,12 +44,7 @@ export default async function AttendanceSessionsPage({
     subjectId?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
 
   const { page, search, status, classGroupId, subjectId } = await searchParams;
   const pagination = normalizePaginationParams(page);

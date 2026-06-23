@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { StatCard } from "@/shared/components/layout/stat-card";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getClassroomBookingsByOrganization } from "@/modules/classrooms/services/classroom.service";
@@ -11,7 +10,6 @@ import { ClassroomBookingsTable } from "@/modules/classrooms/components/classroo
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { getDb } from "@/server/db";
 import { Plus } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Reservas de Sala" };
 
@@ -25,12 +23,7 @@ export default async function ClassroomBookingsPage({
     status?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.CLASSROOM_BOOKINGS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.CLASSROOM_BOOKINGS_VIEW);
 
   const { page, classroomId, yearId, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

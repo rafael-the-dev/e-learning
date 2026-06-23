@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import {
@@ -11,17 +10,11 @@ import {
   getJustificationStats,
 } from "@/modules/attendance/services/attendance.service";
 import { Plus, ClipboardList, FileCheck, BarChart3 } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Presenças" };
 
 export default async function AttendancePage() {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
 
   const perms = await getUserPermissions(context.userId, context.organizationId);
   const ability = createAbility(perms);

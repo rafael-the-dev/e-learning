@@ -1,9 +1,9 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data/status-badge";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getClassGroupById } from "@/modules/class-groups/services/class-group.service";
@@ -26,7 +26,6 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { CLASS_GROUP_STATUS_LABELS } from "@/modules/class-groups/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export async function generateMetadata() {
   return { title: "Detalhes da Turma" };
@@ -37,12 +36,7 @@ export default async function ClassGroupDetailPage({
 }: {
   params: Promise<{ classGroupId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.CLASS_GROUPS_READ);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.CLASS_GROUPS_READ);
 
   const { classGroupId } = await params;
 

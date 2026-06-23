@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   listImportJobs,
@@ -38,12 +37,7 @@ export default async function ImportJobsPage({
     dateTo?: string;
   }>;
 }) {
-  let context;
-  try {
-    context = await requirePermission(PERMISSIONS.IMPORT_JOBS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.IMPORT_JOBS_VIEW);
 
   const { page, search, type, status, uploadedById, dateFrom, dateTo } = await searchParams;
   const pagination = normalizePaginationParams(page);

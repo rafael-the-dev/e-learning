@@ -1,17 +1,16 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getClassroomBookingById } from "@/modules/classrooms/services/classroom.service";
 import {
   CLASSROOM_BOOKING_STATUS_LABELS,
 } from "@/modules/classrooms/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Detalhe da Reserva" };
 
@@ -30,12 +29,7 @@ export default async function ClassroomBookingDetailPage({
 }: {
   params: Promise<{ bookingId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.CLASSROOM_BOOKINGS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.CLASSROOM_BOOKINGS_VIEW);
 
   const { bookingId } = await params;
   const [booking, perms] = await Promise.all([

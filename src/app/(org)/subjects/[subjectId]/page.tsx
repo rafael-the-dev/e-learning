@@ -1,8 +1,8 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getSubjectById } from "@/modules/courses/services/course.service";
@@ -12,7 +12,6 @@ import {
 } from "@/modules/lessons/services/lesson.service";
 import { SubjectLessonsPanel } from "@/modules/lessons/components/subject-lessons-panel";
 import { SUBJECT_STATUS_LABELS } from "@/modules/courses/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export async function generateMetadata({
   params,
@@ -30,12 +29,7 @@ export default async function SubjectDetailPage({
   params: Promise<{ subjectId: string }>;
   searchParams: Promise<{ tab?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.SUBJECTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.SUBJECTS_VIEW);
 
   const { subjectId } = await params;
   const sp = await searchParams;

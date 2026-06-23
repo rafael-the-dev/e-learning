@@ -1,5 +1,5 @@
-import { redirect, notFound } from "next/navigation";
-import { requirePermission } from "@/server/auth/context";
+import { notFound } from "next/navigation";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { NotFoundError } from "@/shared/lib/command";
 import {
@@ -43,7 +43,6 @@ import {
   FileText,
   History,
 } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 import type { Student360TabDef } from "@/modules/students/student-360/components/student-360-tabs-nav";
 
 export async function generateMetadata({
@@ -62,12 +61,7 @@ export default async function StudentDetailPage({
   params: Promise<{ studentId: string }>;
   searchParams: Promise<{ tab?: string; page?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.STUDENTS_READ);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.STUDENTS_READ);
 
   const { studentId } = await params;
   const sp = await searchParams;

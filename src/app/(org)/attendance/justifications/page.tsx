@@ -1,7 +1,6 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import {
@@ -10,7 +9,6 @@ import {
 import { getJustificationStats } from "@/modules/attendance/services/attendance.service";
 import { JustificationsTable } from "@/modules/attendance/components/justifications-table";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Justificações de Presença" };
 
@@ -19,12 +17,7 @@ export default async function AttendanceJustificationsPage({
 }: {
   searchParams: Promise<{ page?: string; search?: string; status?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_VIEW);
 
   const { page, search, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

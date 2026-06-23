@@ -1,8 +1,8 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -13,7 +13,6 @@ import { getEnrollmentStatsByCourse } from "@/modules/enrollments/services/enrol
 import { LevelsTable } from "@/modules/courses/components/levels-table";
 import { NotFoundError } from "@/shared/lib/command";
 import { Layers, BookOpen, Clock, Users } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export async function generateMetadata() {
   return { title: "Níveis do Curso" };
@@ -24,12 +23,7 @@ export default async function CourseLevelsPage({
 }: {
   params: Promise<{ courseId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.COURSES_READ);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.COURSES_READ);
 
   const { courseId } = await params;
 

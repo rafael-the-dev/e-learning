@@ -1,15 +1,13 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/layout/empty-state";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { TrendingUp, ExternalLink, Clock } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Progressão por Nível" };
 
@@ -45,12 +43,7 @@ const DECISION_BADGE_VARIANT: Record<string, "default" | "secondary" | "destruct
 };
 
 export default async function LevelProgressionPage() {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.LEVEL_PROGRESSION_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.LEVEL_PROGRESSION_VIEW);
 
   const perms = await getUserPermissions(context.userId, context.organizationId);
   const ability = createAbility(perms);

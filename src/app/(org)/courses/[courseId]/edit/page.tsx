@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getCourseById,
@@ -9,7 +9,6 @@ import {
 } from "@/modules/courses/services/course.service";
 import { EditCourseForm } from "@/modules/courses/components/course-form";
 import { NotFoundError } from "@/shared/lib/command";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Editar Curso" };
 
@@ -18,12 +17,7 @@ export default async function EditCoursePage({
 }: {
   params: Promise<{ courseId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.COURSES_UPDATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.COURSES_UPDATE);
 
   const { courseId } = await params;
 

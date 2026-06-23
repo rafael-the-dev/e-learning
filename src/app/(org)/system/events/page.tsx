@@ -1,7 +1,6 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import {
@@ -10,7 +9,6 @@ import {
 } from "@/modules/domain-events/services/domain-event.service";
 import { DomainEventsTable } from "@/modules/domain-events/components/domain-events-table";
 import { DOMAIN_EVENT_STATUS_LABELS } from "@/modules/domain-events/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Eventos de Domínio" };
 
@@ -25,12 +23,7 @@ export default async function SystemEventsPage({
     aggregateType?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.DOMAIN_EVENTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.DOMAIN_EVENTS_VIEW);
 
   const { page, search, status, eventType, aggregateType } = await searchParams;
   const pagination = normalizePaginationParams(page, 25);

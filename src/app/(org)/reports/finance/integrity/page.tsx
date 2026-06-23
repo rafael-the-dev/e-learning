@@ -5,7 +5,7 @@ import {
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -53,7 +53,7 @@ export default async function IntegrityReportPage({
 }: {
   searchParams: Record<string, string | undefined>;
 }) {
-  const context = await requirePermission(PERMISSIONS.FINANCIAL_REPORTS_INTEGRITY);
+  const context = await requirePermissionOrRedirect(PERMISSIONS.FINANCIAL_REPORTS_INTEGRITY);
   const { organizationId, userId } = context;
 
   const page = Math.max(1, parseInt(searchParams.page ?? "1", 10));

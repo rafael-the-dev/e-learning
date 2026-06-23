@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ChevronLeft, Download } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getStudentFinancialStatement } from "@/modules/reports/finance/services/financial-reports.service";
@@ -29,7 +29,7 @@ export default async function StudentStatementPage({
   params: { studentId: string };
   searchParams: Record<string, string | undefined>;
 }) {
-  const context = await requirePermission(PERMISSIONS.FINANCIAL_REPORTS_STUDENT_STATEMENT);
+  const context = await requirePermissionOrRedirect(PERMISSIONS.FINANCIAL_REPORTS_STUDENT_STATEMENT);
   const { studentId } = params;
 
   const [statement, criticalCount] = await Promise.all([

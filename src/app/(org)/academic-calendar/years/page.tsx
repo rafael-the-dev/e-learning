@@ -1,13 +1,11 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getAcademicYearsByOrganization } from "@/modules/academic-calendar/services/academic-calendar.service";
 import { AcademicYearsTable } from "@/modules/academic-calendar/components/academic-years-table";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Anos Letivos" };
 
@@ -16,12 +14,7 @@ export default async function AcademicYearsPage({
 }: {
   searchParams: Promise<{ page?: string; search?: string; status?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ACADEMIC_CALENDAR_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ACADEMIC_CALENDAR_VIEW);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);

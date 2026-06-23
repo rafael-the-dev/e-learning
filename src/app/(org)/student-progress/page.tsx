@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Badge } from "@/shared/components/ui/badge";
@@ -14,7 +13,7 @@ import {
 } from "@/shared/components/layout/executive-dashboard";
 import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import {
@@ -43,7 +42,6 @@ import {
   Lock,
   Star,
 } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Progresso dos Alunos" };
 
@@ -75,12 +73,7 @@ export default async function StudentProgressPage({
     courseId?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.STUDENT_COURSE_PROGRESS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.STUDENT_COURSE_PROGRESS_VIEW);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);

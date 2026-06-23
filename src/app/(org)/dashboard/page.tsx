@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/components/ui/card";
@@ -11,7 +10,7 @@ import {
   DashboardSideCard,
   DashboardInsightRow,
 } from "@/shared/components/layout/executive-dashboard";
-import { requireRole } from "@/server/auth/context";
+import { requireRoleOrRedirect } from "@/server/auth/context";
 import { SYSTEM_ROLES } from "@/server/auth/permissions";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getExecutiveDashboardData } from "@/modules/dashboard/services/dashboard.service";
@@ -23,7 +22,6 @@ import { DashboardFinancialWatchlist } from "@/modules/dashboard/components/dash
 import { DashboardActivityFeed } from "@/modules/dashboard/components/dashboard-activity-feed";
 import { DashboardUpcomingDeadlines } from "@/modules/dashboard/components/dashboard-upcoming-deadlines";
 import { DashboardQuickStats } from "@/modules/dashboard/components/dashboard-quick-stats";
-import type { AuthContext } from "@/server/auth/context";
 import {
   Users, GraduationCap, ClipboardList, AlertTriangle, Banknote, Wallet, FileWarning, CreditCard,
   Bell, CalendarClock, Activity, ShieldAlert, TrendingUp,
@@ -36,12 +34,7 @@ function formatCurrency(value: number, symbol: string) {
 }
 
 export default async function DashboardPage() {
-  let context: AuthContext;
-  try {
-    context = await requireRole(SYSTEM_ROLES.ORG_ADMIN);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requireRoleOrRedirect(SYSTEM_ROLES.ORG_ADMIN);
 
   const data = await getExecutiveDashboardData(context.organizationId);
   const { health, kpis, quickStats, trend, academicWatchlist, financialWatchlist, activityFeed, alerts, deadlines } = data;

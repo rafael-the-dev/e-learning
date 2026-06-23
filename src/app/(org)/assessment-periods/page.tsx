@@ -1,7 +1,6 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
@@ -9,7 +8,6 @@ import { findAssessmentPeriodsByOrganization } from "@/modules/assessments/repos
 import { AssessmentPeriodsTable } from "@/modules/assessments/components/assessment-periods-table";
 import { NewAssessmentPeriodButton } from "@/modules/assessments/components/new-assessment-period-button";
 import { getDb } from "@/server/db";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Períodos de Avaliação" };
 
@@ -18,12 +16,7 @@ export default async function AssessmentPeriodsPage({
 }: {
   searchParams: Promise<{ page?: string; search?: string; status?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ASSESSMENT_PERIODS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENT_PERIODS_VIEW);
 
   const { page, search, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

@@ -1,7 +1,6 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -11,7 +10,6 @@ import {
 import { LessonsTable } from "@/modules/lessons/components/lessons-table";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { BookOpen } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export async function generateMetadata() {
   return { title: "Biblioteca de Lições" };
@@ -27,12 +25,7 @@ export default async function LessonsPage({
     type?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.LESSONS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.LESSONS_VIEW);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);

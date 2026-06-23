@@ -1,8 +1,7 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
@@ -11,7 +10,6 @@ import { findAssessmentPoliciesByOrganization } from "@/modules/assessments/repo
 import { AssessmentPoliciesTable } from "@/modules/assessments/components/assessment-policies-table";
 import { AssessmentPolicyDrawer } from "@/modules/assessments/components/assessment-policy-drawer";
 import { NewAssessmentPolicyButton } from "@/modules/assessments/components/new-assessment-policy-button";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Políticas de Avaliação" };
 
@@ -33,12 +31,7 @@ export default async function AssessmentPoliciesPage({
 }: {
   searchParams: Promise<{ page?: string; search?: string; status?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ASSESSMENT_POLICIES_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENT_POLICIES_VIEW);
 
   const { page, search, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

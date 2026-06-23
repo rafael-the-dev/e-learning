@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDiscountRules, getDiscountRuleStats } from "@/modules/billing/services/billing.service";
@@ -13,12 +12,7 @@ export default async function DiscountsPage({
 }: {
   searchParams: Promise<{ page?: string; search?: string; status?: string }>;
 }) {
-  let context;
-  try {
-    context = await requirePermission(PERMISSIONS.DISCOUNT_RULES_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.DISCOUNT_RULES_VIEW);
 
   const { page, search, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

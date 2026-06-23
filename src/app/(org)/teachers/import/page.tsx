@@ -1,17 +1,12 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { ImportWizard } from "@/modules/teachers/import/components/import-wizard";
 
 export const metadata = { title: "Importar Professores" };
 
 export default async function TeachersImportPage() {
-  try {
-    await requirePermission(PERMISSIONS.TEACHERS_IMPORT);
-  } catch {
-    redirect("/forbidden");
-  }
+  await requirePermissionOrRedirect(PERMISSIONS.TEACHERS_IMPORT);
 
   return (
     <>

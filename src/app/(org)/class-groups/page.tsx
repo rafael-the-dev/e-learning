@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
@@ -16,7 +15,7 @@ import {
 } from "@/shared/components/layout/executive-dashboard";
 import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -47,7 +46,6 @@ import {
   Plus,
 } from "lucide-react";
 import { CLASS_GROUP_STATUS_LABELS } from "@/modules/class-groups/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Turmas" };
 
@@ -71,12 +69,7 @@ export default async function ClassGroupsPage({
     yearId?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.CLASS_GROUPS_READ);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.CLASS_GROUPS_READ);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);

@@ -1,10 +1,10 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -16,7 +16,6 @@ import { getAllAcademicYears } from "@/modules/academic-calendar/services/academ
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { ACADEMIC_STATUS_LABELS } from "@/modules/academic-calendar/types";
 import { ArrowLeft } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Detalhe do Ano Letivo" };
 
@@ -27,12 +26,7 @@ export default async function AcademicYearDetailPage({
   params: Promise<{ academicYearId: string }>;
   searchParams: Promise<{ page?: string; search?: string; status?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ACADEMIC_CALENDAR_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ACADEMIC_CALENDAR_VIEW);
 
   const { academicYearId } = await params;
   const sp = await searchParams;

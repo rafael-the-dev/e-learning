@@ -1,10 +1,10 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { Separator } from "@/shared/components/ui/separator";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserInOrganization } from "@/modules/users/services/user.service";
 import { NotFoundError } from "@/shared/lib/command";
@@ -17,19 +17,13 @@ import {
   Shield,
   Pencil,
 } from "lucide-react";
-import type { AuthContext } from "@/server/auth/context";
 
 export default async function UserDetailPage({
   params,
 }: {
   params: Promise<{ userId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.USERS_READ);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.USERS_READ);
 
   const { userId } = await params;
 

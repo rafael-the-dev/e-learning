@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getClassGroupById,
@@ -9,7 +9,6 @@ import {
 } from "@/modules/class-groups/services/class-group.service";
 import { EditClassGroupForm } from "@/modules/class-groups/components/class-group-form";
 import { NotFoundError } from "@/shared/lib/command";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Editar Turma" };
 
@@ -18,12 +17,7 @@ export default async function EditClassGroupPage({
 }: {
   params: Promise<{ classGroupId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.CLASS_GROUPS_UPDATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.CLASS_GROUPS_UPDATE);
 
   const { classGroupId } = await params;
 

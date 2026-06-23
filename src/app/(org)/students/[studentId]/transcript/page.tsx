@@ -1,16 +1,15 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, GraduationCap, TrendingUp } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { EmptyState } from "@/shared/components/layout/empty-state";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { getStudentTranscript } from "@/modules/grades/services/academic-progress.service";
 import { TranscriptSubjectRow } from "./transcript-subject-row";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Boletim de Notas" };
 
@@ -46,12 +45,7 @@ export default async function StudentTranscriptPage({
 }: {
   params: Promise<{ studentId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.TRANSCRIPTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.TRANSCRIPTS_VIEW);
 
   const { studentId } = await params;
   const db = await getDb();

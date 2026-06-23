@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   FileText, Plus, Zap, Download, CreditCard,
@@ -22,7 +21,7 @@ import {
 import { ApexDonutChart, ApexBarChart, ApexLineChart } from "@/shared/components/charts";
 import { InvoiceActionFilterBar } from "@/modules/finance/components/invoice-action-filter-bar";
 import { InvoiceTableFilters } from "@/modules/finance/components/invoice-table-filters";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -41,7 +40,6 @@ import { InvoicesTable } from "@/modules/finance/components/invoices-table";
 import { InvoiceWatchlist } from "@/modules/finance/components/invoice-watchlist";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import { INVOICE_STATUS_LABELS } from "@/modules/finance/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Faturas" };
 
@@ -80,12 +78,7 @@ export default async function InvoicesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.INVOICES_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.INVOICES_VIEW);
 
   const params = await searchParams;
   const pagination = normalizePaginationParams(params.page);

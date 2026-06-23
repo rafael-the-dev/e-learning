@@ -1,10 +1,8 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { RegisterPaymentForm } from "@/modules/finance/components/register-payment-form";
 import { getOpenInvoicesForPaymentForm } from "@/modules/finance/services/invoice.service";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Registar Pagamento" };
 
@@ -13,12 +11,7 @@ export default async function NewPaymentPage({
 }: {
   searchParams: Promise<{ invoiceId?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.PAYMENTS_CREATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.PAYMENTS_CREATE);
 
   const { invoiceId } = await searchParams;
   const rawInvoices = await getOpenInvoicesForPaymentForm(context.organizationId);

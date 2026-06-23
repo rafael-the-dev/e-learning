@@ -1,21 +1,14 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getActiveCategoriesByOrganization } from "@/modules/courses/services/course.service";
 import { CreateCourseForm } from "@/modules/courses/components/course-form";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Novo Curso" };
 
 export default async function NewCoursePage() {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.COURSES_CREATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.COURSES_CREATE);
 
   const categories = await getActiveCategoriesByOrganization(context.organizationId);
 

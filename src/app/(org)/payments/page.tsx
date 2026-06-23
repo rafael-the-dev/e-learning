@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   TrendingUp, Clock, CheckCircle2, XCircle, FileText,
@@ -20,7 +19,7 @@ import {
 import { ApexDonutChart, ApexLineChart } from "@/shared/components/charts";
 import { PaymentActionBar } from "@/modules/finance/components/payment-action-bar";
 import { PaymentTableFilters } from "@/modules/finance/components/payment-table-filters";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -38,7 +37,6 @@ import { getPaymentWatchlist } from "@/modules/finance/services/payment-watchlis
 import { PaymentsTable } from "@/modules/finance/components/payments-table";
 import { PaymentWatchlist } from "@/modules/finance/components/payment-watchlist";
 import { PAYMENT_STATUS_LABELS, PAYMENT_METHOD_LABELS } from "@/modules/finance/types";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Pagamentos" };
 
@@ -68,12 +66,7 @@ export default async function PaymentsPage({
     receiptStatus?: string; branchId?: string; dateFrom?: string; dateTo?: string;
   }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.PAYMENTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.PAYMENTS_VIEW);
 
   const { page, search, status, method, receiptStatus, branchId, dateFrom, dateTo } = await searchParams;
   const pagination = normalizePaginationParams(page);

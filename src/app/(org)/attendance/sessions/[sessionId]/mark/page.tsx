@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { findAttendanceSessionById } from "@/modules/attendance/repositories/attendance-session.repository";
 import { findRecordsBySession } from "@/modules/attendance/repositories/attendance-record.repository";
@@ -8,7 +8,6 @@ import {
   getEnrolledStudentsForSession,
 } from "@/modules/attendance/services/attendance.service";
 import { MarkAttendanceForm } from "@/modules/attendance/components/mark-attendance-form";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Marcar Presenças" };
 
@@ -17,12 +16,7 @@ export default async function MarkAttendancePage({
 }: {
   params: Promise<{ sessionId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ATTENDANCE_RECORDS_MARK);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_RECORDS_MARK);
 
   const { sessionId } = await params;
   const session = await findAttendanceSessionById(sessionId, context.organizationId);

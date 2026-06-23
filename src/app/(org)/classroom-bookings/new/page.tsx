@@ -1,20 +1,13 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { ClassroomBookingForm } from "@/modules/classrooms/components/classroom-booking-form";
 import { getDb } from "@/server/db";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Nova Reserva de Sala" };
 
 export default async function NewClassroomBookingPage() {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.CLASSROOM_BOOKINGS_CREATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.CLASSROOM_BOOKINGS_CREATE);
 
   const db = await getDb();
 

@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { BillingTabs } from "./_components/billing-tabs";
@@ -11,11 +10,7 @@ export default async function BillingSettingsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  try {
-    await requirePermission(PERMISSIONS.BILLING_POLICIES_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  await requirePermissionOrRedirect(PERMISSIONS.BILLING_POLICIES_VIEW);
 
   return (
     <div>

@@ -1,10 +1,8 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { AttendanceReportsView } from "@/modules/attendance/components/attendance-reports-view";
 import { getDb } from "@/server/db";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Relatórios de Presença" };
 
@@ -36,12 +34,7 @@ export default async function AttendanceReportsPage({
 }: {
   searchParams: Promise<{ classGroupId?: string; academicYearId?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
 
   const { classGroupId, academicYearId } = await searchParams;
   const options = await getReportFilterOptions(context.organizationId);

@@ -1,11 +1,9 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { getCategoriesWithCounts } from "@/modules/courses/services/course.service";
 import { CategoriesPageClient } from "@/modules/courses/components/categories-page-client";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Categorias de Cursos" };
 
@@ -14,12 +12,7 @@ export default async function CourseCategoriesPage({
 }: {
   searchParams: Promise<{ search?: string; status?: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.COURSE_CATEGORIES_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.COURSE_CATEGORIES_VIEW);
 
   const { search, status } = await searchParams;
 

@@ -3,13 +3,12 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { getDb } from "@/server/db";
 import { findAssessmentById } from "@/modules/assessments/repositories/assessment.repository";
 import { BulkGradeForm } from "@/modules/assessments/components/bulk-grade-form";
-import type { AuthContext } from "@/server/auth/context";
 
 export const metadata = { title: "Lançar Notas" };
 
@@ -18,12 +17,7 @@ export default async function GradeAssessmentPage({
 }: {
   params: Promise<{ assessmentId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ASSESSMENT_RESULTS_VIEW);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENT_RESULTS_VIEW);
 
   const { assessmentId } = await params;
   const assessment = await findAssessmentById(assessmentId, context.organizationId);

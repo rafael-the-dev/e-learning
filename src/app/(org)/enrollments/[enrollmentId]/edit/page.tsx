@@ -1,13 +1,12 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
-import { requirePermission } from "@/server/auth/context";
+import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getEnrollmentById } from "@/modules/enrollments/services/enrollment.service";
 import { EditEnrollmentForm } from "@/modules/enrollments/components/enrollment-form";
 import { NotFoundError } from "@/shared/lib/command";
 import { getDb } from "@/server/db";
-import type { AuthContext } from "@/server/auth/context";
 
 export async function generateMetadata() {
   return { title: "Editar Matrícula" };
@@ -64,12 +63,7 @@ export default async function EditEnrollmentPage({
 }: {
   params: Promise<{ enrollmentId: string }>;
 }) {
-  let context: AuthContext;
-  try {
-    context = await requirePermission(PERMISSIONS.ENROLLMENTS_UPDATE);
-  } catch {
-    redirect("/forbidden");
-  }
+  const context = await requirePermissionOrRedirect(PERMISSIONS.ENROLLMENTS_UPDATE);
 
   const { enrollmentId } = await params;
 

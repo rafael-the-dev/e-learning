@@ -72,7 +72,7 @@ async function scenarioA(prisma: PrismaClient): Promise<void> {
 
   console.log(`  Allocated ${numbers.length} numbers. Sample: ${numbers.slice(0, 5).join(", ")} ...`);
   assert(numbers.length === CONCURRENCY, `exactly ${CONCURRENCY} numbers allocated`);
-  assert(allUnique(numbers), "all ${CONCURRENCY} invoice numbers are unique");
+  assert(allUnique(numbers), `all ${CONCURRENCY} invoice numbers are unique`);
   assert(
     numbers.every((n) => /^FAT-\d+$/.test(n)),
     "all numbers match FAT-NNNNNN format"
