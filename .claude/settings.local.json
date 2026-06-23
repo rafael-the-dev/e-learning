@@ -57,7 +57,9 @@
       "Bash(rm -f verify_dashboard*.mjs verify-*.png)",
       "Bash(pnpm remove *)",
       "Bash(npx eslint *)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(pnpm db:backfill-role-codes)",
+      "Bash(node -e ' *)"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\students\\[studentId]",
