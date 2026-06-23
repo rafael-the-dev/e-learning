@@ -64,7 +64,9 @@ function validateRow(
   row: StudentImportRow,
   rowNumber: number,
   existingDocNumbers: Set<string>,
-  seenDocNumbersInFile: Set<string>
+  existingEmails: Set<string>,
+  seenDocNumbersInFile: Set<string>,
+  seenEmailsInFile: Set<string>
 ): ImportRowResult {
   let state: ImportRowState = "VALID";
   const messages: string[] = [];
@@ -92,6 +94,19 @@ function validateRow(
     seenDocNumbersInFile.add(docNumber);
   }
 
+  const email = row.email?.trim() ?? "";
+  const emailKey = email.toLowerCase();
+  if (email) {
+    if (seenEmailsInFile.has(emailKey)) {
+      messages.push("Email duplicado no ficheiro");
+      state = escalate(state, "WARNING");
+    } else if (existingEmails.has(emailKey)) {
+      messages.push("Já existe um aluno com este email nesta organização");
+      state = escalate(state, "WARNING");
+    }
+    seenEmailsInFile.add(emailKey);
+  }
+
   const gender = row.gender?.trim().toUpperCase() ?? "";
   if (gender && !VALID_GENDERS.has(gender)) {
     messages.push(`Género "${row.gender}" não reconhecido — será deixado em branco`);
@@ -109,11 +124,13 @@ function validateRow(
 
 export function validateRows(
   rows: StudentImportRow[],
-  existingDocNumbers: Set<string>
+  existingDocNumbers: Set<string>,
+  existingEmails: Set<string>
 ): ValidationResult {
   const seenDocNumbersInFile = new Set<string>();
+  const seenEmailsInFile = new Set<string>();
   const results = rows.map((row, index) =>
-    validateRow(row, index + 1, existingDocNumbers, seenDocNumbersInFile)
+    validateRow(row, index + 1, existingDocNumbers, existingEmails, seenDocNumbersInFile, seenEmailsInFile)
   );
 
   return {

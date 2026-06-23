@@ -8,6 +8,7 @@ vi.mock("@/server/auth/rbac", () => ({
 
 vi.mock("@/modules/students/repositories/student.repository", () => ({
   findExistingIdNumbers: vi.fn().mockResolvedValue(new Set()),
+  findExistingEmails: vi.fn().mockResolvedValue(new Set()),
 }));
 
 vi.mock("@/modules/import-jobs/repositories/import-job.repository", () => ({
@@ -19,7 +20,10 @@ vi.mock("@/modules/audit-logs/services/audit.service", () => ({
 }));
 
 import { createAbility } from "@/server/auth/rbac";
-import { findExistingIdNumbers } from "@/modules/students/repositories/student.repository";
+import {
+  findExistingIdNumbers,
+  findExistingEmails,
+} from "@/modules/students/repositories/student.repository";
 import { createImportJob } from "@/modules/import-jobs/repositories/import-job.repository";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { ValidateStudentsImportCommand } from "../validate-students-import.command";
@@ -124,6 +128,25 @@ describe("ValidateStudentsImportCommand — execute", () => {
     expect(findExistingIdNumbers).toHaveBeenCalledWith("org-1", ["DOC1"]);
   });
 
+  it("collects unique non-empty emails, lowercased, and checks them against the DB in one call", async () => {
+    (createImportJob as Mock).mockResolvedValue({ id: "job-1" });
+
+    const buffer = csvBuffer([
+      "Maria,Santos,FEMALE,2000-01-15,,Carlos@Test.com,BI,DOC1,Maputo",
+      "João,Pedro,MALE,1999-05-20,,carlos@test.com,BI,DOC2,Beira",
+      "Ana,Costa,FEMALE,1998-03-10,,,BI,DOC3,Maputo",
+    ]);
+    const cmd = new ValidateStudentsImportCommand(
+      { fileName: "alunos.csv", fileSize: buffer.byteLength, buffer },
+      CTX
+    );
+
+    await cmd.execute();
+
+    expect(findExistingEmails).toHaveBeenCalledTimes(1);
+    expect(findExistingEmails).toHaveBeenCalledWith("org-1", ["carlos@test.com"]);
+  });
+
   it("marks rows whose documentNumber already exists in the DB as ERROR", async () => {
     (findExistingIdNumbers as Mock).mockResolvedValue(new Set(["EXISTING"]));
     (createImportJob as Mock).mockResolvedValue({ id: "job-1" });
@@ -139,6 +162,44 @@ describe("ValidateStudentsImportCommand — execute", () => {
     const result = await cmd.execute();
     expect(result.errorRows).toBe(1);
     expect(result.rows[0].state).toBe("ERROR");
+  });
+
+  it("warns (not errors) when an uploaded email matches an existing DB email of different case", async () => {
+    (findExistingEmails as Mock).mockResolvedValue(new Set(["carlos@test.com"]));
+    (createImportJob as Mock).mockResolvedValue({ id: "job-1" });
+
+    const buffer = csvBuffer([
+      "Maria,Santos,FEMALE,2000-01-15,,CARLOS@TEST.COM,BI,DOC1,Maputo",
+    ]);
+    const cmd = new ValidateStudentsImportCommand(
+      { fileName: "alunos.csv", fileSize: buffer.byteLength, buffer },
+      CTX
+    );
+
+    const result = await cmd.execute();
+    expect(result.errorRows).toBe(0);
+    expect(result.warningRows).toBe(1);
+    expect(result.rows[0].state).toBe("WARNING");
+    expect(result.rows[0].messages).toContain("Já existe um aluno com este email nesta organização");
+  });
+
+  it("warns (not errors) on the second occurrence of an email duplicated within the file, regardless of case", async () => {
+    (findExistingEmails as Mock).mockResolvedValue(new Set());
+    (createImportJob as Mock).mockResolvedValue({ id: "job-1" });
+
+    const buffer = csvBuffer([
+      "Maria,Santos,FEMALE,2000-01-15,,carlos@Test.com,BI,DOC1,Maputo",
+      "João,Pedro,MALE,1999-05-20,,carlos@test.com,BI,DOC2,Beira",
+    ]);
+    const cmd = new ValidateStudentsImportCommand(
+      { fileName: "alunos.csv", fileSize: buffer.byteLength, buffer },
+      CTX
+    );
+
+    const result = await cmd.execute();
+    expect(result.rows[0].state).toBe("VALID");
+    expect(result.rows[1].state).toBe("WARNING");
+    expect(result.rows[1].messages).toContain("Email duplicado no ficheiro");
   });
 
   it("rejects a file with more than 5000 rows", async () => {

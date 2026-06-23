@@ -136,6 +136,44 @@ describe("validateRows", () => {
     );
   });
 
+  it("warns on the second occurrence of an email duplicated within the file, regardless of case", () => {
+    const rows = [
+      makeRow({ email: "carlos@Test.com", documentNumber: "D1" }),
+      makeRow({ email: "carlos@test.com", documentNumber: "D2" }),
+    ];
+    const result = validateRows(rows, new Set(), new Set());
+    expect(result.rows[0].state).toBe("VALID");
+    expect(result.rows[1].state).toBe("WARNING");
+    expect(result.rows[1].messages).toContain("Email duplicado no ficheiro");
+    expect(result.errorRows).toBe(0);
+  });
+
+  it("warns when an uploaded email matches an existing DB email of different case", () => {
+    // existingEmails is always pre-lowercased by the repository (e.g. a DB
+    // row stored as "Carlos@Test.com" is returned here as "carlos@test.com").
+    const result = validateRows(
+      [makeRow({ email: "CARLOS@TEST.COM" })],
+      new Set(),
+      new Set(["carlos@test.com"])
+    );
+    expect(result.rows[0].state).toBe("WARNING");
+    expect(result.rows[0].messages).toContain(
+      "Já existe um professor com este email nesta organização"
+    );
+  });
+
+  it("ignores surrounding whitespace when comparing emails", () => {
+    const result = validateRows(
+      [makeRow({ email: "  carlos@test.com  " })],
+      new Set(),
+      new Set(["carlos@test.com"])
+    );
+    expect(result.rows[0].state).toBe("WARNING");
+    expect(result.rows[0].messages).toContain(
+      "Já existe um professor com este email nesta organização"
+    );
+  });
+
   it("warns (not errors) on an unrecognized gender", () => {
     const result = validateRows([makeRow({ gender: "NAOSEI" })], new Set(), new Set());
     expect(result.rows[0].state).toBe("WARNING");

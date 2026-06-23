@@ -119,11 +119,12 @@ function validateRow(
   }
 
   const email = row.email?.trim() ?? "";
+  const emailKey = email.toLowerCase();
   if (email) {
-    if (seenEmailsInFile.has(email)) {
+    if (seenEmailsInFile.has(emailKey)) {
       issues.push({ field: "email", message: "Email duplicado no ficheiro", severity: "WARNING" });
       state = escalate(state, "WARNING");
-    } else if (existingEmails.has(email)) {
+    } else if (existingEmails.has(emailKey)) {
       issues.push({
         field: "email",
         message: "Já existe um professor com este email nesta organização",
@@ -131,7 +132,7 @@ function validateRow(
       });
       state = escalate(state, "WARNING");
     }
-    seenEmailsInFile.add(email);
+    seenEmailsInFile.add(emailKey);
   }
 
   const gender = row.gender?.trim().toUpperCase() ?? "";

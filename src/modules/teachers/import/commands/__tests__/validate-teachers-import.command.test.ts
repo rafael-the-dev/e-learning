@@ -176,6 +176,46 @@ describe("ValidateTeachersImportCommand — execute", () => {
     expect(result.rows[0].state).toBe("WARNING");
   });
 
+  it("lowercases emails before the DB lookup, so a mixed-case upload still matches a lowercase existing entry", async () => {
+    (findExistingTeacherEmails as Mock).mockResolvedValue(new Set(["existing@test.com"]));
+    (createImportJob as Mock).mockResolvedValue({ id: "job-1" });
+
+    const buffer = csvBuffer([
+      "Carlos,Mendes,MALE,1980-01-15,,Existing@Test.com,BI,DOC1,Maputo,,,",
+    ]);
+    const cmd = new ValidateTeachersImportCommand(
+      { fileName: "professores.csv", fileSize: buffer.byteLength, buffer },
+      CTX
+    );
+
+    const result = await cmd.execute();
+
+    expect(findExistingTeacherEmails).toHaveBeenCalledWith("org-1", ["existing@test.com"]);
+    expect(result.warningRows).toBe(1);
+    expect(result.rows[0].messages).toContain(
+      "Já existe um professor com este email nesta organização"
+    );
+  });
+
+  it("warns on the second occurrence of an email duplicated within the file, regardless of case", async () => {
+    (findExistingTeacherEmails as Mock).mockResolvedValue(new Set());
+    (createImportJob as Mock).mockResolvedValue({ id: "job-1" });
+
+    const buffer = csvBuffer([
+      "Carlos,Mendes,MALE,1980-01-15,,carlos@Test.com,BI,DOC1,Maputo,,,",
+      "Ana,Silva,FEMALE,1985-05-20,,carlos@test.com,BI,DOC2,Beira,,,",
+    ]);
+    const cmd = new ValidateTeachersImportCommand(
+      { fileName: "professores.csv", fileSize: buffer.byteLength, buffer },
+      CTX
+    );
+
+    const result = await cmd.execute();
+    expect(result.rows[0].state).toBe("VALID");
+    expect(result.rows[1].state).toBe("WARNING");
+    expect(result.rows[1].messages).toContain("Email duplicado no ficheiro");
+  });
+
   it("rejects a file with more than 5000 rows", async () => {
     const rows = Array.from(
       { length: 5001 },

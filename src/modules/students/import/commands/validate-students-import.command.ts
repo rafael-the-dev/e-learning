@@ -2,7 +2,10 @@ import { BaseCommand, AuthorizationError } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
-import { findExistingIdNumbers } from "@/modules/students/repositories/student.repository";
+import {
+  findExistingIdNumbers,
+  findExistingEmails,
+} from "@/modules/students/repositories/student.repository";
 import { createImportJob } from "@/modules/import-jobs/repositories/import-job.repository";
 import {
   assertFileConstraints,
@@ -42,12 +45,17 @@ export class ValidateStudentsImportCommand extends BaseCommand<
           .filter((v) => v.length > 0)
       ),
     ];
-    const existingDocNumbers = await findExistingIdNumbers(
-      this.context.organizationId,
-      docNumbers
-    );
+    const emails = [
+      ...new Set(
+        rows.map((r) => r.email?.trim().toLowerCase() ?? "").filter((v) => v.length > 0)
+      ),
+    ];
+    const [existingDocNumbers, existingEmails] = await Promise.all([
+      findExistingIdNumbers(this.context.organizationId, docNumbers),
+      findExistingEmails(this.context.organizationId, emails),
+    ]);
 
-    const result = validateRows(rows, existingDocNumbers);
+    const result = validateRows(rows, existingDocNumbers, existingEmails);
 
     const job = await createImportJob({
       organizationId: this.context.organizationId,

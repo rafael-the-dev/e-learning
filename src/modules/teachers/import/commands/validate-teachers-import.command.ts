@@ -44,7 +44,9 @@ export class ValidateTeachersImportCommand extends BaseCommand<
       ),
     ];
     const emails = [
-      ...new Set(rows.map((r) => r.email?.trim() ?? "").filter((v) => v.length > 0)),
+      ...new Set(
+        rows.map((r) => r.email?.trim().toLowerCase() ?? "").filter((v) => v.length > 0)
+      ),
     ];
 
     const [existingDocNumbers, existingEmails] = await Promise.all([

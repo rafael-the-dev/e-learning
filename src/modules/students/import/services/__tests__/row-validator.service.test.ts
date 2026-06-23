@@ -38,7 +38,7 @@ describe("parseImportDate", () => {
 
 describe("validateRows", () => {
   it("marks a fully valid row as VALID", () => {
-    const result = validateRows([makeRow()], new Set());
+    const result = validateRows([makeRow()], new Set(), new Set());
     expect(result.rows[0].state).toBe("VALID");
     expect(result.validRows).toBe(1);
     expect(result.errorRows).toBe(0);
@@ -46,28 +46,28 @@ describe("validateRows", () => {
   });
 
   it("rejects a row missing firstName", () => {
-    const result = validateRows([makeRow({ firstName: "" })], new Set());
+    const result = validateRows([makeRow({ firstName: "" })], new Set(), new Set());
     expect(result.rows[0].state).toBe("ERROR");
     expect(result.rows[0].messages.length).toBeGreaterThan(0);
   });
 
   it("rejects a row missing lastName", () => {
-    const result = validateRows([makeRow({ lastName: "" })], new Set());
+    const result = validateRows([makeRow({ lastName: "" })], new Set(), new Set());
     expect(result.rows[0].state).toBe("ERROR");
   });
 
   it("rejects an invalid email format", () => {
-    const result = validateRows([makeRow({ email: "not-an-email" })], new Set());
+    const result = validateRows([makeRow({ email: "not-an-email" })], new Set(), new Set());
     expect(result.rows[0].state).toBe("ERROR");
   });
 
   it("accepts an empty email (optional field)", () => {
-    const result = validateRows([makeRow({ email: "" })], new Set());
+    const result = validateRows([makeRow({ email: "" })], new Set(), new Set());
     expect(result.rows[0].state).toBe("VALID");
   });
 
   it("rejects an invalid birthDate", () => {
-    const result = validateRows([makeRow({ birthDate: "31/02/2000" })], new Set());
+    const result = validateRows([makeRow({ birthDate: "31/02/2000" })], new Set(), new Set());
     expect(result.rows[0].state).toBe("ERROR");
     expect(result.rows[0].messages).toContain("Data de nascimento inválida");
   });
@@ -77,14 +77,18 @@ describe("validateRows", () => {
       makeRow({ documentNumber: "DUP1" }),
       makeRow({ documentNumber: "DUP1" }),
     ];
-    const result = validateRows(rows, new Set());
+    const result = validateRows(rows, new Set(), new Set());
     expect(result.rows[0].state).toBe("VALID");
     expect(result.rows[1].state).toBe("ERROR");
     expect(result.rows[1].messages).toContain("Número de documento duplicado no ficheiro");
   });
 
   it("rejects a documentNumber that already exists in the database", () => {
-    const result = validateRows([makeRow({ documentNumber: "EXISTING" })], new Set(["EXISTING"]));
+    const result = validateRows(
+      [makeRow({ documentNumber: "EXISTING" })],
+      new Set(["EXISTING"]),
+      new Set()
+    );
     expect(result.rows[0].state).toBe("ERROR");
     expect(result.rows[0].messages).toContain(
       "Já existe um aluno com este número de documento nesta organização"
@@ -92,14 +96,14 @@ describe("validateRows", () => {
   });
 
   it("warns (not errors) on an unrecognized gender", () => {
-    const result = validateRows([makeRow({ gender: "NAOSEI" })], new Set());
+    const result = validateRows([makeRow({ gender: "NAOSEI" })], new Set(), new Set());
     expect(result.rows[0].state).toBe("WARNING");
     expect(result.warningRows).toBe(1);
     expect(result.errorRows).toBe(0);
   });
 
   it("warns (not errors) on an unrecognized documentType", () => {
-    const result = validateRows([makeRow({ documentType: "OUTRO_TIPO" })], new Set());
+    const result = validateRows([makeRow({ documentType: "OUTRO_TIPO" })], new Set(), new Set());
     expect(result.rows[0].state).toBe("WARNING");
   });
 
@@ -109,10 +113,50 @@ describe("validateRows", () => {
       makeRow({ gender: "UNKNOWN", documentNumber: "DOC2" }),
       makeRow({ firstName: "", documentNumber: "DOC3" }),
     ];
-    const result = validateRows(rows, new Set());
+    const result = validateRows(rows, new Set(), new Set());
     expect(result.totalRows).toBe(3);
     expect(result.validRows).toBe(1);
     expect(result.warningRows).toBe(1);
     expect(result.errorRows).toBe(1);
+  });
+
+  describe("email duplicate detection — case-insensitive", () => {
+    it("warns (not errors) on the second occurrence of an email duplicated within the file, regardless of case", () => {
+      const rows = [
+        makeRow({ email: "carlos@Test.com", documentNumber: "DOC1" }),
+        makeRow({ email: "carlos@test.com", documentNumber: "DOC2" }),
+      ];
+      const result = validateRows(rows, new Set(), new Set());
+      expect(result.rows[0].state).toBe("VALID");
+      expect(result.rows[1].state).toBe("WARNING");
+      expect(result.rows[1].messages).toContain("Email duplicado no ficheiro");
+      expect(result.errorRows).toBe(0);
+    });
+
+    it("warns when an uploaded email matches an existing DB email of different case", () => {
+      // existingEmails is always pre-lowercased by the repository (e.g. a DB
+      // row stored as "Carlos@Test.com" is returned here as "carlos@test.com").
+      const result = validateRows(
+        [makeRow({ email: "CARLOS@TEST.COM", documentNumber: "DOC1" })],
+        new Set(),
+        new Set(["carlos@test.com"])
+      );
+      expect(result.rows[0].state).toBe("WARNING");
+      expect(result.rows[0].messages).toContain(
+        "Já existe um aluno com este email nesta organização"
+      );
+    });
+
+    it("ignores surrounding whitespace when comparing emails", () => {
+      const result = validateRows(
+        [makeRow({ email: "  carlos@test.com  ", documentNumber: "DOC1" })],
+        new Set(),
+        new Set(["carlos@test.com"])
+      );
+      expect(result.rows[0].state).toBe("WARNING");
+      expect(result.rows[0].messages).toContain(
+        "Já existe um aluno com este email nesta organização"
+      );
+    });
   });
 });

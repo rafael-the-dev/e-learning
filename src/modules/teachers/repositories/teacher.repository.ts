@@ -312,6 +312,7 @@ export async function findExistingTeacherIdNumbers(
   return new Set(rows.map((r) => r.idNumber).filter((v): v is string => v !== null));
 }
 
+/** `emails` must already be trimmed+lowercased — the returned Set is always lowercased too, so callers never need to normalize case themselves. */
 export async function findExistingTeacherEmails(
   organizationId: string,
   emails: string[]
@@ -322,7 +323,12 @@ export async function findExistingTeacherEmails(
     where: { organizationId, deletedAt: null, email: { in: emails } },
     select: { email: true },
   });
-  return new Set(rows.map((r) => r.email).filter((v): v is string => v !== null));
+  return new Set(
+    rows
+      .map((r) => r.email)
+      .filter((v): v is string => v !== null)
+      .map((e) => e.trim().toLowerCase())
+  );
 }
 
 export async function listActiveBranches(organizationId: string): Promise<TeacherBranch[]> {
