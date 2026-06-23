@@ -5,15 +5,16 @@ import { ResolveFinancialIntegrityIssueCommand } from "@/modules/finance/integri
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { issueId: string } }
+  { params }: { params: Promise<{ issueId: string }> }
 ) {
   try {
     const context = await requirePermission(PERMISSIONS.INTEGRITY_ISSUES_RESOLVE);
     const body = await req.json();
+    const { issueId } = await params;
 
     const command = new ResolveFinancialIntegrityIssueCommand(
       {
-        issueId: params.issueId,
+        issueId,
         newStatus: body.newStatus,
         resolutionNotes: body.resolutionNotes,
       },

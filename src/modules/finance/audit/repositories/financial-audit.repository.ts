@@ -20,8 +20,6 @@ function parseJson(raw: string | null): Record<string, unknown> | null {
   }
 }
 
-type DecimalLike = { toNumber(): number };
-
 function toNum(v: unknown): number | null {
   if (v == null) return null;
   if (typeof v === "number") return v;
@@ -134,8 +132,6 @@ export async function summarizeAuditByEvent(
 ): Promise<FinancialAuditSummaryByEvent[]> {
   const db = await getDb();
 
-  type SummaryRow = { eventType: string; _count: { id: number }; _sum: { amount: DecimalLike | null } };
-
   const rows = await db.financialAuditLog.groupBy({
     by: ["eventType"],
     where: {
@@ -146,7 +142,7 @@ export async function summarizeAuditByEvent(
     _count: { id: true },
     _sum: { amount: true },
     orderBy: { _count: { id: "desc" } },
-  }) as SummaryRow[];
+  });
 
   return rows.map((r) => ({
     eventType: r.eventType,

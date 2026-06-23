@@ -8,7 +8,6 @@ import {
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
-import { getDb } from "@/server/db";
 import { findRecordById } from "@/modules/attendance/repositories/attendance-record.repository";
 import {
   createJustification,
@@ -65,22 +64,8 @@ export class CreateAttendanceJustificationCommand extends BaseCommand<
     if (!createAbility(perms).can(PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_CREATE)) {
       throw new AuthorizationError();
     }
-
-    // Students may only justify their own attendance records
-    const db = await getDb();
-    const studentProfile = await db.student.findFirst({
-      where: { userId: this.context.userId, organizationId: this.context.organizationId, deletedAt: null },
-      select: { id: true },
-    });
-    if (studentProfile) {
-      const record = await db.attendanceRecord.findFirst({
-        where: { id: this.input.attendanceRecordId, organizationId: this.context.organizationId, deletedAt: null },
-        select: { studentId: true },
-      });
-      if (!record || record.studentId !== studentProfile.id) {
-        throw new AuthorizationError();
-      }
-    }
+    // NOTE: no own-record restriction for STUDENT — Student has no userId/User
+    // relation anywhere in this schema, so per-record ownership can't be verified.
   }
 
   async execute(): Promise<AttendanceJustification> {

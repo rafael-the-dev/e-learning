@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -44,7 +45,7 @@ export function ClassroomForm({ classroom, branches }: ClassroomFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
 
-  const form = useForm<CreateClassroomSchema>({
+  const form = useForm<z.input<typeof createClassroomSchema>, unknown, CreateClassroomSchema>({
     resolver: zodResolver(createClassroomSchema),
     defaultValues: {
       branchId: classroom?.branchId ?? undefined,

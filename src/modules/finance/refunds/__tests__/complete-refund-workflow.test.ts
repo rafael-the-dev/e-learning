@@ -365,8 +365,8 @@ describe("CompleteRefund — audit trail", () => {
 
     await new CompleteRefundCommand({ refundId: "ref-1" }, CTX).execute();
 
-    const calls = (auditService.log as Mock).mock.calls.map(
-      ([, entry]: [unknown, { action: string }]) => entry.action
+    const calls = ((auditService.log as Mock).mock.calls as [unknown, { action: string }][]).map(
+      ([, entry]) => entry.action
     );
     expect(calls).toContain("refund.completed");
     expect(calls).toContain("payment.refunded");
@@ -382,8 +382,8 @@ describe("CompleteRefund — audit trail", () => {
 
     await new CompleteRefundCommand({ refundId: "ref-1" }, CTX).execute();
 
-    const calls = (auditService.log as Mock).mock.calls.map(
-      ([, entry]: [unknown, { action: string }]) => entry.action
+    const calls = ((auditService.log as Mock).mock.calls as [unknown, { action: string }][]).map(
+      ([, entry]) => entry.action
     );
     expect(calls).toContain("wallet_transaction.created");
   });

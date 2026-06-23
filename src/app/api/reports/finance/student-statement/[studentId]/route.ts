@@ -6,12 +6,12 @@ import { getStudentFinancialStatement } from "@/modules/reports/finance/services
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { studentId: string } }
+  { params }: { params: Promise<{ studentId: string }> }
 ) {
   try {
     const context = await requirePermission(PERMISSIONS.FINANCIAL_REPORTS_STUDENT_STATEMENT);
     const { searchParams } = req.nextUrl;
-    const { studentId } = params;
+    const { studentId } = await params;
 
     const statement = await getStudentFinancialStatement({
       organizationId: context.organizationId,

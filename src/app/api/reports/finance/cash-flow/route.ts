@@ -17,7 +17,6 @@ export async function GET(req: NextRequest) {
       organizationId: context.organizationId,
       page,
       pageSize,
-      branchId: searchParams.get("branchId") ?? undefined,
       studentId: searchParams.get("studentId") ?? undefined,
       dateFrom: searchParams.get("dateFrom") ?? undefined,
       dateTo: searchParams.get("dateTo") ?? undefined,

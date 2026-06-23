@@ -26,6 +26,7 @@ const receiptSelect = {
   receiptNumber: true,
   issueDate: true,
   amount: true,
+  refundedAmount: true,
   status: true,
   issuedBy: true,
   cancelledAt: true,
@@ -107,6 +108,7 @@ type ReceiptRow = {
   receiptNumber: string;
   issueDate: Date;
   amount: DecimalLike;
+  refundedAmount: DecimalLike;
   status: string;
   issuedBy: string | null;
   cancelledAt: Date | null;
@@ -164,6 +166,7 @@ function mapToReceipt(row: ReceiptRow): Receipt {
     receiptNumber: row.receiptNumber,
     issueDate: row.issueDate,
     amount: row.amount.toNumber(),
+    refundedAmount: row.refundedAmount.toNumber(),
     status: row.status as Receipt["status"],
     issuedBy: row.issuedBy,
     cancelledAt: row.cancelledAt,

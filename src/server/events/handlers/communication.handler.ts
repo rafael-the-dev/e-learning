@@ -71,7 +71,7 @@ export class CommunicationEventHandler implements DomainEventHandler {
 
         const lesson = await db.lesson.findFirst({
           where: { id: lessonId, organizationId: event.organizationId },
-          select: { title: true, subjectId: true },
+          select: { title: true },
         });
         if (!lesson) return;
 

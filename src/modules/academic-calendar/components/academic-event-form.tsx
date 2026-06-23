@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { z } from "zod";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/shared/components/ui/button";
@@ -59,7 +60,7 @@ export function CreateAcademicEventDrawer({ years, terms, open, onOpenChange, on
     reset,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<CreateAcademicEventSchema>({
+  } = useForm<z.input<typeof createAcademicEventSchema>, unknown, CreateAcademicEventSchema>({
     resolver: zodResolver(createAcademicEventSchema),
     defaultValues: { eventType: "GENERAL", status: "DRAFT" },
   });

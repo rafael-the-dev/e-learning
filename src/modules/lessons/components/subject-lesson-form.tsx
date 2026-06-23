@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { z } from "zod";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/shared/components/ui/button";
@@ -59,7 +60,7 @@ export function AssignLessonDrawer({
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<AssignLessonToSubjectSchema>({
+  } = useForm<z.input<typeof assignLessonToSubjectSchema>, unknown, AssignLessonToSubjectSchema>({
     resolver: zodResolver(assignLessonToSubjectSchema),
     defaultValues: {
       subjectId,

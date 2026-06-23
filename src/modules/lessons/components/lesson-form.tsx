@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -50,7 +51,7 @@ export function CreateLessonForm({ onSuccess }: CreateLessonFormProps) {
     watch,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<CreateLessonSchema>({
+  } = useForm<z.input<typeof createLessonSchema>, unknown, CreateLessonSchema>({
     resolver: zodResolver(createLessonSchema),
     defaultValues: {
       lessonType: "TEXT",

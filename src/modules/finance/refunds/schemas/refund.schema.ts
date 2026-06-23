@@ -6,7 +6,7 @@ export const createRefundRequestSchema = z.object({
   reason: z.string().min(2, "A razão deve ter pelo menos 2 caracteres"),
   // RefundMethod: CASH_RETURN | WALLET_CREDIT
   refundMethod: z.enum(["CASH_RETURN", "WALLET_CREDIT"], {
-    errorMap: () => ({ message: "Método de reembolso inválido" }),
+    message: "Método de reembolso inválido",
   }),
   notes: z.string().optional(),
 });

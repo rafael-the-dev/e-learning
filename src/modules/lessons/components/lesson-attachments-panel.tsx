@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { z } from "zod";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/shared/components/ui/button";
@@ -334,7 +335,7 @@ function AddAttachmentDrawer({ lessonId, open, onOpenChange, onSuccess }: AddAtt
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CreateLessonAttachmentSchema>({
+  } = useForm<z.input<typeof createLessonAttachmentSchema>, unknown, CreateLessonAttachmentSchema>({
     resolver: zodResolver(createLessonAttachmentSchema),
     defaultValues: {
       lessonId,
