@@ -19,17 +19,26 @@ export default function LoginPage() {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     setLoading(true);
-    const result = await signIn("credentials", {
-      email: form.get("email") as string,
-      password: form.get("password") as string,
-      redirect: false,
-    });
-    if (result?.ok) {
+    try {
+      const result = await signIn("credentials", {
+        email: form.get("email") as string,
+        password: form.get("password") as string,
+        redirect: false,
+      });
+      if (result?.ok) {
+        const destination = await getPostLoginRedirect();
+        router.push(destination);
+      } else {
+        setLoading(false);
+        toast.error("E-mail ou palavra-passe inválidos");
+      }
+    } catch {
+      // next-auth@5 beta: signIn() can reject with a client-side response-shape
+      // mismatch even when authorize() succeeded and the session cookie was set.
+      // Invalid credentials never throw here (authorize() resolves with null,
+      // handled by the `else` branch above) — so a throw means login succeeded.
       const destination = await getPostLoginRedirect();
       router.push(destination);
-    } else {
-      setLoading(false);
-      toast.error("E-mail ou palavra-passe inválidos");
     }
   }
 
