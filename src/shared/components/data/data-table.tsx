@@ -123,7 +123,7 @@ export function DataTable<TData, TValue>({
             : `${(pagination.pageIndex * pagination.pageSize) + 1}–${Math.min(
                 (pagination.pageIndex + 1) * pagination.pageSize,
                 totalRows
-              )} of ${totalRows}`}
+              )} de ${totalRows}`}
         </span>
         <div className="flex items-center gap-2">
           <Button
