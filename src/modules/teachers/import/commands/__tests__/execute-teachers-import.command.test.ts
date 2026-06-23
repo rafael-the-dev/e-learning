@@ -142,6 +142,28 @@ describe("ExecuteTeachersImportCommand — execute", () => {
     );
   });
 
+  it("persists executionSummary with successRows, failedRows, durationMs, and the final status", async () => {
+    const rows = [makeRow(1, "VALID"), makeRow(2, "WARNING"), makeRow(3, "ERROR")];
+    (findImportJobById as Mock).mockResolvedValue(makeJob({ rowsData: rows, totalRows: 3 }));
+
+    const cmd = new ExecuteTeachersImportCommand({ jobId: "job-1" }, CTX);
+    await cmd.validate();
+    await cmd.execute();
+
+    expect(updateImportJob).toHaveBeenCalledWith(
+      "job-1",
+      "org-1",
+      expect.objectContaining({
+        status: "COMPLETED",
+        executionSummary: {
+          successRows: 2,
+          failedRows: 1,
+          durationMs: expect.any(Number),
+        },
+      })
+    );
+  });
+
   it("defaults status to ACTIVE when the row's status is blank or unrecognized", async () => {
     const row: ImportRowResult = {
       rowNumber: 1,

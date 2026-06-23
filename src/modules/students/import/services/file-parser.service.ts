@@ -28,6 +28,7 @@ const TEMPLATE_COLUMNS = [
 function normalizeRow(raw: Record<string, unknown>): StudentImportRow {
   const cell = (key: string): string => {
     const value = raw[key];
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
     return value === null || value === undefined ? "" : String(value).trim();
   };
   return {
@@ -75,7 +76,10 @@ export function parseCsv(buffer: Buffer): StudentImportRow[] {
 export function parseXlsx(buffer: Buffer): StudentImportRow[] {
   let workbook: XLSX.WorkBook;
   try {
-    workbook = XLSX.read(buffer, { type: "buffer" });
+    // cellDates: true — without it, a genuinely date-formatted Excel cell
+    // (as opposed to a text cell that merely looks like a date) round-trips
+    // as a raw serial number, which fails parseImportDate downstream.
+    workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   } catch {
     throw new ValidationError("Dados inválidos", {
       file: ["Não foi possível ler o ficheiro XLSX. Verifique o formato e tente novamente"],
