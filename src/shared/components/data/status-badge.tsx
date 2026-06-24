@@ -64,6 +64,15 @@ const STATUS_MAP: Record<string, BadgeProps["variant"]> = {
   // Justifications
   REJECTED: "destructive",
   APPROVED: "success",
+
+  // Notification Deliveries (PENDING/CANCELLED reuse the mappings above)
+  PROCESSING: "info",
+  SENT: "info",
+  DELIVERED: "success",
+  FAILED: "destructive",
+
+  // Notification Email Settings — test result (FAILED reuses the mapping above)
+  SUCCESS: "success",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -99,6 +108,15 @@ const STATUS_LABELS: Record<string, string> = {
   REMOTE: "Remoto",
   REJECTED: "Rejeitada",
   APPROVED: "Aprovada",
+
+  // Notification Deliveries
+  PROCESSING: "A processar",
+  SENT: "Enviada",
+  DELIVERED: "Entregue",
+  FAILED: "Falhou",
+
+  // Notification Email Settings — test result
+  SUCCESS: "Sucesso",
 };
 
 interface StatusBadgeProps {

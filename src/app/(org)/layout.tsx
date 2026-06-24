@@ -6,6 +6,7 @@ import { NavLinks } from "./_components/nav-links";
 import { QueryProvider } from "./_components/query-provider";
 import { SidebarProvider } from "./_components/sidebar-context";
 import { SidebarShell } from "./_components/sidebar-shell";
+import { NotificationBell } from "@/modules/notifications/components/notification-bell";
 
 export default async function OrgLayout({ children }: { children: React.ReactNode }) {
   let session: Awaited<ReturnType<typeof getOrgSession>>;
@@ -32,6 +33,9 @@ export default async function OrgLayout({ children }: { children: React.ReactNod
 
           {/* Main */}
           <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <div className="h-12 shrink-0 border-b flex items-center justify-end px-4">
+              <NotificationBell />
+            </div>
             <div className="flex-1 overflow-y-auto">{children}</div>
           </main>
         </div>

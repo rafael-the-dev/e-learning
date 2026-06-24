@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { getDb } from "../src/server/db";
 import { PERMISSIONS, ROLE_PERMISSIONS, SYSTEM_ROLES } from "../src/server/auth/permissions";
 import { parsePermissionCode, buildPermissionCode } from "../src/server/auth/permission-codec";
+import { ensureDefaultNotificationConfig } from "../src/modules/notifications/services/notification-defaults.service";
 import type { PrismaClient } from "@prisma/client";
 
 // =============================================================================
@@ -195,6 +196,13 @@ async function main() {
     });
     console.log(`✓ Super admin user seeded: ${superAdmin.email}`);
   }
+
+  console.log("Seeding default notification rules/templates...");
+  const organizations = await db.organization.findMany({ select: { id: true } });
+  for (const org of organizations) {
+    await ensureDefaultNotificationConfig(org.id);
+  }
+  console.log(`✓ Default notification config ensured for ${organizations.length} organization(s)`);
 
   console.log("Seed complete.");
 }

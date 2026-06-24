@@ -2,6 +2,7 @@ import { getDb } from "@/server/db";
 import type { DomainEventHandler } from "../event-handlers";
 import type { PersistedDomainEvent } from "../domain-event";
 import { DomainEventType } from "../event-types";
+import { createNotificationFromEvent } from "@/modules/notifications/services/notification.service";
 
 // =============================================================================
 // ENROLLMENT ACTIVATION HANDLER
@@ -29,7 +30,14 @@ export class EnrollmentActivationEventHandler implements DomainEventHandler {
 
     const enrollment = await db.enrollment.findFirst({
       where: { id: enrollmentId, organizationId: event.organizationId },
-      select: { id: true, status: true, billingPolicyId: true, studentId: true },
+      select: {
+        id: true,
+        status: true,
+        billingPolicyId: true,
+        studentId: true,
+        courseId: true,
+        enrollmentNumber: true,
+      },
     });
     if (!enrollment || enrollment.status !== "PENDING_PAYMENT") return;
 
@@ -102,29 +110,39 @@ export class EnrollmentActivationEventHandler implements DomainEventHandler {
     // Resolve the student's user account via email (Student has no direct userId FK).
     const studentId = enrollment.studentId;
     if (studentId) {
-      const student = await db.student.findFirst({
-        where: { id: studentId, organizationId: event.organizationId },
-        select: { email: true },
-      });
+      const [student, course] = await Promise.all([
+        db.student.findFirst({
+          where: { id: studentId, organizationId: event.organizationId },
+          select: { email: true, firstName: true, lastName: true },
+        }),
+        db.course.findFirst({
+          where: { id: enrollment.courseId, organizationId: event.organizationId },
+          select: { name: true },
+        }),
+      ]);
+
       let userId: string | null = null;
       if (student?.email) {
         const user = await db.user.findFirst({ where: { email: student.email }, select: { id: true } });
         userId = user?.id ?? null;
       }
 
-      await db.notification.create({
-        data: {
-          organizationId: event.organizationId,
-          userId: userId ?? undefined,
-          type: "ENROLLMENT_APPROVED",
-          channel: "IN_APP",
-          title: "Matrícula ativada",
-          body: "A sua matrícula foi ativada automaticamente após confirmação do pagamento.",
-          data: JSON.stringify({ enrollmentId: enrollment.id }),
-          status: "SENT",
-          sentAt: new Date(),
-        },
-      });
+      if (userId) {
+        // Routed through the rule/template engine — same path as manual activation
+        // (CommunicationEventHandler) — so an org's enrollment.activated rule/template
+        // governs both activation paths identically. No hardcoded title/message here.
+        await createNotificationFromEvent(event.organizationId, {
+          eventType: DomainEventType.ENROLLMENT_ACTIVATED,
+          recipientUserId: userId,
+          variables: {
+            enrollmentId: enrollment.id,
+            enrollmentNumber: enrollment.enrollmentNumber,
+            studentName: student ? `${student.firstName} ${student.lastName}` : undefined,
+            courseName: course?.name,
+          },
+          referenceId: enrollment.id,
+        });
+      }
     }
   }
 }

@@ -9,6 +9,7 @@ import {
 } from "@/modules/organizations/repositories/organization.repository";
 import { createBranch } from "@/modules/organizations/repositories/branch.repository";
 import { createOrganizationSchema, type CreateOrganizationSchema } from "@/modules/organizations/schemas/organization.schema";
+import { ensureDefaultNotificationConfig } from "@/modules/notifications/services/notification-defaults.service";
 import { getDb } from "@/server/db";
 import type { Organization } from "@prisma/client";
 
@@ -94,6 +95,8 @@ export class CreateOrganizationCommand extends BaseCommand<
         },
       });
     }
+
+    await ensureDefaultNotificationConfig(org.id);
 
     await auditService.log(
       { ...this.context, organizationId: org.id },

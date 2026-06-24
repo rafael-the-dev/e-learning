@@ -63,3 +63,16 @@ export class BusinessRuleError extends Error {
     this.name = "BusinessRuleError";
   }
 }
+
+/**
+ * Thrown when a conditional update (WHERE ... AND status = expected) affects
+ * zero rows — the record was modified by another process between the read
+ * and the write. Distinct from BusinessRuleError: this is a transient race,
+ * not an invalid request; callers should retry the read-modify-write cycle.
+ */
+export class ConcurrencyError extends Error {
+  constructor(entity: string, id: string) {
+    super(`${entity} with id "${id}" was modified concurrently; expected state no longer matches`);
+    this.name = "ConcurrencyError";
+  }
+}

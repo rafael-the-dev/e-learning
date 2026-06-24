@@ -355,14 +355,78 @@ export const NotificationType = {
 export type NotificationType =
   (typeof NotificationType)[keyof typeof NotificationType];
 
+export const NotificationSeverity = {
+  INFO: "INFO",
+  SUCCESS: "SUCCESS",
+  WARNING: "WARNING",
+  CRITICAL: "CRITICAL",
+} as const;
+export type NotificationSeverity =
+  (typeof NotificationSeverity)[keyof typeof NotificationSeverity];
+
+export const NotificationStatus = {
+  UNREAD: "UNREAD",
+  READ: "READ",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type NotificationStatus =
+  (typeof NotificationStatus)[keyof typeof NotificationStatus];
+
+// NotificationChannel — Phase 3.1 creates a NotificationDelivery row per
+// channel, but only ever actually sends IN_APP; the rest get PENDING/FAILED
+// delivery rows with no real provider behind them yet (see
+// NotificationDeliveryStatus / docs/notifications-center.md).
 export const NotificationChannel = {
   IN_APP: "IN_APP",
   EMAIL: "EMAIL",
-  SMS: "SMS",
   WHATSAPP: "WHATSAPP",
+  SMS: "SMS",
+  PUSH: "PUSH",
 } as const;
 export type NotificationChannel =
   (typeof NotificationChannel)[keyof typeof NotificationChannel];
+
+export const NotificationRulePriority = {
+  LOW: "LOW",
+  NORMAL: "NORMAL",
+  HIGH: "HIGH",
+  CRITICAL: "CRITICAL",
+} as const;
+export type NotificationRulePriority =
+  (typeof NotificationRulePriority)[keyof typeof NotificationRulePriority];
+
+// NotificationDeliveryStatus — per-channel delivery attempt lifecycle for a
+// Notification. IN_APP rows go straight to DELIVERED (the notification is
+// just a DB row, "delivered" the instant it's created). Other channels have
+// no provider yet (Phase 3.1), so they sit in PENDING/FAILED until Phase 3.2
+// wires a real sender.
+export const NotificationDeliveryStatus = {
+  PENDING: "PENDING",
+  PROCESSING: "PROCESSING",
+  SENT: "SENT",
+  DELIVERED: "DELIVERED",
+  FAILED: "FAILED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type NotificationDeliveryStatus =
+  (typeof NotificationDeliveryStatus)[keyof typeof NotificationDeliveryStatus];
+
+// NotificationEmailProviderType — which real sender NotificationEmailSettings
+// is configured for. MICROSOFT_GRAPH is reserved (schema + registry branch
+// exist) but has no implementation yet — see docs/notifications-center.md.
+export const NotificationEmailProviderType = {
+  SMTP: "SMTP",
+  MICROSOFT_GRAPH: "MICROSOFT_GRAPH",
+} as const;
+export type NotificationEmailProviderType =
+  (typeof NotificationEmailProviderType)[keyof typeof NotificationEmailProviderType];
+
+export const NotificationEmailTestStatus = {
+  SUCCESS: "SUCCESS",
+  FAILED: "FAILED",
+} as const;
+export type NotificationEmailTestStatus =
+  (typeof NotificationEmailTestStatus)[keyof typeof NotificationEmailTestStatus];
 
 export const CourseStatus = {
   DRAFT: "DRAFT",

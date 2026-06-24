@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Prisma } from "@prisma/client";
 import { runAction } from "../action";
-import { ValidationError, AuthorizationError, NotFoundError, BusinessRuleError } from "../command";
+import { ValidationError, AuthorizationError, NotFoundError, BusinessRuleError, ConcurrencyError } from "../command";
 
 describe("runAction", () => {
   it("returns success with data when fn resolves", async () => {
@@ -38,6 +38,16 @@ describe("runAction", () => {
         throw new BusinessRuleError("Regra de negócio violada");
       })
     ).resolves.toEqual({ success: false, error: "Regra de negócio violada" });
+  });
+
+  it("maps ConcurrencyError to a user-friendly PT message", async () => {
+    const result = await runAction(async () => {
+      throw new ConcurrencyError("NotificationDelivery", "delivery-1");
+    });
+    expect(result).toEqual({
+      success: false,
+      error: "Este registo foi alterado por outro processo. Atualize a página e tente novamente",
+    });
   });
 
   it("maps a Prisma P2002 unique-constraint violation to a clean PT message", async () => {

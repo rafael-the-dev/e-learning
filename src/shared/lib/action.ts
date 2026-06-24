@@ -3,6 +3,7 @@ import type { ActionResult } from "@/shared/types/common";
 import {
   AuthorizationError,
   BusinessRuleError,
+  ConcurrencyError,
   NotFoundError,
   ValidationError,
 } from "@/shared/lib/command";
@@ -35,6 +36,12 @@ export async function runAction<T>(
     }
     if (error instanceof BusinessRuleError) {
       return { success: false, error: error.message };
+    }
+    if (error instanceof ConcurrencyError) {
+      return {
+        success: false,
+        error: "Este registo foi alterado por outro processo. Atualize a página e tente novamente",
+      };
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return { success: false, error: "Já existe um registo com estes dados" };

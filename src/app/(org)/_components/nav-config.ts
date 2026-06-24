@@ -34,7 +34,8 @@ export type NavIconName =
   | "PenLine"
   | "TrendingUp"
   | "Upload"
-  | "History";
+  | "History"
+  | "Bell";
 
 export interface NavigationItem {
   href: string;
@@ -69,6 +70,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         label: "Dashboard",
         iconName: "LayoutDashboard",
         requiredPermission: "dashboard.view",
+      },
+      {
+        href: "/notifications",
+        label: "Notificações",
+        iconName: "Bell",
+        requiredPermission: "notifications.viewOwn",
       },
     ],
   },

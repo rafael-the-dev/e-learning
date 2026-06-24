@@ -36,79 +36,83 @@ model Organization {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  branches          Branch[]
-  userOrganizations UserOrganization[]
-  students          Student[]
-  teachers          Teacher[]
-  courses           Course[]
-  courseCategories  CourseCategory[]
-  subjects          Subject[]
-  levelSubjects     LevelSubject[]
-  lessons           Lesson[]
-  lessonAttachments LessonAttachment[]
-  subjectLessons    SubjectLesson[]
-  lessonProgress    StudentLessonProgress[]
-  vehicles          Vehicle[]
-  invoices          Invoice[]
-  payments          Payment[]
-  receipts          Receipt[]
-  paymentSplits     PaymentSplit[]
-  paymentAllocations PaymentAllocation[]
-  studentWallets    StudentWallet[]
-  walletTransactions StudentWalletTransaction[]
-  creditApplications CreditApplication[]
-  roles             Role[]
-  auditLogs         AuditLog[]
-  notifications     Notification[]
-  settings          OrganizationSettings?
-  schedulePeriods   SchedulePeriod[]
-  scheduleSlots     ScheduleSlot[]
-  classGroupSchedules ClassGroupSchedule[]
-  feeDefinitions           FeeDefinition[]
+  branches                  Branch[]
+  userOrganizations         UserOrganization[]
+  students                  Student[]
+  teachers                  Teacher[]
+  courses                   Course[]
+  courseCategories          CourseCategory[]
+  subjects                  Subject[]
+  levelSubjects             LevelSubject[]
+  lessons                   Lesson[]
+  lessonAttachments         LessonAttachment[]
+  subjectLessons            SubjectLesson[]
+  lessonProgress            StudentLessonProgress[]
+  vehicles                  Vehicle[]
+  invoices                  Invoice[]
+  payments                  Payment[]
+  receipts                  Receipt[]
+  paymentSplits             PaymentSplit[]
+  paymentAllocations        PaymentAllocation[]
+  studentWallets            StudentWallet[]
+  walletTransactions        StudentWalletTransaction[]
+  creditApplications        CreditApplication[]
+  roles                     Role[]
+  auditLogs                 AuditLog[]
+  notifications             Notification[]
+  notificationTemplates     NotificationTemplate[]
+  notificationEventRules    NotificationEventRule[]
+  notificationDeliveries    NotificationDelivery[]
+  notificationEmailSettings NotificationEmailSettings?
+  settings                  OrganizationSettings?
+  schedulePeriods           SchedulePeriod[]
+  scheduleSlots             ScheduleSlot[]
+  classGroupSchedules       ClassGroupSchedule[]
+  feeDefinitions            FeeDefinition[]
   enrollmentBillingPolicies EnrollmentBillingPolicy[]
-  policyFees               PolicyFee[]
-  discountRules            DiscountRule[]
-  taxRules                 TaxRule[]
-  appliedDiscounts         AppliedDiscount[]
-  appliedTaxes             AppliedTax[]
-  academicYears            AcademicYear[]
-  academicTerms            AcademicTerm[]
-  academicHolidays         AcademicHoliday[]
-  academicEvents           AcademicEvent[]
-  classrooms               Classroom[]
-  classroomFeatures        ClassroomFeature[]
-  classroomResources       ClassroomResource[]
-  classroomMaintenances    ClassroomMaintenance[]
-  classroomBookings        ClassroomBooking[]
-  domainEvents             DomainEvent[]
-  domainEventHandlerLogs   DomainEventHandlerLog[]
-  importJobs               ImportJob[]
-  studentTimelineEvents    StudentTimelineEvent[]
-  attendanceSessions       AttendanceSession[]
-  attendanceRecords        AttendanceRecord[]
-  attendanceJustifications AttendanceJustification[]
-  assessmentPolicies         AssessmentPolicy[]
-  assessmentComponents       AssessmentComponent[]
-  assessmentPeriods          AssessmentPeriod[]
-  assessments                Assessment[]
-  assessmentResults          AssessmentResult[]
-  assessmentPublications     AssessmentPublication[]
-  studentSubjectProgress     StudentSubjectProgress[]
-  assessmentRetakes          AssessmentRetake[]
-  studentAssessmentResults   StudentAssessmentResult[]
-  gradeChangeLogs            GradeChangeLog[]
-  studentLevelProgress       StudentLevelProgress[]
-  studentCourseProgress      StudentCourseProgress[]
-  prerequisiteGroups         LevelSubjectPrerequisiteGroup[]
-  prerequisiteItems          LevelSubjectPrerequisiteItem[]
-  prerequisiteWaivers        PrerequisiteWaiver[]
-  levelProgressionPolicies   LevelProgressionPolicy[]
-  levelProgressionRequests   LevelProgressionRequest[]
-  refunds                    Refund[]
-  financialTransactions      FinancialTransaction[]
-  financialIntegrityIssues   FinancialIntegrityIssue[]
-  financialAuditLogs         FinancialAuditLog[]
-  studentDocuments           StudentDocument[]
+  policyFees                PolicyFee[]
+  discountRules             DiscountRule[]
+  taxRules                  TaxRule[]
+  appliedDiscounts          AppliedDiscount[]
+  appliedTaxes              AppliedTax[]
+  academicYears             AcademicYear[]
+  academicTerms             AcademicTerm[]
+  academicHolidays          AcademicHoliday[]
+  academicEvents            AcademicEvent[]
+  classrooms                Classroom[]
+  classroomFeatures         ClassroomFeature[]
+  classroomResources        ClassroomResource[]
+  classroomMaintenances     ClassroomMaintenance[]
+  classroomBookings         ClassroomBooking[]
+  domainEvents              DomainEvent[]
+  domainEventHandlerLogs    DomainEventHandlerLog[]
+  importJobs                ImportJob[]
+  studentTimelineEvents     StudentTimelineEvent[]
+  attendanceSessions        AttendanceSession[]
+  attendanceRecords         AttendanceRecord[]
+  attendanceJustifications  AttendanceJustification[]
+  assessmentPolicies        AssessmentPolicy[]
+  assessmentComponents      AssessmentComponent[]
+  assessmentPeriods         AssessmentPeriod[]
+  assessments               Assessment[]
+  assessmentResults         AssessmentResult[]
+  assessmentPublications    AssessmentPublication[]
+  studentSubjectProgress    StudentSubjectProgress[]
+  assessmentRetakes         AssessmentRetake[]
+  studentAssessmentResults  StudentAssessmentResult[]
+  gradeChangeLogs           GradeChangeLog[]
+  studentLevelProgress      StudentLevelProgress[]
+  studentCourseProgress     StudentCourseProgress[]
+  prerequisiteGroups        LevelSubjectPrerequisiteGroup[]
+  prerequisiteItems         LevelSubjectPrerequisiteItem[]
+  prerequisiteWaivers       PrerequisiteWaiver[]
+  levelProgressionPolicies  LevelProgressionPolicy[]
+  levelProgressionRequests  LevelProgressionRequest[]
+  refunds                   Refund[]
+  financialTransactions     FinancialTransaction[]
+  financialIntegrityIssues  FinancialIntegrityIssue[]
+  financialAuditLogs        FinancialAuditLog[]
+  studentDocuments          StudentDocument[]
 
   @@map("organizations")
 }
@@ -128,16 +132,16 @@ model Branch {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  classGroups  ClassGroup[]
-  students     Student[]
-  teachers     Teacher[]
-  vehicles     Vehicle[]
-  enrollments  Enrollment[]
-  invoices     Invoice[]
-  payments     Payment[]
-  receipts     Receipt[]
-  classrooms   Classroom[]
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroups        ClassGroup[]
+  students           Student[]
+  teachers           Teacher[]
+  vehicles           Vehicle[]
+  enrollments        Enrollment[]
+  invoices           Invoice[]
+  payments           Payment[]
+  receipts           Receipt[]
+  classrooms         Classroom[]
   classroomBookings  ClassroomBooking[]
   attendanceSessions AttendanceSession[]
   refunds            Refund[]
@@ -146,24 +150,24 @@ model Branch {
 }
 
 model OrganizationSettings {
-  id                String   @id @default(cuid())
-  organizationId    String   @unique
-  currencyCode      String   @default("MZN")
-  currencySymbol    String   @default("MT")
-  dateFormat        String   @default("DD/MM/YYYY")
-  taxRate           Decimal? @db.Decimal(5, 2)
-  taxName           String?
-  invoicePrefix     String   @default("INV")
-  receiptPrefix     String   @default("REC")
-  allowLatePayments                            Boolean  @default(true)
-  gracePeriodDays                              Int      @default(7)
-  enableAutomaticOverdueProcessing             Boolean  @default(true)
-  overdueGraceDays                             Int      @default(0)
-  markInvoiceOverdueWhenAnyInstallmentOverdue  Boolean  @default(true)
-  notifyOnOverdue                              Boolean  @default(true)
-  overdueNotificationDelayDays                 Int      @default(0)
-  createdAt                                    DateTime @default(now())
-  updatedAt                                    DateTime @updatedAt
+  id                                          String   @id @default(cuid())
+  organizationId                              String   @unique
+  currencyCode                                String   @default("MZN")
+  currencySymbol                              String   @default("MT")
+  dateFormat                                  String   @default("DD/MM/YYYY")
+  taxRate                                     Decimal? @db.Decimal(5, 2)
+  taxName                                     String?
+  invoicePrefix                               String   @default("INV")
+  receiptPrefix                               String   @default("REC")
+  allowLatePayments                           Boolean  @default(true)
+  gracePeriodDays                             Int      @default(7)
+  enableAutomaticOverdueProcessing            Boolean  @default(true)
+  overdueGraceDays                            Int      @default(0)
+  markInvoiceOverdueWhenAnyInstallmentOverdue Boolean  @default(true)
+  notifyOnOverdue                             Boolean  @default(true)
+  overdueNotificationDelayDays                Int      @default(0)
+  createdAt                                   DateTime @default(now())
+  updatedAt                                   DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -350,8 +354,8 @@ model Student {
   createdBy      String?
   updatedBy      String?
 
-  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  branch           Branch?            @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch                   Branch?                   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   enrollments              Enrollment[]
   attendanceRecords        AttendanceRecord[]
   attendanceJustifications AttendanceJustification[]
@@ -359,19 +363,19 @@ model Student {
   invoices                 Invoice[]
   payments                 Payment[]
   receipts                 Receipt[]
-  wallets                    StudentWallet[]
-  lessonProgress             StudentLessonProgress[]
-  timelineEvents             StudentTimelineEvent[]
-  assessmentResults          AssessmentResult[]
-  studentSubjectProgress     StudentSubjectProgress[]
-  assessmentRetakes          AssessmentRetake[]
-  studentAssessmentResults   StudentAssessmentResult[]
-  studentLevelProgress       StudentLevelProgress[]
-  studentCourseProgress      StudentCourseProgress[]
-  prerequisiteWaivers        PrerequisiteWaiver[]
-  levelProgressionRequests   LevelProgressionRequest[]
-  refunds                    Refund[]
-  documents                  StudentDocument[]
+  wallets                  StudentWallet[]
+  lessonProgress           StudentLessonProgress[]
+  timelineEvents           StudentTimelineEvent[]
+  assessmentResults        AssessmentResult[]
+  studentSubjectProgress   StudentSubjectProgress[]
+  assessmentRetakes        AssessmentRetake[]
+  studentAssessmentResults StudentAssessmentResult[]
+  studentLevelProgress     StudentLevelProgress[]
+  studentCourseProgress    StudentCourseProgress[]
+  prerequisiteWaivers      PrerequisiteWaiver[]
+  levelProgressionRequests LevelProgressionRequest[]
+  refunds                  Refund[]
+  documents                StudentDocument[]
 
   @@index([organizationId, branchId])
   @@map("students")
@@ -409,8 +413,8 @@ model Teacher {
   createdBy      String?
   updatedBy      String?
 
-  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  branch             Branch?            @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch             Branch?             @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   teacherSubjects    TeacherSubject[]
   classGroups        ClassGroup[]
   practicalLessons   PracticalLesson[]
@@ -463,12 +467,12 @@ model Course {
   createdBy      String?
   updatedBy      String?
 
-  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  category      CourseCategory? @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levels        CourseLevel[]
-  levelSubjects LevelSubject[]
-  classGroups   ClassGroup[]
-  enrollments   Enrollment[]
+  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  category                 CourseCategory?           @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levels                   CourseLevel[]
+  levelSubjects            LevelSubject[]
+  classGroups              ClassGroup[]
+  enrollments              Enrollment[]
   studentCourseProgress    StudentCourseProgress[]
   levelProgressionPolicies LevelProgressionPolicy[]
   levelProgressionRequests LevelProgressionRequest[]
@@ -491,17 +495,17 @@ model CourseLevel {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  course        Course         @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levelSubjects LevelSubject[]
-  classGroups   ClassGroup[]
-  enrollments              Enrollment[]             @relation("CourseLevelEnrollments")
-  initialEnrollments       Enrollment[]             @relation("InitialLevelEnrollments")
-  currentEnrollments       Enrollment[]             @relation("CurrentLevelEnrollments")
-  studentLevelProgress     StudentLevelProgress[]
-  fromProgressionPolicies  LevelProgressionPolicy[] @relation("FromLevel")
-  toProgressionPolicies    LevelProgressionPolicy[] @relation("ToLevel")
-  fromProgressionRequests  LevelProgressionRequest[] @relation("FromLevelRequests")
-  toProgressionRequests    LevelProgressionRequest[] @relation("ToLevelRequests")
+  course                  Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubjects           LevelSubject[]
+  classGroups             ClassGroup[]
+  enrollments             Enrollment[]              @relation("CourseLevelEnrollments")
+  initialEnrollments      Enrollment[]              @relation("InitialLevelEnrollments")
+  currentEnrollments      Enrollment[]              @relation("CurrentLevelEnrollments")
+  studentLevelProgress    StudentLevelProgress[]
+  fromProgressionPolicies LevelProgressionPolicy[]  @relation("FromLevel")
+  toProgressionPolicies   LevelProgressionPolicy[]  @relation("ToLevel")
+  fromProgressionRequests LevelProgressionRequest[] @relation("FromLevelRequests")
+  toProgressionRequests   LevelProgressionRequest[] @relation("ToLevelRequests")
 
   @@map("course_levels")
 }
@@ -518,12 +522,12 @@ model Subject {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization              Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levelSubjects             LevelSubject[]
-  teacherSubjects           TeacherSubject[]
-  subjectLessons            SubjectLesson[]
-  attendanceSessions        AttendanceSession[]
-  studentAssessmentResults  StudentAssessmentResult[]
+  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubjects            LevelSubject[]
+  teacherSubjects          TeacherSubject[]
+  subjectLessons           SubjectLesson[]
+  attendanceSessions       AttendanceSession[]
+  studentAssessmentResults StudentAssessmentResult[]
 
   @@unique([organizationId, code])
   @@map("subjects")
@@ -553,16 +557,16 @@ model LevelSubject {
   updatedAt                   DateTime  @updatedAt
   deletedAt                   DateTime?
 
-  organization           Organization             @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  course                 Course                   @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courseLevel            CourseLevel              @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  subject                Subject                  @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assessmentPolicies         AssessmentPolicy[]
-  studentSubjectProgress     StudentSubjectProgress[]
-  studentAssessmentResults   StudentAssessmentResult[]
-  prerequisiteGroups         LevelSubjectPrerequisiteGroup[]
-  prerequisiteItemsAsPrereq  LevelSubjectPrerequisiteItem[]  @relation("PrerequisiteSubject")
-  prerequisiteWaivers        PrerequisiteWaiver[]
+  organization              Organization                    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course                    Course                          @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel               CourseLevel                     @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject                   Subject                         @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentPolicies        AssessmentPolicy[]
+  studentSubjectProgress    StudentSubjectProgress[]
+  studentAssessmentResults  StudentAssessmentResult[]
+  prerequisiteGroups        LevelSubjectPrerequisiteGroup[]
+  prerequisiteItemsAsPrereq LevelSubjectPrerequisiteItem[]  @relation("PrerequisiteSubject")
+  prerequisiteWaivers       PrerequisiteWaiver[]
 
   @@unique([courseLevelId, subjectId])
   @@map("level_subjects")
@@ -586,33 +590,33 @@ model TeacherSubject {
 // =============================================================================
 
 model ClassGroup {
-  id               String    @id @default(cuid())
-  organizationId   String
-  branchId         String?
-  courseId         String
-  courseLevelId    String?
-  teacherId        String?
-  academicYearId   String
-  academicTermId   String?
-  name             String
-  code             String?
-  capacity         Int       @default(30)
-  currentCount     Int       @default(0)
-  startDate        DateTime?
-  endDate          DateTime?
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String?
+  courseId       String
+  courseLevelId  String?
+  teacherId      String?
+  academicYearId String
+  academicTermId String?
+  name           String
+  code           String?
+  capacity       Int       @default(30)
+  currentCount   Int       @default(0)
+  startDate      DateTime?
+  endDate        DateTime?
   // ClassGroupStatus: FORMING | ACTIVE | COMPLETED | CANCELLED
-  status           String    @default("FORMING")
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  deletedAt        DateTime?
-  createdBy        String?
+  status         String    @default("FORMING")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
 
-  branch        Branch?           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  course        Course            @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courseLevel   CourseLevel?      @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  teacher       Teacher?          @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicYear  AcademicYear      @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicTerm  AcademicTerm?     @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch              Branch?              @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course              Course               @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel         CourseLevel?         @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacher             Teacher?             @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear        AcademicYear         @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm        AcademicTerm?        @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   classGroupSchedules ClassGroupSchedule[]
   enrollments         Enrollment[]
   attendanceSessions  AttendanceSession[]
@@ -639,7 +643,7 @@ model SchedulePeriod {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   slots        ScheduleSlot[]
 
   @@unique([organizationId, code])
@@ -897,17 +901,17 @@ model Enrollment {
   createdBy        String?
   updatedBy        String?
 
-  branch         Branch?                   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student        Student                   @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  course         Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courseLevel    CourseLevel?              @relation("CourseLevelEnrollments", fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  initialLevel   CourseLevel?              @relation("InitialLevelEnrollments", fields: [initialLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  currentLevel   CourseLevel?              @relation("CurrentLevelEnrollments", fields: [currentLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  classGroup     ClassGroup?               @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicYear   AcademicYear              @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicTerm   AcademicTerm?             @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  billingPolicy  EnrollmentBillingPolicy?  @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  invoices               Invoice[]
+  branch                   Branch?                   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student                  Student                   @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course                   Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel              CourseLevel?              @relation("CourseLevelEnrollments", fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  initialLevel             CourseLevel?              @relation("InitialLevelEnrollments", fields: [initialLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  currentLevel             CourseLevel?              @relation("CurrentLevelEnrollments", fields: [currentLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup               ClassGroup?               @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear             AcademicYear              @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm             AcademicTerm?             @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  billingPolicy            EnrollmentBillingPolicy?  @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoices                 Invoice[]
   payments                 Payment[]
   statusHistory            EnrollmentStatusHistory[]
   lessonProgress           StudentLessonProgress[]
@@ -928,13 +932,13 @@ model Enrollment {
 }
 
 model EnrollmentStatusHistory {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   enrollmentId String
   fromStatus   String?
   toStatus     String
   reason       String?
   changedBy    String?
-  changedAt    DateTime  @default(now())
+  changedAt    DateTime @default(now())
 
   enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -972,15 +976,15 @@ model AttendanceSession {
   deletedAt       DateTime?
   createdBy       String?
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicTerm AcademicTerm? @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  classGroup   ClassGroup    @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  subject      Subject       @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  teacher      Teacher?      @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  classroom    Classroom?    @relation(fields: [classroomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  scheduleSlot ScheduleSlot? @relation(fields: [scheduleSlotId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch       Branch?            @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear AcademicYear       @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm AcademicTerm?      @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup   ClassGroup         @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject      Subject            @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacher      Teacher?           @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classroom    Classroom?         @relation(fields: [classroomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  scheduleSlot ScheduleSlot?      @relation(fields: [scheduleSlotId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   records      AttendanceRecord[]
 
   @@index([organizationId, classGroupId, sessionDate])
@@ -1008,9 +1012,9 @@ model AttendanceRecord {
   updatedAt           DateTime  @updatedAt
   deletedAt           DateTime?
 
-  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  attendanceSession AttendanceSession @relation(fields: [attendanceSessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student           Student           @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization      Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendanceSession AttendanceSession         @relation(fields: [attendanceSessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student           Student                   @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   justifications    AttendanceJustification[]
 
   @@unique([attendanceSessionId, studentId])
@@ -1034,9 +1038,9 @@ model AttendanceJustification {
   updatedAt          DateTime  @updatedAt
   deletedAt          DateTime?
 
-  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  attendanceRecord  AttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student           Student          @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendanceRecord AttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student          Student          @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([organizationId, studentId])
   @@index([organizationId, status])
@@ -1078,7 +1082,7 @@ model Vehicle {
 // =============================================================================
 
 model PracticalLesson {
-  id              String    @id @default(cuid())
+  id              String   @id @default(cuid())
   organizationId  String
   studentId       String
   teacherId       String?
@@ -1088,11 +1092,11 @@ model PracticalLesson {
   endTime         String
   durationMinutes Int?
   // PracticalLessonStatus: SCHEDULED | IN_PROGRESS | COMPLETED | CANCELLED | NO_SHOW
-  status          String    @default("SCHEDULED")
-  evaluation      String?   @db.NVarChar(Max)
+  status          String   @default("SCHEDULED")
+  evaluation      String?  @db.NVarChar(Max)
   notes           String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
   createdBy       String?
 
   student Student  @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -1117,11 +1121,11 @@ model Invoice {
   issueDate       DateTime  @default(now())
   dueDate         DateTime?
   subtotal        Decimal   @db.Decimal(10, 2)
-  discountAmount  Decimal   @db.Decimal(10, 2) @default(0)
-  taxAmount       Decimal   @db.Decimal(10, 2) @default(0)
+  discountAmount  Decimal   @default(0) @db.Decimal(10, 2)
+  taxAmount       Decimal   @default(0) @db.Decimal(10, 2)
   totalAmount     Decimal   @db.Decimal(10, 2)
-  paidAmount      Decimal   @db.Decimal(10, 2) @default(0)
-  balanceAmount   Decimal   @db.Decimal(10, 2) @default(0)
+  paidAmount      Decimal   @default(0) @db.Decimal(10, 2)
+  balanceAmount   Decimal   @default(0) @db.Decimal(10, 2)
   // InvoiceStatus: PENDING | PARTIALLY_PAID | PAID | OVERDUE | CANCELLED
   status          String    @default("PENDING")
   notes           String?   @db.NVarChar(Max)
@@ -1131,16 +1135,16 @@ model Invoice {
   createdBy       String?
   updatedBy       String?
 
-  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  branch         Branch?                  @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student        Student?                 @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  enrollment     Enrollment?              @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  billingPolicy  EnrollmentBillingPolicy? @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  items          InvoiceItem[]
-  payments       Payment[]
-  paymentPlan    PaymentPlan?
-  receipts       Receipt[]
-  allocations    PaymentAllocation[]
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch           Branch?                  @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student          Student?                 @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment       Enrollment?              @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  billingPolicy    EnrollmentBillingPolicy? @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  items            InvoiceItem[]
+  payments         Payment[]
+  paymentPlan      PaymentPlan?
+  receipts         Receipt[]
+  allocations      PaymentAllocation[]
   appliedDiscounts AppliedDiscount[]
   appliedTaxes     AppliedTax[]
   refunds          Refund[]
@@ -1162,11 +1166,11 @@ model InvoiceItem {
   // InvoiceItemType: REGISTRATION_FEE | COURSE_FEE | MATERIAL_FEE | EXAM_FEE | CERTIFICATE_FEE | PENALTY | OTHER
   itemType        String   @default("OTHER")
   description     String
-  quantity        Decimal  @db.Decimal(10, 2) @default(1)
+  quantity        Decimal  @default(1) @db.Decimal(10, 2)
   unitPrice       Decimal  @db.Decimal(10, 2)
   totalPrice      Decimal  @db.Decimal(10, 2)
-  paidAmount      Decimal  @db.Decimal(10, 2) @default(0)
-  balanceAmount   Decimal  @db.Decimal(10, 2) @default(0)
+  paidAmount      Decimal  @default(0) @db.Decimal(10, 2)
+  balanceAmount   Decimal  @default(0) @db.Decimal(10, 2)
   priority        Int      @default(7)
   // InvoiceItemStatus: PENDING | PARTIALLY_PAID | PAID
   status          String   @default("PENDING")
@@ -1206,8 +1210,8 @@ model Installment {
   installmentNumber Int
   dueDate           DateTime
   amount            Decimal   @db.Decimal(10, 2)
-  paidAmount        Decimal   @db.Decimal(10, 2) @default(0)
-  balanceAmount     Decimal   @db.Decimal(10, 2) @default(0)
+  paidAmount        Decimal   @default(0) @db.Decimal(10, 2)
+  balanceAmount     Decimal   @default(0) @db.Decimal(10, 2)
   // InstallmentStatus: PENDING | PARTIALLY_PAID | PAID | OVERDUE
   status            String    @default("PENDING")
   paidAt            DateTime?
@@ -1221,29 +1225,29 @@ model Installment {
 }
 
 model Payment {
-  id            String   @id @default(cuid())
+  id             String   @id @default(cuid())
   organizationId String
-  branchId      String?
-  invoiceId     String?
-  installmentId String?
-  studentId     String?
-  enrollmentId  String?
-  paymentNumber String
-  paymentDate   DateTime @default(now())
-  totalAmount   Decimal  @db.Decimal(10, 2)
+  branchId       String?
+  invoiceId      String?
+  installmentId  String?
+  studentId      String?
+  enrollmentId   String?
+  paymentNumber  String
+  paymentDate    DateTime @default(now())
+  totalAmount    Decimal  @db.Decimal(10, 2)
   // PaymentStatus: PENDING | CONFIRMED | CANCELLED | REFUNDED
-  status        String   @default("PENDING")
-  notes         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  createdBy     String?
+  status         String   @default("PENDING")
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String?
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student      Student?      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  invoice      Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  installment  Installment?  @relation(fields: [installmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  enrollment   Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch             Branch?             @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student            Student?            @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoice            Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  installment        Installment?        @relation(fields: [installmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment         Enrollment?         @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   receipt            Receipt?
   splits             PaymentSplit[]
   creditApplications CreditApplication[]
@@ -1258,16 +1262,16 @@ model Payment {
 }
 
 model Receipt {
-  id             String   @id @default(cuid())
-  organizationId String
-  branchId       String?
-  paymentId      String   @unique
-  invoiceId      String
-  studentId      String?
-  receiptNumber  String
-  issueDate      DateTime @default(now())
-  amount         Decimal  @db.Decimal(10, 2)
-  refundedAmount Decimal  @db.Decimal(10, 2) @default(0)
+  id                 String    @id @default(cuid())
+  organizationId     String
+  branchId           String?
+  paymentId          String    @unique
+  invoiceId          String
+  studentId          String?
+  receiptNumber      String
+  issueDate          DateTime  @default(now())
+  amount             Decimal   @db.Decimal(10, 2)
+  refundedAmount     Decimal   @default(0) @db.Decimal(10, 2)
   // ReceiptStatus: ISSUED | PARTIALLY_REFUNDED | CANCELLED
   status             String    @default("ISSUED")
   issuedBy           String?
@@ -1366,8 +1370,8 @@ model StudentWalletTransaction {
   createdAt       DateTime @default(now())
   createdBy       String?
 
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  wallet       StudentWallet  @relation(fields: [studentWalletId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  wallet       StudentWallet @relation(fields: [studentWalletId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([studentWalletId, createdAt])
   @@index([organizationId, type, createdAt])
@@ -1388,9 +1392,9 @@ model CreditApplication {
   createdAt       DateTime @default(now())
   createdBy       String?
 
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  wallet       StudentWallet      @relation(fields: [studentWalletId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  payment      Payment?           @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  wallet       StudentWallet       @relation(fields: [studentWalletId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment      Payment?            @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   allocations  PaymentAllocation[]
 
   @@map("credit_applications")
@@ -1401,28 +1405,183 @@ model CreditApplication {
 // =============================================================================
 
 model Notification {
-  id             String    @id @default(cuid())
+  id              String    @id @default(cuid())
+  organizationId  String
+  recipientUserId String
+  // NotificationType: see src/shared/types/common.ts NotificationType
+  type            String
+  // NotificationSeverity: INFO | SUCCESS | WARNING | CRITICAL
+  severity        String    @default("INFO")
+  title           String
+  message         String    @db.NVarChar(Max)
+  // NotificationStatus: UNREAD | READ | ARCHIVED
+  status          String    @default("UNREAD")
+  actionUrl       String?
+  metadata        String?   @db.NVarChar(Max)
+  readAt          DateTime?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  recipient    User                   @relation(fields: [recipientUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  deliveries   NotificationDelivery[]
+
+  @@index([organizationId, recipientUserId, status, createdAt])
+  @@index([organizationId, type, createdAt])
+  @@map("notifications")
+}
+
+// =============================================================================
+// NOTIFICATIONS CENTER — PHASE 3.1: DELIVERY INFRASTRUCTURE
+// Tracks one delivery attempt per (Notification, channel). IN_APP rows are
+// created already DELIVERED — the Notification row itself *is* the delivery.
+// Other channels (EMAIL/WHATSAPP/SMS/PUSH) get PENDING/FAILED rows with no
+// real provider behind them yet — see docs/notifications-center.md.
+// =============================================================================
+
+model NotificationDelivery {
+  id             String @id @default(cuid())
   organizationId String
-  userId         String?
-  // NotificationType: ENROLLMENT_APPROVED | ENROLLMENT_CANCELLED | PAYMENT_RECEIVED |
-  //                   PAYMENT_OVERDUE | CLASS_SCHEDULED | CLASS_CANCELLED | DOCUMENT_READY | GENERAL
-  type           String
-  // NotificationChannel: IN_APP | EMAIL | SMS | WHATSAPP
-  channel        String    @default("IN_APP")
-  title          String
-  body           String    @db.NVarChar(Max)
-  data           String?   @db.NVarChar(Max)
-  isRead         Boolean   @default(false)
-  readAt         DateTime?
-  sentAt         DateTime?
-  // NotificationStatus: PENDING | SENT | FAILED | READ
-  status         String    @default("PENDING")
-  createdAt      DateTime  @default(now())
+  notificationId String
+
+  // NotificationChannel: IN_APP | EMAIL | WHATSAPP | SMS | PUSH
+  channel   String
+  recipient String
+
+  // NotificationDeliveryStatus: PENDING | PROCESSING | SENT | DELIVERED | FAILED | CANCELLED
+  status String @default("PENDING")
+
+  // Reserved for the real provider integration (Phase 3.2) — e.g. "resend", "twilio".
+  provider          String?
+  providerMessageId String?
+
+  attempts    Int @default(0)
+  maxAttempts Int @default(3)
+
+  lastAttemptAt DateTime?
+  nextAttemptAt DateTime?
+
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  failedAt    DateTime?
+  cancelledAt DateTime?
+
+  failureReason String? @db.NVarChar(Max)
+  metadata      String? @db.NVarChar(Max)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  user         User?        @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@map("notifications")
+  @@index([organizationId, status, channel, createdAt])
+  @@index([notificationId])
+  @@index([organizationId, nextAttemptAt, status])
+  @@index([organizationId, channel, createdAt])
+  @@map("notification_deliveries")
+}
+
+// =============================================================================
+// NOTIFICATIONS CENTER — PHASE 3.2B: EMAIL SETTINGS
+// One row per organization. SMTP credentials are stored encrypted
+// (smtpPasswordEncrypted) — see src/shared/lib/secret-encryption.ts. The
+// Microsoft Graph fields are reserved for a future provider and are never
+// read by anything yet (see docs/notifications-center.md).
+// =============================================================================
+
+model NotificationEmailSettings {
+  id             String  @id @default(cuid())
+  organizationId String  @unique
+
+  // NotificationEmailProviderType: SMTP | MICROSOFT_GRAPH
+  providerType String  @default("SMTP")
+  isEnabled    Boolean @default(false)
+
+  fromName String
+  fromEmail String
+  replyTo  String?
+
+  smtpHost              String?
+  smtpPort              Int?
+  smtpUsername          String?
+  smtpPasswordEncrypted String?  @db.NVarChar(Max)
+  smtpSecure            Boolean  @default(true)
+
+  // Reserved — Microsoft Graph is not implemented in this phase.
+  graphTenantId              String?
+  graphClientId              String?
+  graphClientSecretEncrypted String? @db.NVarChar(Max)
+
+  lastTestedAt DateTime?
+  // NotificationEmailTestStatus: SUCCESS | FAILED
+  lastTestStatus String?
+  lastTestError  String?   @db.NVarChar(Max)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("notification_email_settings")
+}
+
+// =============================================================================
+// NOTIFICATIONS CENTER — PHASE 2: TEMPLATES & EVENT RULES
+// =============================================================================
+
+model NotificationTemplate {
+  id             String    @id @default(cuid())
+  organizationId String
+  // eventType matches DomainEventType (e.g. "payment.confirmed") — see
+  // src/modules/notifications/catalog/notification-event-catalog.ts
+  eventType      String
+  // NotificationChannel: IN_APP | EMAIL | WHATSAPP | SMS — Phase 2 only resolves IN_APP
+  channel        String    @default("IN_APP")
+  name           String
+  // Future EMAIL channel subject line — unused for IN_APP
+  subject        String?
+  titleTemplate  String    @db.NVarChar(Max)
+  bodyTemplate   String    @db.NVarChar(Max)
+  // Variable names referenced by titleTemplate/bodyTemplate, extracted at save time
+  variables      String    @db.NVarChar(Max)
+  language       String    @default("pt-PT")
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, eventType, channel])
+  @@index([organizationId, isActive])
+  @@map("notification_templates")
+}
+
+model NotificationEventRule {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  // eventType matches DomainEventType (e.g. "payment.confirmed")
+  eventType           String
+  enabled             Boolean   @default(true)
+  // JSON-encoded NotificationChannel[] — e.g. ["IN_APP"]
+  channels            String    @db.NVarChar(Max)
+  dedupeWindowMinutes Int       @default(1440)
+  // Stored for a future dispatcher — not acted upon in Phase 2
+  delayMinutes        Int       @default(0)
+  // NotificationRulePriority: LOW | NORMAL | HIGH | CRITICAL
+  priority            String    @default("NORMAL")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([organizationId, eventType])
+  @@index([organizationId, eventType])
+  @@index([organizationId, enabled])
+  @@map("notification_event_rules")
 }
 
 // =============================================================================
@@ -1430,51 +1589,51 @@ model Notification {
 // =============================================================================
 
 model Lesson {
-  id               String    @id @default(cuid())
-  organizationId   String
-  title            String
-  slug             String
-  description      String?   @db.NVarChar(Max)
-  summary          String?   @db.NVarChar(Max)
-  objectives       String?   @db.NVarChar(Max)
-  durationMinutes  Int?
+  id              String    @id @default(cuid())
+  organizationId  String
+  title           String
+  slug            String
+  description     String?   @db.NVarChar(Max)
+  summary         String?   @db.NVarChar(Max)
+  objectives      String?   @db.NVarChar(Max)
+  durationMinutes Int?
   // LessonType: VIDEO | TEXT | LIVE | PRACTICAL | READING | ASSIGNMENT_PREP
-  lessonType       String    @default("TEXT")
+  lessonType      String    @default("TEXT")
   // VideoProvider: YOUTUBE | VIMEO | CLOUDFLARE_STREAM | BUNNY | S3 | EXTERNAL | NONE
-  videoProvider    String    @default("NONE")
-  videoUrl         String?   @db.NVarChar(Max)
-  externalVideoId  String?
-  thumbnailUrl     String?   @db.NVarChar(Max)
+  videoProvider   String    @default("NONE")
+  videoUrl        String?   @db.NVarChar(Max)
+  externalVideoId String?
+  thumbnailUrl    String?   @db.NVarChar(Max)
   // LessonStatus: DRAFT | PUBLISHED | ARCHIVED
-  status           String    @default("DRAFT")
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  deletedAt        DateTime?
+  status          String    @default("DRAFT")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
 
-  organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  attachments     LessonAttachment[]
-  subjectLessons  SubjectLesson[]
-  lessonProgress  StudentLessonProgress[]
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attachments    LessonAttachment[]
+  subjectLessons SubjectLesson[]
+  lessonProgress StudentLessonProgress[]
 
   @@unique([organizationId, slug])
   @@map("lessons")
 }
 
 model LessonAttachment {
-  id               String    @id @default(cuid())
-  organizationId   String
-  lessonId         String
-  fileName         String
-  fileUrl          String    @db.NVarChar(Max)
+  id             String    @id @default(cuid())
+  organizationId String
+  lessonId       String
+  fileName       String
+  fileUrl        String    @db.NVarChar(Max)
   // FileType: PDF | IMAGE | DOCUMENT | SPREADSHEET | PRESENTATION | AUDIO | VIDEO | OTHER
-  fileType         String    @default("OTHER")
-  fileSize         Int?
-  isDownloadable   Boolean   @default(true)
+  fileType       String    @default("OTHER")
+  fileSize       Int?
+  isDownloadable Boolean   @default(true)
   // LessonAttachmentStatus: ACTIVE | ARCHIVED
-  status           String    @default("ACTIVE")
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  deletedAt        DateTime?
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   lesson       Lesson       @relation(fields: [lessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -1497,11 +1656,11 @@ model SubjectLesson {
   updatedAt           DateTime  @updatedAt
   deletedAt           DateTime?
 
-  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  subject      Subject                @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  lesson       Lesson                 @relation(fields: [lessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  unlockAfter  SubjectLesson?         @relation("UnlockChain", fields: [unlockAfterLessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  unlockedBy   SubjectLesson[]        @relation("UnlockChain")
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject        Subject                 @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lesson         Lesson                  @relation(fields: [lessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  unlockAfter    SubjectLesson?          @relation("UnlockChain", fields: [unlockAfterLessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  unlockedBy     SubjectLesson[]         @relation("UnlockChain")
   lessonProgress StudentLessonProgress[]
 
   @@unique([subjectId, lessonId])
@@ -1510,27 +1669,27 @@ model SubjectLesson {
 }
 
 model StudentLessonProgress {
-  id                String    @id @default(cuid())
-  organizationId    String
-  studentId         String
-  enrollmentId      String
-  subjectId         String
-  lessonId          String
-  subjectLessonId   String?
-  watchedSeconds    Int       @default(0)
-  progressPercentage Decimal  @db.Decimal(5, 2) @default(0)
+  id                 String    @id @default(cuid())
+  organizationId     String
+  studentId          String
+  enrollmentId       String
+  subjectId          String
+  lessonId           String
+  subjectLessonId    String?
+  watchedSeconds     Int       @default(0)
+  progressPercentage Decimal   @default(0) @db.Decimal(5, 2)
   // ProgressStatus: NOT_STARTED | IN_PROGRESS | COMPLETED
-  status            String    @default("NOT_STARTED")
-  completedAt       DateTime?
-  lastAccessedAt    DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  status             String    @default("NOT_STARTED")
+  completedAt        DateTime?
+  lastAccessedAt     DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student        Student        @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  enrollment     Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  lesson         Lesson         @relation(fields: [lessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  subjectLesson  SubjectLesson? @relation(fields: [subjectLessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student       Student        @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment    Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lesson        Lesson         @relation(fields: [lessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subjectLesson SubjectLesson? @relation(fields: [subjectLessonId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([studentId, enrollmentId, lessonId])
   @@map("student_lesson_progress")
@@ -1580,7 +1739,7 @@ model AcademicYear {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   terms              AcademicTerm[]
   holidays           AcademicHoliday[]
   events             AcademicEvent[]
@@ -1611,8 +1770,8 @@ model AcademicTerm {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicYear       AcademicYear       @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear       AcademicYear        @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   events             AcademicEvent[]
   classGroups        ClassGroup[]
   enrollments        Enrollment[]
@@ -1680,25 +1839,25 @@ model AcademicEvent {
 // =============================================================================
 
 model Classroom {
-  id             String    @id @default(cuid())
+  id             String  @id @default(cuid())
   organizationId String
   branchId       String?
 
   code        String
   name        String
-  description String?   @db.NVarChar(Max)
+  description String? @db.NVarChar(Max)
 
   // ClassroomType: STANDARD_ROOM | COMPUTER_LAB | LANGUAGE_LAB | DESIGN_STUDIO |
   //                DRIVING_ROOM | MEETING_ROOM | ONLINE_ROOM | OTHER
-  classroomType String    @default("STANDARD_ROOM")
-  capacity      Int       @default(1)
+  classroomType String @default("STANDARD_ROOM")
+  capacity      Int    @default(1)
 
   location String?
   floor    String?
 
   // MeetingProvider: ZOOM | GOOGLE_MEET | MICROSOFT_TEAMS | CUSTOM
   meetingProvider String?
-  meetingUrl      String?   @db.NVarChar(Max)
+  meetingUrl      String? @db.NVarChar(Max)
 
   // ClassroomStatus: ACTIVE | MAINTENANCE | INACTIVE | ARCHIVED
   status String @default("ACTIVE")
@@ -1745,7 +1904,7 @@ model ClassroomResource {
   classroomId    String
 
   name        String
-  quantity    Int       @default(0)
+  quantity    Int     @default(0)
   description String?
 
   // ClassroomResourceStatus: ACTIVE | INACTIVE | ARCHIVED
@@ -1767,7 +1926,7 @@ model ClassroomMaintenance {
   classroomId    String
 
   title       String
-  description String?   @db.NVarChar(Max)
+  description String?  @db.NVarChar(Max)
   startDate   DateTime
   endDate     DateTime
 
@@ -1808,13 +1967,13 @@ model ClassroomBooking {
   deletedAt DateTime?
   createdBy String?
 
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  classroom      Classroom     @relation(fields: [classroomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  classGroup     ClassGroup?   @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  scheduleSlot   ScheduleSlot? @relation(fields: [scheduleSlotId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicYear   AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicTerm   AcademicTerm? @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classroom    Classroom     @relation(fields: [classroomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup   ClassGroup?   @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  scheduleSlot ScheduleSlot? @relation(fields: [scheduleSlotId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm AcademicTerm? @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([organizationId, classroomId, status])
   @@index([organizationId, academicYearId])
@@ -1826,7 +1985,7 @@ model ClassroomBooking {
 // =============================================================================
 
 model StudentTimelineEvent {
-  id             String    @id @default(cuid())
+  id             String @id @default(cuid())
   organizationId String
   studentId      String
 
@@ -1835,28 +1994,28 @@ model StudentTimelineEvent {
   //   WALLET_DEPOSIT_CREATED | WALLET_CREDIT_APPLIED | WALLET_OVERPAYMENT_CREATED |
   //   LESSON_COMPLETED | CLASS_GROUP_ASSIGNED | CLASSROOM_BOOKING_CHANGED |
   //   NOTIFICATION_SENT | MANUAL_NOTE
-  eventType      String
+  eventType String
 
-  title          String
-  description    String?   @db.NVarChar(Max)
+  title       String
+  description String? @db.NVarChar(Max)
 
   // TimelineReferenceType: ENROLLMENT | INVOICE | PAYMENT | RECEIPT | WALLET |
   //   LESSON | CLASS_GROUP | CLASSROOM_BOOKING | NOTIFICATION | USER | SYSTEM
-  referenceType  String?
-  referenceId    String?
+  referenceType String?
+  referenceId   String?
 
-  sourceEventId  String?   // DomainEvent.id — used for idempotency
-  actorUserId    String?
+  sourceEventId String? // DomainEvent.id — used for idempotency
+  actorUserId   String?
 
   // TimelineVisibility: INTERNAL | STUDENT_VISIBLE
-  visibility     String    @default("INTERNAL")
+  visibility String @default("INTERNAL")
 
-  metadata       String?   @db.NVarChar(Max)
+  metadata String? @db.NVarChar(Max)
 
-  occurredAt     DateTime
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
+  occurredAt DateTime
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -1889,8 +2048,8 @@ model DomainEvent {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  organization  Organization           @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  handlerLogs   DomainEventHandlerLog[]
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  handlerLogs  DomainEventHandlerLog[]
 
   @@index([organizationId, eventType, status])
   @@index([organizationId, aggregateType, aggregateId])
@@ -1927,25 +2086,25 @@ model DomainEventHandlerLog {
 // =============================================================================
 
 model ImportJob {
-  id               String    @id @default(cuid())
-  organizationId   String
+  id                String    @id @default(cuid())
+  organizationId    String
   // ImportJobType: STUDENTS | TEACHERS | ENROLLMENTS | CLASS_GROUPS | COURSES | SUBJECTS
-  type             String    @default("STUDENTS")
+  type              String    @default("STUDENTS")
   // ImportJobStatus: PENDING | VALIDATED | PROCESSING | COMPLETED | FAILED
-  status           String    @default("PENDING")
-  uploadedFileName String
-  totalRows        Int       @default(0)
-  successRows      Int       @default(0)
-  failedRows       Int       @default(0)
-  rowsData         String?   @db.NVarChar(Max)
-  resultData       String?   @db.NVarChar(Max)
-  validationSummary String?  @db.NVarChar(Max)
-  executionSummary  String?  @db.NVarChar(Max)
-  startedAt        DateTime?
-  completedAt      DateTime?
-  uploadedById     String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  status            String    @default("PENDING")
+  uploadedFileName  String
+  totalRows         Int       @default(0)
+  successRows       Int       @default(0)
+  failedRows        Int       @default(0)
+  rowsData          String?   @db.NVarChar(Max)
+  resultData        String?   @db.NVarChar(Max)
+  validationSummary String?   @db.NVarChar(Max)
+  executionSummary  String?   @db.NVarChar(Max)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  uploadedById      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   uploadedBy   User?        @relation(fields: [uploadedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -1979,8 +2138,8 @@ model AssessmentPolicy {
   updatedAt           DateTime  @updatedAt
   deletedAt           DateTime?
 
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levelSubject LevelSubject     @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject LevelSubject          @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   components   AssessmentComponent[]
   assessments  Assessment[]
 
@@ -1996,7 +2155,7 @@ model AssessmentComponent {
   // ComponentType: TEST | QUIZ | EXAM | ASSIGNMENT | PROJECT | ORAL | PRACTICAL | PARTICIPATION | FINAL_EXAM | RECOVERY | OTHER
   componentType      String    @default("TEST")
   weight             Decimal   @db.Decimal(5, 2)
-  maxGrade           Decimal   @db.Decimal(5, 2) @default(20)
+  maxGrade           Decimal   @default(20) @db.Decimal(5, 2)
   order              Int       @default(0)
   isRequired         Boolean   @default(true)
   // AssessmentComponentStatus: ACTIVE | INACTIVE | ARCHIVED
@@ -2005,8 +2164,8 @@ model AssessmentComponent {
   updatedAt          DateTime  @updatedAt
   deletedAt          DateTime?
 
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assessmentPolicy AssessmentPolicy @relation(fields: [assessmentPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentPolicy AssessmentPolicy          @relation(fields: [assessmentPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   assessments      Assessment[]
   gradeResults     StudentAssessmentResult[]
 
@@ -2065,18 +2224,18 @@ model Assessment {
   deletedAt             DateTime?
   createdBy             String?
 
-  organization        Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assessmentPolicy    AssessmentPolicy    @relation(fields: [assessmentPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assessmentComponent AssessmentComponent @relation(fields: [assessmentComponentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assessmentPeriod    AssessmentPeriod    @relation(fields: [assessmentPeriodId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicYear        AcademicYear        @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicTerm        AcademicTerm?       @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  classGroup          ClassGroup          @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  teacher             Teacher?            @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  results              AssessmentResult[]
-  publication          AssessmentPublication?
-  retakes              AssessmentRetake[]
-  gradeResults         StudentAssessmentResult[]
+  organization        Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentPolicy    AssessmentPolicy          @relation(fields: [assessmentPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentComponent AssessmentComponent       @relation(fields: [assessmentComponentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessmentPeriod    AssessmentPeriod          @relation(fields: [assessmentPeriodId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear        AcademicYear              @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm        AcademicTerm?             @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup          ClassGroup                @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacher             Teacher?                  @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  results             AssessmentResult[]
+  publication         AssessmentPublication?
+  retakes             AssessmentRetake[]
+  gradeResults        StudentAssessmentResult[]
 
   @@index([organizationId, classGroupId, status])
   @@index([organizationId, assessmentPeriodId])
@@ -2101,10 +2260,10 @@ model AssessmentResult {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assessment   Assessment   @relation(fields: [assessmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  enrollment   Enrollment?  @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessment   Assessment         @relation(fields: [assessmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student            @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment?        @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   retakes      AssessmentRetake[]
 
   @@unique([assessmentId, studentId])
@@ -2147,10 +2306,10 @@ model StudentSubjectProgress {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student       Student       @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  enrollment    Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levelSubject  LevelSubject  @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject LevelSubject @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([enrollmentId, levelSubjectId])
   @@index([organizationId, studentId])
@@ -2189,7 +2348,6 @@ model AssessmentRetake {
   @@index([organizationId, assessmentId])
   @@map("assessment_retakes")
 }
-
 
 model StudentAssessmentResult {
   id                    String    @id @default(cuid())
@@ -2334,8 +2492,8 @@ model LevelSubjectPrerequisiteGroup {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization Organization                  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levelSubject LevelSubject                  @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization                   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject LevelSubject                   @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   items        LevelSubjectPrerequisiteItem[]
   waivers      PrerequisiteWaiver[]
 
@@ -2420,10 +2578,10 @@ model LevelProgressionPolicy {
   updatedAt                 DateTime  @updatedAt
   deletedAt                 DateTime?
 
-  organization        Organization           @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  course              Course                 @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  fromLevel           CourseLevel            @relation("FromLevel", fields: [fromLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  toLevel             CourseLevel            @relation("ToLevel", fields: [toLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization        Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course              Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fromLevel           CourseLevel               @relation("FromLevel", fields: [fromLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  toLevel             CourseLevel               @relation("ToLevel", fields: [toLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   progressionRequests LevelProgressionRequest[]
 
   @@unique([courseId, fromLevelId, toLevelId])
