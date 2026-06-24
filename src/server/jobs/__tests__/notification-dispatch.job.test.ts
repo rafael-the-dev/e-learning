@@ -29,6 +29,7 @@ describe("runNotificationDispatchJob — org scoping", () => {
       processed: 1,
       sent: 0,
       delivered: 1,
+      failed: 0,
       providerNotConfigured: 0,
       errors: 0,
     });
@@ -49,6 +50,7 @@ describe("runNotificationDispatchJob — org scoping", () => {
       processed: 0,
       sent: 0,
       delivered: 0,
+      failed: 0,
       providerNotConfigured: 0,
       errors: 0,
     });
@@ -68,6 +70,7 @@ describe("runNotificationDispatchJob — org scoping", () => {
       processed: 0,
       sent: 0,
       delivered: 0,
+      failed: 0,
       providerNotConfigured: 0,
       errors: 0,
     });
@@ -88,6 +91,7 @@ describe("runNotificationDispatchJob — limit (test #18)", () => {
       processed: 0,
       sent: 0,
       delivered: 0,
+      failed: 0,
       providerNotConfigured: 0,
       errors: 0,
     });
@@ -104,6 +108,7 @@ describe("runNotificationDispatchJob — limit (test #18)", () => {
       processed: 0,
       sent: 0,
       delivered: 0,
+      failed: 0,
       providerNotConfigured: 0,
       errors: 0,
     });
@@ -120,6 +125,7 @@ describe("runNotificationDispatchJob — limit (test #18)", () => {
       processed: 0,
       sent: 0,
       delivered: 0,
+      failed: 0,
       providerNotConfigured: 0,
       errors: 0,
     });
@@ -135,14 +141,29 @@ describe("runNotificationDispatchJob — aggregation and error isolation", () =>
     const db = makeDb([{ id: "org-1" }, { id: "org-2" }]);
     (getDb as Mock).mockResolvedValue(db);
     (dispatchPendingDeliveries as Mock)
-      .mockResolvedValueOnce({ processed: 2, sent: 1, delivered: 1, providerNotConfigured: 0, errors: 0 })
-      .mockResolvedValueOnce({ processed: 3, sent: 0, delivered: 1, providerNotConfigured: 2, errors: 0 });
+      .mockResolvedValueOnce({ processed: 2, sent: 1, delivered: 1, failed: 0, providerNotConfigured: 0, errors: 0 })
+      .mockResolvedValueOnce({ processed: 3, sent: 0, delivered: 1, failed: 2, providerNotConfigured: 2, errors: 0 });
 
     const result = await runNotificationDispatchJob();
 
-    expect(result).toMatchObject({ processed: 5, sent: 1, delivered: 2, providerNotConfigured: 2, failed: 2 });
+    expect(result).toMatchObject({ processed: 5, sent: 1, delivered: 2, failed: 2, providerNotConfigured: 2 });
     expect(result.startedAt).toBeInstanceOf(Date);
     expect(result.completedAt).toBeInstanceOf(Date);
+  });
+
+  it("sums failed and providerNotConfigured independently (hardening §7)", async () => {
+    const db = makeDb([{ id: "org-1" }, { id: "org-2" }]);
+    (getDb as Mock).mockResolvedValue(db);
+    (dispatchPendingDeliveries as Mock)
+      // org-1: a generic SMTP failure — counts toward failed only.
+      .mockResolvedValueOnce({ processed: 1, sent: 0, delivered: 0, failed: 1, providerNotConfigured: 0, errors: 0 })
+      // org-2: a provider-not-configured failure — counts toward both.
+      .mockResolvedValueOnce({ processed: 1, sent: 0, delivered: 0, failed: 1, providerNotConfigured: 1, errors: 0 });
+
+    const result = await runNotificationDispatchJob();
+
+    expect(result.failed).toBe(2);
+    expect(result.providerNotConfigured).toBe(1);
   });
 
   it("isolates a per-org failure — one org throwing does not abort the batch", async () => {
@@ -150,7 +171,7 @@ describe("runNotificationDispatchJob — aggregation and error isolation", () =>
     (getDb as Mock).mockResolvedValue(db);
     (dispatchPendingDeliveries as Mock)
       .mockRejectedValueOnce(new Error("db hiccup"))
-      .mockResolvedValueOnce({ processed: 1, sent: 0, delivered: 1, providerNotConfigured: 0, errors: 0 });
+      .mockResolvedValueOnce({ processed: 1, sent: 0, delivered: 1, failed: 0, providerNotConfigured: 0, errors: 0 });
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     const result = await runNotificationDispatchJob();
@@ -166,6 +187,7 @@ describe("runNotificationDispatchJob — aggregation and error isolation", () =>
       processed: 1,
       sent: 1,
       delivered: 0,
+      failed: 0,
       providerNotConfigured: 0,
       errors: 0,
     });

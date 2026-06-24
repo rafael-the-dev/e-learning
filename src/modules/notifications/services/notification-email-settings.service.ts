@@ -4,6 +4,7 @@ import {
   upsertByOrganization,
   setEnabled,
   updateTestResult,
+  type NotificationEmailSettingsRawRow,
 } from "@/modules/notifications/repositories/notification-email-settings.repository";
 import { encryptSecret, decryptSecret, SecretEncryptionError } from "@/shared/lib/secret-encryption";
 import { SmtpEmailProvider } from "@/modules/notifications/providers/smtp-email-provider";
@@ -73,8 +74,48 @@ async function requireSettings(organizationId: string): Promise<NotificationEmai
   return settings;
 }
 
+async function requireRawSettings(organizationId: string): Promise<NotificationEmailSettingsRawRow> {
+  const raw = await findRawByOrganization(organizationId);
+  if (!raw) throw new NotFoundError("NotificationEmailSettings", organizationId);
+  return raw;
+}
+
+const REQUIRED_FIELDS_FOR_ENABLE: Array<[keyof NotificationEmailSettingsRawRow, string]> = [
+  ["fromName", "nome do remetente"],
+  ["fromEmail", "email do remetente"],
+  ["smtpHost", "servidor SMTP"],
+  ["smtpPort", "porta SMTP"],
+  ["smtpUsername", "utilizador SMTP"],
+  ["smtpPasswordEncrypted", "palavra-passe SMTP"],
+];
+
+/**
+ * Guards against enabling a half-configured (or unsupported-provider)
+ * settings row — without this, the registry would silently fall back to
+ * NoopEmailProvider at send time, which is safe but leaves "Email ativo"
+ * toggled on with nothing actually working. `smtpPasswordEncrypted` already
+ * covers "password provided at some point" — a fresh password always goes
+ * through `upsertEmailSettings` (which encrypts it onto this same column)
+ * before `enableEmailSettings` is ever called separately, so there is no
+ * extra "or new password" input to thread through here.
+ */
+function assertCompleteForEnable(raw: NotificationEmailSettingsRawRow): void {
+  if (raw.providerType === NotificationEmailProviderType.MICROSOFT_GRAPH) {
+    throw new BusinessRuleError("Microsoft Graph ainda não está disponível.");
+  }
+  if (raw.providerType !== NotificationEmailProviderType.SMTP) {
+    throw new BusinessRuleError("Fornecedor de email não suportado.");
+  }
+
+  const missing = REQUIRED_FIELDS_FOR_ENABLE.filter(([field]) => !raw[field]).map(([, label]) => label);
+  if (missing.length > 0) {
+    throw new BusinessRuleError(`Configuração de email incompleta. Em falta: ${missing.join(", ")}.`);
+  }
+}
+
 export async function enableEmailSettings(organizationId: string): Promise<NotificationEmailSettings> {
-  await requireSettings(organizationId);
+  const raw = await requireRawSettings(organizationId);
+  assertCompleteForEnable(raw);
   return setEnabled(organizationId, true);
 }
 

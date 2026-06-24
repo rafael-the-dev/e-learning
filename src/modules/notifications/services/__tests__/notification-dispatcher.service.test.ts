@@ -75,7 +75,7 @@ describe("dispatchPendingDeliveries — IN_APP (test #25)", () => {
     expect(markDelivered).toHaveBeenCalledWith("delivery-1", ORG_ID);
     expect(markFailed).not.toHaveBeenCalled();
     expect(getProvider).not.toHaveBeenCalled();
-    expect(result).toEqual({ processed: 1, sent: 0, delivered: 1, providerNotConfigured: 0, errors: 0 });
+    expect(result).toEqual({ processed: 1, sent: 0, delivered: 1, failed: 0, providerNotConfigured: 0, errors: 0 });
   });
 });
 
@@ -89,7 +89,7 @@ describe("dispatchPendingDeliveries — external channels (tests #26, #27)", () 
     expect(markSent).not.toHaveBeenCalled();
     expect(markDelivered).not.toHaveBeenCalled();
     expect(markFailed).toHaveBeenCalledWith("delivery-2", ORG_ID, "Fornecedor não configurado", "noop-email");
-    expect(result).toEqual({ processed: 1, sent: 0, delivered: 0, providerNotConfigured: 1, errors: 0 });
+    expect(result).toEqual({ processed: 1, sent: 0, delivered: 0, failed: 1, providerNotConfigured: 1, errors: 0 });
   });
 
   it("returns an empty summary when there is nothing due", async () => {
@@ -98,7 +98,7 @@ describe("dispatchPendingDeliveries — external channels (tests #26, #27)", () 
     const result = await dispatchPendingDeliveries(ORG_ID);
 
     expect(startProcessing).not.toHaveBeenCalled();
-    expect(result).toEqual({ processed: 0, sent: 0, delivered: 0, providerNotConfigured: 0, errors: 0 });
+    expect(result).toEqual({ processed: 0, sent: 0, delivered: 0, failed: 0, providerNotConfigured: 0, errors: 0 });
   });
 });
 
@@ -122,7 +122,7 @@ describe("dispatchPendingDeliveries — per-delivery failure isolation (M2)", ()
     expect(startProcessing).toHaveBeenCalledTimes(3);
     expect(markSent).toHaveBeenCalledTimes(2);
     expect(markDelivered).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({ processed: 3, sent: 0, delivered: 2, providerNotConfigured: 0, errors: 1 });
+    expect(result).toEqual({ processed: 3, sent: 0, delivered: 2, failed: 0, providerNotConfigured: 0, errors: 1 });
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining("delivery-2"),
       expect.any(ConcurrencyError)
@@ -147,7 +147,7 @@ describe("dispatchPendingDeliveries — per-delivery failure isolation (M2)", ()
     const result = await dispatchPendingDeliveries(ORG_ID);
 
     expect(markDelivered).toHaveBeenCalledWith("delivery-2", ORG_ID);
-    expect(result).toEqual({ processed: 2, sent: 0, delivered: 1, providerNotConfigured: 0, errors: 1 });
+    expect(result).toEqual({ processed: 2, sent: 0, delivered: 1, failed: 0, providerNotConfigured: 0, errors: 1 });
   });
 
   it("isolates failures when the resolved provider's send() itself throws (test #12)", async () => {
@@ -163,7 +163,7 @@ describe("dispatchPendingDeliveries — per-delivery failure isolation (M2)", ()
     const result = await dispatchPendingDeliveries(ORG_ID);
 
     expect(markDelivered).toHaveBeenCalledWith("delivery-2", ORG_ID);
-    expect(result).toEqual({ processed: 2, sent: 0, delivered: 1, providerNotConfigured: 0, errors: 1 });
+    expect(result).toEqual({ processed: 2, sent: 0, delivered: 1, failed: 0, providerNotConfigured: 0, errors: 1 });
   });
 });
 
@@ -188,6 +188,7 @@ describe("dispatchPendingDeliveries — provider registry integration (Phase 3.2
     expect(markFailed).toHaveBeenCalledWith("delivery-2", ORG_ID, "Fornecedor não configurado", "not-configured-whatsapp");
     expect(markFailed).toHaveBeenCalledWith("delivery-3", ORG_ID, "Fornecedor não configurado", "not-configured-sms");
     expect(markFailed).toHaveBeenCalledWith("delivery-4", ORG_ID, "Fornecedor não configurado", "not-configured-push");
+    expect(result.failed).toBe(3);
     expect(result.providerNotConfigured).toBe(3);
   });
 
@@ -252,7 +253,7 @@ describe("dispatchPendingDeliveries — status mapping (review fix: success must
     expect(markSent).toHaveBeenCalledWith("delivery-2", ORG_ID, "msg-1", "fake-email");
     expect(markDelivered).not.toHaveBeenCalled();
     expect(markFailed).not.toHaveBeenCalled();
-    expect(result).toEqual({ processed: 1, sent: 1, delivered: 0, providerNotConfigured: 0, errors: 0 });
+    expect(result).toEqual({ processed: 1, sent: 1, delivered: 0, failed: 0, providerNotConfigured: 0, errors: 0 });
   });
 
   it("marks DELIVERED when the provider explicitly confirms delivery (status DELIVERED)", async () => {
@@ -269,7 +270,7 @@ describe("dispatchPendingDeliveries — status mapping (review fix: success must
 
     expect(markSent).toHaveBeenCalledWith("delivery-2", ORG_ID, "msg-2", "fake-email");
     expect(markDelivered).toHaveBeenCalledWith("delivery-2", ORG_ID, "msg-2", "fake-email");
-    expect(result).toEqual({ processed: 1, sent: 0, delivered: 1, providerNotConfigured: 0, errors: 0 });
+    expect(result).toEqual({ processed: 1, sent: 0, delivered: 1, failed: 0, providerNotConfigured: 0, errors: 0 });
   });
 });
 
@@ -345,6 +346,100 @@ describe("dispatchPendingDeliveries — DispatchSummary sent/delivered split (te
 
     const result = await dispatchPendingDeliveries(ORG_ID);
 
-    expect(result).toEqual({ processed: 3, sent: 1, delivered: 1, providerNotConfigured: 1, errors: 0 });
+    expect(result).toEqual({ processed: 3, sent: 1, delivered: 1, failed: 1, providerNotConfigured: 1, errors: 0 });
+  });
+});
+
+describe("dispatchPendingDeliveries — failed vs providerNotConfigured (hardening §7)", () => {
+  it("increments failed but not providerNotConfigured for a generic provider failure", async () => {
+    (findDueDeliveries as Mock).mockResolvedValue([makeDelivery({ id: "delivery-2", channel: "EMAIL" })]);
+    const sendSpy = vi.fn().mockResolvedValue({
+      success: false,
+      provider: "smtp",
+      status: "FAILED",
+      errorCode: "SMTP_AUTH_FAILED",
+      errorMessage: "Falha de autenticação SMTP",
+    });
+    (getProvider as Mock).mockImplementationOnce(() => ({ send: sendSpy }));
+
+    const result = await dispatchPendingDeliveries(ORG_ID);
+
+    expect(result.failed).toBe(1);
+    expect(result.providerNotConfigured).toBe(0);
+  });
+
+  it("increments both failed and providerNotConfigured for a PROVIDER_NOT_CONFIGURED failure", async () => {
+    (findDueDeliveries as Mock).mockResolvedValue([makeDelivery({ id: "delivery-2", channel: "EMAIL" })]);
+    const sendSpy = vi.fn().mockResolvedValue({
+      success: false,
+      provider: "noop-email",
+      status: "FAILED",
+      errorCode: "PROVIDER_NOT_CONFIGURED",
+      errorMessage: "Fornecedor de email não está configurado",
+    });
+    (getProvider as Mock).mockImplementationOnce(() => ({ send: sendSpy }));
+
+    const result = await dispatchPendingDeliveries(ORG_ID);
+
+    expect(result.failed).toBe(1);
+    expect(result.providerNotConfigured).toBe(1);
+  });
+});
+
+describe("dispatchPendingDeliveries — provider cache per dispatch run (hardening §4)", () => {
+  it("resolves the provider once for two EMAIL deliveries in the same org/run", async () => {
+    (findDueDeliveries as Mock).mockResolvedValue([
+      makeDelivery({ id: "delivery-1", channel: "EMAIL" }),
+      makeDelivery({ id: "delivery-2", channel: "EMAIL" }),
+    ]);
+    (getProvider as Mock).mockImplementation(async () => ({
+      send: vi.fn().mockResolvedValue({ success: true, provider: "smtp", status: "SENT" }),
+    }));
+
+    await dispatchPendingDeliveries(ORG_ID);
+
+    expect(getProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves the provider separately per channel even within the same org/run", async () => {
+    (findDueDeliveries as Mock).mockResolvedValue([
+      makeDelivery({ id: "delivery-1", channel: "EMAIL" }),
+      makeDelivery({ id: "delivery-2", channel: "WHATSAPP" }),
+    ]);
+    (getProvider as Mock).mockImplementation(async () => ({
+      send: vi.fn().mockResolvedValue({ success: true, provider: "stub", status: "SENT" }),
+    }));
+
+    await dispatchPendingDeliveries(ORG_ID);
+
+    expect(getProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not share the provider cache across two separate dispatch runs for the same org (test: cache scoped to one run)", async () => {
+    (findDueDeliveries as Mock).mockResolvedValue([makeDelivery({ id: "delivery-1", channel: "EMAIL" })]);
+    (getProvider as Mock).mockImplementation(async () => ({
+      send: vi.fn().mockResolvedValue({ success: true, provider: "smtp", status: "SENT" }),
+    }));
+
+    await dispatchPendingDeliveries(ORG_ID);
+    await dispatchPendingDeliveries(ORG_ID);
+
+    expect(getProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves the provider once per organization across two separate single-org runs (different orgs)", async () => {
+    (getProvider as Mock).mockImplementation(async () => ({
+      send: vi.fn().mockResolvedValue({ success: true, provider: "smtp", status: "SENT" }),
+    }));
+
+    (findDueDeliveries as Mock).mockResolvedValueOnce([makeDelivery({ id: "delivery-1", channel: "EMAIL" })]);
+    await dispatchPendingDeliveries("org-a");
+
+    (findDueDeliveries as Mock).mockResolvedValueOnce([makeDelivery({ id: "delivery-2", channel: "EMAIL" })]);
+    await dispatchPendingDeliveries("org-b");
+
+    expect(getProvider).toHaveBeenCalledTimes(2);
+    expect(getProvider).toHaveBeenCalledWith("EMAIL", "org-a");
+    expect(getProvider).toHaveBeenCalledWith("EMAIL", "org-b");
   });
 });

@@ -21,8 +21,9 @@ export interface NotificationDispatchJobResult {
   processed: number;
   sent: number;
   delivered: number;
-  /** Same value as providerNotConfigured — kept for the route's documented response shape. */
+  /** Every send failure, regardless of errorCode — see DispatchSummary. */
   failed: number;
+  /** Subset of `failed` where errorCode === "PROVIDER_NOT_CONFIGURED" specifically. */
   providerNotConfigured: number;
   errors: number;
   startedAt: Date;
@@ -56,6 +57,7 @@ export async function runNotificationDispatchJob(
   let processed = 0;
   let sent = 0;
   let delivered = 0;
+  let failed = 0;
   let providerNotConfigured = 0;
   let errors = 0;
 
@@ -65,6 +67,7 @@ export async function runNotificationDispatchJob(
       processed += summary.processed;
       sent += summary.sent;
       delivered += summary.delivered;
+      failed += summary.failed;
       providerNotConfigured += summary.providerNotConfigured;
       errors += summary.errors;
     } catch (error) {
@@ -91,7 +94,8 @@ export async function runNotificationDispatchJob(
           processed,
           sent,
           delivered,
-          failed: providerNotConfigured,
+          failed,
+          providerNotConfigured,
           errors,
         }),
       },
@@ -100,5 +104,5 @@ export async function runNotificationDispatchJob(
     // Audit log failure must never abort or alter the job result.
   }
 
-  return { processed, sent, delivered, failed: providerNotConfigured, providerNotConfigured, errors, startedAt, completedAt };
+  return { processed, sent, delivered, failed, providerNotConfigured, errors, startedAt, completedAt };
 }

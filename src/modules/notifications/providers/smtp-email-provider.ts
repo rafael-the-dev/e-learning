@@ -30,6 +30,22 @@ export interface SmtpProviderConfig {
 
 const UNKNOWN_FAILURE_MESSAGE = "Falha desconhecida ao enviar o email";
 
+// Bounds worst-case latency for a single send — without these, a hung/slow
+// SMTP host can block a synchronous dispatch run (and the HTTP route behind
+// it) for nodemailer's much longer defaults (~2 minutes per phase).
+export const SMTP_CONNECTION_TIMEOUT_MS = 15000;
+export const SMTP_GREETING_TIMEOUT_MS = 15000;
+export const SMTP_SOCKET_TIMEOUT_MS = 15000;
+
+const TLS_CERT_ERROR_CODES = [
+  "EPROTO",
+  "CERT_HAS_EXPIRED",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+];
+const CONNECTION_ERROR_CODES = ["ECONNECTION", "ETIMEDOUT", "ESOCKET", "ECONNREFUSED", "EDNS"];
+
 interface NodemailerErrorShape {
   code?: string;
   responseCode?: number;
@@ -39,9 +55,10 @@ interface NodemailerErrorShape {
 /**
  * Maps a nodemailer/SMTP transport error onto one of the categories the
  * admin "Entregas" tab is expected to surface (spec §10) — auth failure,
- * connection failure, rate limiting, or an unknown fallback. Never includes
- * the raw error/stack: that could leak transport internals (host, banner
- * text) into a failureReason shown directly to an organization's admin.
+ * TLS/certificate failure, connection failure, rate limiting, or an unknown
+ * fallback. Never includes the raw error/stack: that could leak transport
+ * internals (host, banner text, certificate details) into a failureReason
+ * shown directly to an organization's admin.
  */
 function mapSendError(error: unknown): { errorCode: string; errorMessage: string } {
   const err = error as NodemailerErrorShape | undefined;
@@ -49,7 +66,10 @@ function mapSendError(error: unknown): { errorCode: string; errorMessage: string
   if (err?.code === "EAUTH") {
     return { errorCode: "SMTP_AUTH_FAILED", errorMessage: "Falha de autenticação SMTP" };
   }
-  if (err?.code && ["ECONNECTION", "ETIMEDOUT", "ESOCKET", "ECONNREFUSED", "EDNS"].includes(err.code)) {
+  if (err?.code && TLS_CERT_ERROR_CODES.includes(err.code)) {
+    return { errorCode: "SMTP_TLS_ERROR", errorMessage: "Erro de TLS/certificado na ligação SMTP" };
+  }
+  if (err?.code && CONNECTION_ERROR_CODES.includes(err.code)) {
     return { errorCode: "SMTP_CONNECTION_FAILED", errorMessage: "Falha de ligação ao servidor SMTP" };
   }
   if (err?.responseCode === 421 || err?.responseCode === 450 || err?.responseCode === 451) {
@@ -79,6 +99,15 @@ export class SmtpEmailProvider implements EmailProvider {
       port: this.config.port,
       secure: this.config.secure,
       auth: { user: this.config.username, pass: this.config.password },
+      connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+      greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+      socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
+      // secure=false is the typical port-587 STARTTLS case — without
+      // requireTLS, nodemailer will still send if the STARTTLS upgrade is
+      // stripped (downgrade to plaintext) instead of failing the send.
+      // secure=true already negotiates TLS from the first byte, so this is
+      // never set in that case.
+      ...(this.config.secure ? {} : { requireTLS: true }),
     });
 
     try {
@@ -95,6 +124,10 @@ export class SmtpEmailProvider implements EmailProvider {
     } catch (error) {
       const { errorCode, errorMessage } = mapSendError(error);
       return { success: false, provider: this.name, errorCode, errorMessage };
+    } finally {
+      // Non-pooled transports auto-close after sendMail, but closing
+      // explicitly is cheaper to reason about than relying on that default.
+      transport.close?.();
     }
   }
 

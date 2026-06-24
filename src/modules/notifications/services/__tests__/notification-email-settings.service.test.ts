@@ -121,9 +121,9 @@ describe("upsertEmailSettings — encryption (tests #1, #5)", () => {
   });
 });
 
-describe("enableEmailSettings / disableEmailSettings (test #4)", () => {
-  it("enables an existing settings row", async () => {
-    (findByOrganization as Mock).mockResolvedValue(makeDto());
+describe("enableEmailSettings — completeness validation (hardening §3)", () => {
+  it("enables a complete SMTP settings row", async () => {
+    (findRawByOrganization as Mock).mockResolvedValue(makeRawRow());
     (setEnabled as Mock).mockResolvedValue(makeDto({ isEnabled: true }));
 
     const result = await enableEmailSettings(ORG_ID);
@@ -132,8 +132,55 @@ describe("enableEmailSettings / disableEmailSettings (test #4)", () => {
     expect(result.isEnabled).toBe(true);
   });
 
-  it("disables an existing settings row", async () => {
-    (findByOrganization as Mock).mockResolvedValue(makeDto({ isEnabled: true }));
+  it("can enable with an existing encrypted password (no new password typed)", async () => {
+    (findRawByOrganization as Mock).mockResolvedValue(makeRawRow({ smtpPasswordEncrypted: "already-stored" }));
+    (setEnabled as Mock).mockResolvedValue(makeDto({ isEnabled: true }));
+
+    await enableEmailSettings(ORG_ID);
+
+    expect(setEnabled).toHaveBeenCalledWith(ORG_ID, true);
+  });
+
+  it("throws NotFoundError when no settings row exists yet", async () => {
+    (findRawByOrganization as Mock).mockResolvedValue(null);
+    await expect(enableEmailSettings(ORG_ID)).rejects.toThrow(NotFoundError);
+    expect(setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("cannot enable without smtpHost", async () => {
+    (findRawByOrganization as Mock).mockResolvedValue(makeRawRow({ smtpHost: null }));
+    await expect(enableEmailSettings(ORG_ID)).rejects.toThrow(BusinessRuleError);
+    expect(setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("cannot enable without smtpUsername", async () => {
+    (findRawByOrganization as Mock).mockResolvedValue(makeRawRow({ smtpUsername: null }));
+    await expect(enableEmailSettings(ORG_ID)).rejects.toThrow(BusinessRuleError);
+    expect(setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("cannot enable without fromEmail", async () => {
+    (findRawByOrganization as Mock).mockResolvedValue(makeRawRow({ fromEmail: "" }));
+    await expect(enableEmailSettings(ORG_ID)).rejects.toThrow(BusinessRuleError);
+    expect(setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("cannot enable without a password when no encrypted password exists", async () => {
+    (findRawByOrganization as Mock).mockResolvedValue(makeRawRow({ smtpPasswordEncrypted: null }));
+    await expect(enableEmailSettings(ORG_ID)).rejects.toThrow(BusinessRuleError);
+    expect(setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("cannot enable MICROSOFT_GRAPH yet", async () => {
+    (findRawByOrganization as Mock).mockResolvedValue(makeRawRow({ providerType: "MICROSOFT_GRAPH" }));
+    await expect(enableEmailSettings(ORG_ID)).rejects.toThrow("Microsoft Graph ainda não está disponível.");
+    expect(setEnabled).not.toHaveBeenCalled();
+  });
+});
+
+describe("disableEmailSettings", () => {
+  it("disables an existing settings row regardless of completeness", async () => {
+    (findByOrganization as Mock).mockResolvedValue(makeDto({ isEnabled: true, smtpHost: null }));
     (setEnabled as Mock).mockResolvedValue(makeDto({ isEnabled: false }));
 
     const result = await disableEmailSettings(ORG_ID);
@@ -144,7 +191,7 @@ describe("enableEmailSettings / disableEmailSettings (test #4)", () => {
 
   it("throws NotFoundError when no settings row exists yet", async () => {
     (findByOrganization as Mock).mockResolvedValue(null);
-    await expect(enableEmailSettings(ORG_ID)).rejects.toThrow(NotFoundError);
+    await expect(disableEmailSettings(ORG_ID)).rejects.toThrow(NotFoundError);
     expect(setEnabled).not.toHaveBeenCalled();
   });
 });

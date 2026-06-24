@@ -10,7 +10,12 @@ vi.mock("nodemailer", () => ({
   createTransport,
 }));
 
-import { SmtpEmailProvider } from "../smtp-email-provider";
+import {
+  SmtpEmailProvider,
+  SMTP_CONNECTION_TIMEOUT_MS,
+  SMTP_GREETING_TIMEOUT_MS,
+  SMTP_SOCKET_TIMEOUT_MS,
+} from "../smtp-email-provider";
 
 const CONFIG = {
   host: "smtp.example.com",
@@ -22,9 +27,11 @@ const CONFIG = {
   fromEmail: "noreply@escola.pt",
 };
 
+const close = vi.fn();
+
 beforeEach(() => {
   vi.clearAllMocks();
-  createTransport.mockReturnValue({ sendMail });
+  createTransport.mockReturnValue({ sendMail, close });
 });
 
 describe("SmtpEmailProvider.sendEmail — success (test #6)", () => {
@@ -40,6 +47,9 @@ describe("SmtpEmailProvider.sendEmail — success (test #6)", () => {
       port: CONFIG.port,
       secure: CONFIG.secure,
       auth: { user: CONFIG.username, pass: CONFIG.password },
+      connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+      greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+      socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
     });
   });
 
@@ -63,6 +73,84 @@ describe("SmtpEmailProvider.sendEmail — success (test #6)", () => {
   });
 });
 
+describe("SmtpEmailProvider — timeouts (Phase 3.2B hardening §1)", () => {
+  it("passes connectionTimeout/greetingTimeout/socketTimeout to createTransport", async () => {
+    sendMail.mockResolvedValue({ messageId: "msg-1" });
+    const provider = new SmtpEmailProvider(CONFIG);
+
+    await provider.sendEmail({ to: "student@example.com", subject: "Assunto", text: "Corpo" });
+
+    const options = createTransport.mock.calls[0][0];
+    expect(options.connectionTimeout).toBe(15000);
+    expect(options.greetingTimeout).toBe(15000);
+    expect(options.socketTimeout).toBe(15000);
+  });
+
+  it("never omits any of the three timeout values", async () => {
+    sendMail.mockResolvedValue({ messageId: "msg-1" });
+    const provider = new SmtpEmailProvider(CONFIG);
+
+    await provider.sendEmail({ to: "student@example.com", subject: "Assunto", text: "Corpo" });
+
+    const options = createTransport.mock.calls[0][0];
+    expect(options.connectionTimeout).not.toBeUndefined();
+    expect(options.greetingTimeout).not.toBeUndefined();
+    expect(options.socketTimeout).not.toBeUndefined();
+  });
+});
+
+describe("SmtpEmailProvider — requireTLS (Phase 3.2B hardening §2)", () => {
+  it("sets requireTLS=true when smtpSecure is false (STARTTLS downgrade guard)", async () => {
+    sendMail.mockResolvedValue({ messageId: "msg-1" });
+    const provider = new SmtpEmailProvider({ ...CONFIG, secure: false });
+
+    await provider.sendEmail({ to: "student@example.com", subject: "Assunto", text: "Corpo" });
+
+    const options = createTransport.mock.calls[0][0];
+    expect(options.requireTLS).toBe(true);
+  });
+
+  it("does not force requireTLS when smtpSecure is true", async () => {
+    sendMail.mockResolvedValue({ messageId: "msg-1" });
+    const provider = new SmtpEmailProvider({ ...CONFIG, secure: true });
+
+    await provider.sendEmail({ to: "student@example.com", subject: "Assunto", text: "Corpo" });
+
+    const options = createTransport.mock.calls[0][0];
+    expect(options.requireTLS).toBeUndefined();
+  });
+});
+
+describe("SmtpEmailProvider — transport cleanup (Phase 3.2B hardening §6)", () => {
+  it("closes the transport after a successful send", async () => {
+    sendMail.mockResolvedValue({ messageId: "msg-1" });
+    const provider = new SmtpEmailProvider(CONFIG);
+
+    await provider.sendEmail({ to: "student@example.com", subject: "Assunto", text: "Corpo" });
+
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the transport after a failed send", async () => {
+    sendMail.mockRejectedValue({ code: "EAUTH" });
+    const provider = new SmtpEmailProvider(CONFIG);
+
+    await provider.sendEmail({ to: "student@example.com", subject: "Assunto", text: "Corpo" });
+
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throw when the transport has no close() method", async () => {
+    createTransport.mockReturnValue({ sendMail });
+    sendMail.mockResolvedValue({ messageId: "msg-1" });
+    const provider = new SmtpEmailProvider(CONFIG);
+
+    await expect(
+      provider.sendEmail({ to: "student@example.com", subject: "Assunto", text: "Corpo" })
+    ).resolves.toMatchObject({ success: true });
+  });
+});
+
 describe("SmtpEmailProvider.sendEmail — failure mapping (test #7)", () => {
   it("maps EAUTH to SMTP_AUTH_FAILED", async () => {
     sendMail.mockRejectedValue({ code: "EAUTH", message: "invalid login" });
@@ -74,6 +162,20 @@ describe("SmtpEmailProvider.sendEmail — failure mapping (test #7)", () => {
     expect(result.errorCode).toBe("SMTP_AUTH_FAILED");
     expect(result.errorMessage).toBe("Falha de autenticação SMTP");
   });
+
+  it.each(["EPROTO", "CERT_HAS_EXPIRED", "SELF_SIGNED_CERT_IN_CHAIN", "DEPTH_ZERO_SELF_SIGNED_CERT", "UNABLE_TO_VERIFY_LEAF_SIGNATURE"])(
+    "maps %s to SMTP_TLS_ERROR with a safe message (hardening §5)",
+    async (code) => {
+      sendMail.mockRejectedValue({ code, message: `${code}: certificate chain detail leak attempt` });
+      const provider = new SmtpEmailProvider(CONFIG);
+
+      const result = await provider.sendEmail({ to: "student@example.com", subject: "Assunto", text: "Corpo" });
+
+      expect(result.errorCode).toBe("SMTP_TLS_ERROR");
+      expect(result.errorMessage).toBe("Erro de TLS/certificado na ligação SMTP");
+      expect(result.errorMessage).not.toContain("certificate chain detail leak attempt");
+    }
+  );
 
   it.each(["ECONNECTION", "ETIMEDOUT", "ESOCKET", "ECONNREFUSED"])(
     "maps %s to SMTP_CONNECTION_FAILED",
