@@ -437,6 +437,9 @@ export const PERMISSIONS = {
 
   // Notifications — Phase 3.2B Email Settings
   NOTIFICATIONS_MANAGE_EMAIL_SETTINGS: "notifications.manageEmailSettings",
+
+  // Notifications — Phase 3.3 Operations Dashboard
+  NOTIFICATIONS_VIEW_OPERATIONS: "notifications.viewOperations",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

@@ -280,3 +280,124 @@ export const NOTIFICATION_EMAIL_TEST_STATUS_LABELS: Record<NotificationEmailTest
   SUCCESS: "Sucesso",
   FAILED: "Falhou",
 };
+
+// =============================================================================
+// PHASE 3.3 — DELIVERY OPERATIONS DASHBOARD
+// =============================================================================
+
+/**
+ * Local to this module rather than imported from the dashboard module's
+ * DashboardSeverity — same 4 literal values, kept independent so this module
+ * has no dependency on src/modules/dashboard.
+ */
+export type NotificationOperationsSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+
+export const NOTIFICATION_OPERATIONS_SEVERITY_LABELS: Record<NotificationOperationsSeverity, string> = {
+  CRITICAL: "Crítico",
+  HIGH: "Alto",
+  MEDIUM: "Médio",
+  LOW: "Baixo",
+};
+
+/**
+ * Pending/Processing/Retry Backlog are always current-state (ignore the
+ * selected period). Sent/Delivered/Failed/Cancelled/SuccessRate/AverageAttempts
+ * are period-based (scoped to the dashboard's date range) — see
+ * docs/notifications-center.md "Queue-state vs period metrics".
+ */
+export interface NotificationOperationsKpis {
+  pending: number;
+  processing: number;
+  sent: number;
+  delivered: number;
+  failed: number;
+  cancelled: number;
+  successRate: number;
+  retryBacklog: number;
+  averageAttempts: number;
+}
+
+export interface DeliveryVolumePoint {
+  date: string;
+  sent: number;
+  delivered: number;
+  failed: number;
+  pendingCreated: number;
+}
+
+export interface DeliveryStatusDistributionPoint {
+  status: NotificationDeliveryStatus;
+  count: number;
+}
+
+export interface ChannelHealthPoint {
+  channel: NotificationChannel;
+  successCount: number;
+  failureCount: number;
+  successRate: number;
+}
+
+export interface FailureReasonPoint {
+  failureReason: string;
+  count: number;
+}
+
+export interface EventVolumePoint {
+  type: string;
+  count: number;
+}
+
+export type DeliveryOperationsWatchlistType =
+  | "TERMINAL_FAILURES"
+  | "EMAIL_PROVIDER_NOT_CONFIGURED"
+  | "EMAIL_AUTH_OR_CONFIG_ISSUE"
+  | "EMAIL_ENABLED_BUT_REPEATEDLY_FAILING"
+  | "STALE_RETRYABLE_FAILURES"
+  | "RETRY_BACKLOG_HIGH"
+  | "STUCK_PROCESSING"
+  | "EMAIL_DISABLED_BUT_RULE_ENABLED"
+  | "HIGH_CHANNEL_FAILURE_RATE"
+  | "HIGH_PENDING_VOLUME";
+
+export interface DeliveryOperationsWatchlistItem {
+  id: string;
+  severity: NotificationOperationsSeverity;
+  type: DeliveryOperationsWatchlistType;
+  channel?: NotificationChannel;
+  count: number;
+  description: string;
+  recommendedAction: string;
+  link: string;
+}
+
+export interface ProblemDeliveryRow {
+  id: string;
+  createdAt: Date;
+  notificationTitle: string | null;
+  notificationType: string | null;
+  channel: NotificationChannel;
+  recipient: string;
+  status: NotificationDeliveryStatus;
+  attempts: number;
+  maxAttempts: number;
+  nextAttemptAt: Date | null;
+  failureReason: string | null;
+}
+
+/** Filters for the "Recent Problem Deliveries" table — independent of the dashboard's own date range. */
+export interface ProblemDeliveryFilters {
+  status?: NotificationDeliveryStatus;
+  channel?: NotificationChannel;
+  failureReason?: string;
+  eventType?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  page?: number;
+  pageSize?: number;
+}
+
+/** Shared date-range filter for the dashboard's KPIs (period portion), charts and table. */
+export interface NotificationOperationsDateRange {
+  dateFrom: Date;
+  dateTo: Date;
+}

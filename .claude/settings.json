@@ -26,7 +26,21 @@
       "Bash(cd \"/c/salc/web/mine/e-learning\" && cat eslint.config.* 2>/dev/null | head -60)",
       "Read(//c/c/salc/web/mine/**)",
       "Bash(grep -rn '$transaction' /c/salc/web/mine/e-learning/src/modules/notifications/)",
-      "Bash(pnpm db:generate)"
+      "Bash(pnpm db:generate)",
+      "Skill(agent-browser)",
+      "Skill(agent-browser:*)",
+      "Bash(agent-browser snapshot *)",
+      "Bash(agent-browser close *)",
+      "Bash(agent-browser open *)",
+      "Bash(agent-browser fill *)",
+      "Bash(agent-browser click *)",
+      "PowerShell(\\(Get-PSDrive C\\).Free / 1GB)",
+      "Read(//c/Users/rtivane/AppData/Local/Temp/**)",
+      "Bash(agent-browser console *)",
+      "Bash(agent-browser wait *)",
+      "Bash(agent-browser get *)",
+      "PowerShell(Stop-Process -Id 37708,35340,34440 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(\"stopped\")"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\settings\\roles\\[roleId]"

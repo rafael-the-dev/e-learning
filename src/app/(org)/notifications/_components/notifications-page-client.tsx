@@ -14,6 +14,7 @@ import { NotificationTemplateList } from "@/modules/notifications/components/not
 import { NotificationRuleList } from "@/modules/notifications/components/notification-rule-list";
 import { NotificationDeliveryTable } from "@/modules/notifications/components/notification-delivery-table";
 import { NotificationEmailSettingsPanel } from "@/modules/notifications/components/notification-email-settings-panel";
+import { NotificationOperationsDashboard } from "@/modules/notifications/components/notification-operations-dashboard";
 import {
   markNotificationReadAction,
   markAllNotificationsReadAction,
@@ -25,22 +26,39 @@ import type {
   NotificationEventRule,
   NotificationDelivery,
   NotificationEmailSettings,
+  NotificationOperationsKpis,
+  DeliveryVolumePoint,
+  DeliveryStatusDistributionPoint,
+  ChannelHealthPoint,
+  FailureReasonPoint,
+  EventVolumePoint,
+  DeliveryOperationsWatchlistItem,
+  ProblemDeliveryRow,
 } from "@/modules/notifications/types";
 import type { PaginatedResult } from "@/shared/types/common";
 
 interface Props {
-  activeTab: "inbox" | "templates" | "rules" | "deliveries" | "email";
+  activeTab: "inbox" | "templates" | "rules" | "deliveries" | "email" | "operations";
   canManageTemplates: boolean;
   canManageRules: boolean;
   canViewDeliveries: boolean;
   canRetryDelivery: boolean;
   canCancelDelivery: boolean;
   canManageEmailSettings: boolean;
+  canViewOperations: boolean;
   result: PaginatedResult<Notification>;
   templates: NotificationTemplate[];
   rules: NotificationEventRule[];
   deliveries: PaginatedResult<NotificationDelivery>;
   emailSettings: NotificationEmailSettings | null;
+  operationsKpis: NotificationOperationsKpis | null;
+  dailyVolume: DeliveryVolumePoint[];
+  statusDistribution: DeliveryStatusDistributionPoint[];
+  channelHealth: ChannelHealthPoint[];
+  failureReasons: FailureReasonPoint[];
+  topEvents: EventVolumePoint[];
+  operationsWatchlist: DeliveryOperationsWatchlistItem[];
+  problemDeliveries: PaginatedResult<ProblemDeliveryRow>;
   status?: string;
   severity?: string;
   type?: string;
@@ -48,6 +66,12 @@ interface Props {
   dateTo?: string;
   deliveryChannel?: string;
   deliveryRecipient?: string;
+  opsDateFrom?: string;
+  opsDateTo?: string;
+  opsStatus?: string;
+  opsChannel?: string;
+  opsFailureReason?: string;
+  opsEventType?: string;
 }
 
 export function NotificationsPageClient({
@@ -58,11 +82,20 @@ export function NotificationsPageClient({
   canRetryDelivery,
   canCancelDelivery,
   canManageEmailSettings,
+  canViewOperations,
   result,
   templates,
   rules,
   deliveries,
   emailSettings,
+  operationsKpis,
+  dailyVolume,
+  statusDistribution,
+  channelHealth,
+  failureReasons,
+  topEvents,
+  operationsWatchlist,
+  problemDeliveries,
   status,
   severity,
   type,
@@ -70,6 +103,12 @@ export function NotificationsPageClient({
   dateTo,
   deliveryChannel,
   deliveryRecipient,
+  opsDateFrom,
+  opsDateTo,
+  opsStatus,
+  opsChannel,
+  opsFailureReason,
+  opsEventType,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -106,7 +145,7 @@ export function NotificationsPageClient({
     router.push(tab === "inbox" ? pathname : `${pathname}?tab=${tab}`);
   }
 
-  const showManageTabs = canManageTemplates || canManageRules || canViewDeliveries || canManageEmailSettings;
+  const showManageTabs = canManageTemplates || canManageRules || canViewDeliveries || canManageEmailSettings || canViewOperations;
 
   return (
     <>
@@ -131,6 +170,7 @@ export function NotificationsPageClient({
               {canManageRules && <TabsTrigger value="rules">Regras</TabsTrigger>}
               {canViewDeliveries && <TabsTrigger value="deliveries">Entregas</TabsTrigger>}
               {canManageEmailSettings && <TabsTrigger value="email">Email</TabsTrigger>}
+              {canViewOperations && <TabsTrigger value="operations">Operações</TabsTrigger>}
             </TabsList>
           )}
 
@@ -208,6 +248,39 @@ export function NotificationsPageClient({
                 </CardHeader>
                 <CardContent>
                   <NotificationEmailSettingsPanel settings={emailSettings} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {canViewOperations && operationsKpis && (
+            <TabsContent value="operations">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Operações de Notificações</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Estado de entrega, falhas, filas e saúde dos canais.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <NotificationOperationsDashboard
+                    kpis={operationsKpis}
+                    dailyVolume={dailyVolume}
+                    statusDistribution={statusDistribution}
+                    channelHealth={channelHealth}
+                    failureReasons={failureReasons}
+                    topEvents={topEvents}
+                    watchlist={operationsWatchlist}
+                    problemDeliveries={problemDeliveries}
+                    defaultDateFrom={opsDateFrom}
+                    defaultDateTo={opsDateTo}
+                    defaultStatus={opsStatus}
+                    defaultChannel={opsChannel}
+                    defaultFailureReason={opsFailureReason}
+                    defaultEventType={opsEventType}
+                    canRetryDelivery={canRetryDelivery}
+                    canCancelDelivery={canCancelDelivery}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>

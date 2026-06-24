@@ -186,6 +186,117 @@ The dispatcher (`resolveFailureReason` in `notification-dispatcher.service.ts`) 
 
 Provider-level `errorMessage`/`errorCode` strings (e.g. `NoopEmailProvider`'s `"Fornecedor de email não está configurado"`, `NotConfiguredProvider`'s per-channel message) are internal diagnostics, not UI copy — the dispatcher's mapping above is the only thing that produces the Portuguese text actually shown in the admin "Entregas" tab. A real provider's own error text (Phase 3.2B — e.g. Resend's API error message) will often be in English and must go through this same mapping rather than being rendered raw.
 
+## Phase 3.3 Scope — Delivery Operations Dashboard
+
+Phase 3.3 adds an **operational dashboard** for delivery health on top of the Phase 3.1/3.2 delivery infrastructure — no new providers, no new channels, no queue (BullMQ or otherwise). It answers six operational questions purely from data already collected by `NotificationDelivery`/`Notification`/`NotificationEventRule`/`NotificationEmailSettings`: are notifications being delivered, which channels are failing, which organizations have misconfigured providers, are retries backing up, which events generate the most notifications, and is reliability improving or degrading.
+
+Explicitly **out of scope**: Microsoft Graph, WhatsApp, SMS, Push providers; marketing campaigns; new delivery channels; a job queue. This is a read-only dashboard (plus the pre-existing retry/cancel row actions) — it does not change how anything is delivered.
+
+### Route — "Operações" tab
+
+`/notifications?tab=operations`, alongside the existing Inbox/Modelos/Regras/Entregas/Email tabs. Gated by a new permission, **not** reused from `NOTIFICATIONS_VIEW_DELIVERIES` — operations data aggregates across every delivery in the organization (health/trend, not row-level), which is a strictly broader visibility surface than the Entregas tab's own row list.
+
+### Permission
+
+`NOTIFICATIONS_VIEW_OPERATIONS` (`notifications.viewOperations`) — granted to `ORG_ADMIN`/`SUPER_ADMIN` only (via the existing "every permission except `organizations.delete`" wildcard for `ORG_ADMIN`, and the full-catalog grant for `SUPER_ADMIN`). **Not** granted to `SECRETARY` by default (the spec marks this "optional, no by default" — unlike `NOTIFICATIONS_VIEW_DELIVERIES`, which SECRETARY does hold), and never to `TEACHER`/`STUDENT`. Retry/cancel row actions on the Problem Deliveries table reuse the existing `NOTIFICATIONS_RETRY_DELIVERY`/`NOTIFICATIONS_CANCEL_DELIVERY` permissions unchanged. Pinned by `src/server/auth/__tests__/notifications-view-operations-permission.test.ts` (catalog registration + exact role grants), mirroring the existing `closing-permission.test.ts` pattern — this codebase has no component-rendering test harness (no `@testing-library/react`/jsdom), so the "Operações" tab's JSX visibility (a single `canViewOperations &&` guard around this same permission check) isn't separately rendered-tested; the permission-grant test is what actually matters.
+
+### Queue-state vs period metrics
+
+Every number on this dashboard is one of two kinds, and the distinction matters because they can legitimately disagree with each other:
+
+- **Queue-state** — Pending, Processing, and Retry Backlog (3 of the 8 KPI cards) always reflect the live, current row counts, **ignoring** the dashboard's selected date range. A queue is either backed up right now or it isn't; filtering it by "deliveries created in March" would misrepresent today's operational state.
+- **Period-based** — Sent, Delivered, Failed, Cancelled, Success Rate, Average Attempts (the remaining KPI cards), and all 5 charts are scoped to the selected date range (`createdAt` between `dateFrom`/`dateTo`, default last 30 days). The Status Distribution donut is also period-based and includes all 6 statuses — so its "Pendente" slice (pending deliveries *created* in the period) is a different number from the queue-state "Pendentes" KPI card (pending deliveries *right now*) by design, not a bug.
+
+The Recent Problem Deliveries table has its **own**, independent filter set (status/channel/failure reason/event type/date range, all `ops`-prefixed query params distinct from the page's other tabs) — its date range defaults to the same dashboard period but can be changed without affecting the KPIs/charts.
+
+**`opsDateTo` is normalized to end-of-day.** A date-only `<input type="date">` value (e.g. `"2026-06-24"`) parses to local midnight — comparing `createdAt <= dateTo` against that raw value would silently exclude every delivery created later that same day. `src/modules/notifications/lib/operations-date-range.ts#endOfDay` sets the parsed `opsDateTo` to `23:59:59.999` before it reaches any query (page-level fix, so it covers the KPIs, all 5 charts, and the Problem Deliveries table in one place); the *default* range (no query param) is unaffected — it already uses `new Date()` (the current instant), which is always inclusive of "now." Changing either date input also resets the Problem Deliveries table's `opsPage` back to `"1"`, so narrowing the range can't leave the table stranded on a now-out-of-range page.
+
+### KPIs
+
+8 cards (`NotificationOperationsKpis`, `notification-operations.service.ts#getOperationsKpis`):
+
+| Card | Formula | Scope |
+|---|---|---|
+| Pendentes | `status = PENDING` | current-state |
+| Em Processamento | `status = PROCESSING` | current-state |
+| Enviadas | `status = SENT` | period |
+| Entregues | `status = DELIVERED` | period |
+| Falhadas | `status = FAILED` | period |
+| Canceladas | `status = CANCELLED` | period |
+| Taxa de Sucesso | `(SENT + DELIVERED) / (SENT + DELIVERED + FAILED + PENDING + PROCESSING) * 100` — i.e. every non-cancelled delivery in the period | period |
+| Lista de Reenvio | `status = FAILED AND attempts < maxAttempts AND (nextAttemptAt IS NULL OR nextAttemptAt <= now)` | current-state |
+
+A 9th, optional card (**Tentativas Médias** — average `attempts`, period-scoped) is also shown, per the spec's "Optional: Average Attempts." The spec leaves this KPI's exact formula undefined; `getAverageAttempts` deliberately averages `attempts` across **every** delivery created in the period, including never-attempted `PENDING` rows (`attempts: 0`) — it's an unweighted "how many attempts does an average delivery in this window carry" snapshot, not a "how many retries does a typical failure need" metric. Documented here rather than left implicit.
+
+### Charts
+
+All 5 read from `notification-operations.repository.ts`, every one SQL-aggregated (`groupBy`/`aggregate`/`$queryRaw` — never a raw-row `findMany` followed by JS counting):
+
+1. **Volume Diário de Entregas** (line) — 4 series (`sent`/`delivered`/`failed`/`pendingCreated`) over the period, one day per point. Each series is its own `$queryRaw` `GROUP BY FORMAT(<timestamp column>, 'yyyy-MM-dd')` — `pendingCreated` groups by `createdAt`, `sent`/`delivered`/`failed` group by `sentAt`/`deliveredAt`/`failedAt` respectively (so a delivery created on day 1 but not sent until day 2 counts as "created" on day 1 and "sent" on day 2, not both on day 1). The 4 per-metric maps are merged and zero-filled across every day in the range in JS — that's filling gaps in an already-aggregated, day-bounded series, not grouping raw rows.
+2. **Distribuição por Estado** (donut) — single `groupBy(["status"])` over the period, all 6 statuses.
+3. **Saúde por Canal** (bar) — single `groupBy(["channel", "status"])` over the period; the at-most-30-row result (5 channels × 6 statuses) is reduced into per-channel success/failure counts and a success rate in JS — reducing an aggregate, not raw deliveries.
+4. **Motivos de Falha** (horizontal bar, top 10) — `groupBy(["failureReason"])` where `status = FAILED AND failureReason IS NOT NULL`, ordered `orderBy: { _count: { failureReason: "desc" } }` and capped with `take: 10` — sorting and the top-10 cap both happen in the `groupBy` call itself (SQL-side), not in JS.
+5. **Principais Eventos** (horizontal bar, top 10) — `groupBy(["type"])` on the **`Notification`** table (not `NotificationDelivery`) over the period, `orderBy: { _count: { type: "desc" } }`, `take: 10` — same SQL-side ordering/cap as Motivos de Falha. "Top events" is a property of notifications, not of any one channel's delivery attempts.
+
+### Watchlist — `DeliveryOperationsWatchlistItem[]`
+
+`getDeliveryOperationsWatchlist(organizationId, now)` composes the repository's single-purpose counts into a flat, severity-sorted list (CRITICAL → HIGH → MEDIUM → LOW). Every threshold below is a named constant in `notification-operations.service.ts`:
+
+| Severity | Type | Trigger |
+|---|---|---|
+| CRITICAL | `TERMINAL_FAILURES` | `FAILED` with `attempts >= maxAttempts` (raw SQL — compares two columns of the same row) |
+| CRITICAL | `EMAIL_PROVIDER_NOT_CONFIGURED` | EMAIL `FAILED` with `failureReason` exactly `"Fornecedor não configurado"` |
+| CRITICAL | `EMAIL_AUTH_OR_CONFIG_ISSUE` | EMAIL `FAILED` with `failureReason` containing `"autenticação"` or `"TLS/certificado"` (the SMTP provider's Portuguese auth/TLS error strings), excluding the exact "not configured" string above |
+| CRITICAL | `EMAIL_ENABLED_BUT_REPEATEDLY_FAILING` | `NotificationEmailSettings.isEnabled = true` **and** ≥ 5 EMAIL `FAILED` rows in the last 24h |
+| HIGH | `STALE_RETRYABLE_FAILURES` | `FAILED`, `attempts < maxAttempts`, `createdAt` older than 24h (raw SQL) |
+| HIGH | `RETRY_BACKLOG_HIGH` | Retry backlog count (same formula as the KPI) exceeds 50 |
+| HIGH | `STUCK_PROCESSING` | `status = PROCESSING` with `lastAttemptAt` (or no `lastAttemptAt` at all) older than 30 minutes |
+| MEDIUM | `EMAIL_DISABLED_BUT_RULE_ENABLED` | Email settings missing/disabled **and** at least one enabled `NotificationEventRule` still lists `EMAIL` in its `channels` |
+| MEDIUM | `HIGH_CHANNEL_FAILURE_RATE` | Any non-`IN_APP` channel with ≥ 10 deliveries in the trailing 7 days and a failure rate > 20% — one item per qualifying channel |
+| LOW | `HIGH_PENDING_VOLUME` | Current `PENDING` count > 20 |
+
+`IN_APP` is excluded from `HIGH_CHANNEL_FAILURE_RATE` — it never goes through a provider and is always `DELIVERED` immediately, so a "failure rate" for it is meaningless. The `EMAIL_DISABLED_BUT_RULE_ENABLED` check reuses `notification-event-rule.repository.ts#findManyRules` directly (already parses `channels` from JSON) rather than re-querying — bounded by the event catalog size (a handful of rows per organization), not the delivery table. Columns rendered: Severidade, Tipo, Canal, Contagem, Descrição, Ação Recomendada, Link — `recommendedAction` is one of "Ver Entregas Falhadas" / "Ver Entregas Pendentes" / "Ver Entregas em Processamento" / "Abrir Configurações de Email" / "Reenviar Falhadas" / "Abrir Regras", each pointing at the relevant tab or a pre-filtered Problem Deliveries table.
+
+### Table — "Entregas com Problemas Recentes"
+
+`notification-operations.repository.ts#getProblemDeliveries` — server-paginated (`buildSkipTake`/`buildPaginationMeta`), defaults to `status IN (FAILED, PENDING, PROCESSING)` when no explicit status filter is given, sorted `createdAt DESC`. Filters: status, channel, failure reason (substring), event type, and the shared date range. Columns: Data, Notificação, Canal, Destinatário, Estado, Tentativas, Próxima Tentativa, Motivo da Falha, Ações — no Organization column, since this phase stays org-scoped (see below). Retry/Cancel row actions reuse the existing `retryNotificationDeliveryAction`/`cancelNotificationDeliveryAction` (`notification-delivery.actions.ts`) unchanged — same permissions, same audit trail, no new action was added for this table.
+
+**Event type filter is exact-match by design, not free text.** `notification: { type: filters.eventType }` (a relation filter, single joined Prisma query — not two round-trips) is an exact equality, not a substring `contains`. The UI reflects that: the "Tipo de evento" control is a `<Select>` populated from `listEventCatalog()` (event types are a small, finite, catalogued set — `notification-operations-table.tsx`), not a free-text input — a user can no longer type a partial event name and silently get zero results. Changing it resets `opsPage` back to `"1"`, same as the other table filters.
+
+### Organization scope
+
+Kept **org-scoped only**, per the spec's own fallback recommendation ("if global support is too big, keep org-scoped only for Phase 3.3, document SUPER_ADMIN still views within selected organization"). `organizationId` always comes from `requireOrganization()`'s active-org cookie, identical to every other tab on this page — a `SUPER_ADMIN` sees this dashboard for whichever organization they've currently switched into, not a cross-tenant aggregate. A global all-organizations view is a documented future extension, not implemented here.
+
+### Audit
+
+Viewing the dashboard is **not** audited (matches the Executive Dashboard's own `/dashboard` route, which also has no view-audit) — only the pre-existing retry/cancel actions are, unchanged from Phase 3.1.
+
+### Performance
+
+No new indexes were needed — every aggregate query is covered by the existing `NotificationDelivery` indexes (`(organizationId, status, channel, createdAt)`, `(organizationId, nextAttemptAt, status)`, `(organizationId, channel, createdAt)`). Nothing in this phase calls `findMany` on `NotificationDelivery` without `skip`/`take` (only the Problem Deliveries table reads individual rows, and it's paginated); every KPI/chart is `groupBy`, `aggregate`, `count`, or a `$queryRaw` `COUNT(*)`/`GROUP BY`.
+
+### Module structure additions
+
+```
+src/modules/notifications/
+├── repositories/notification-operations.repository.ts   (Phase 3.3 — every query SQL-aggregated)
+├── services/notification-operations.service.ts           (Phase 3.3 — KPIs, watchlist, chart/table composition)
+└── components/
+    ├── notification-operations-dashboard.tsx              (tab layout: KPIs, charts, watchlist, table)
+    ├── notification-operations-charts.tsx                  (5 ApexCharts wrappers)
+    ├── notification-operations-watchlist.tsx
+    ├── notification-operations-table.tsx
+    └── notification-operations-columns.tsx
+```
+
+No `notification-operations.actions.ts` was added — the entire tab is server-rendered from `/notifications/page.tsx` (one `Promise.all` alongside the other tabs' data, URL-param-driven filters trigger a fresh server render on navigation, same as the Entregas tab), and the only mutations on this tab (retry/cancel) reuse the existing delivery actions.
+
+### Future Phases (not in this implementation)
+
+- A global, all-organizations view of this dashboard for `SUPER_ADMIN` (deferred — see "Organization scope" above)
+- Acting automatically on the watchlist (e.g. auto-disabling a repeatedly-failing EMAIL provider) — today it is purely observational
+- Everything already deferred in Phase 3.2B (Microsoft Graph, WhatsApp/SMS/Push, a real queue, bounce webhooks, per-channel templates, per-user preferences) remains deferred
+
 ## NotificationDelivery Model
 
 `NotificationDelivery` (table `notification_deliveries`), scoped by `organizationId`:
@@ -383,6 +494,7 @@ The public DTO (`NotificationEmailSettings` in `types/index.ts`, returned by `ge
 src/modules/notifications/
 ├── catalog/notification-event-catalog.ts
 ├── types/index.ts
+├── lib/operations-date-range.ts                          (Phase 3.3 — endOfDay/defaultOperationsDateRange/toDateInputValue, unit-tested in isolation from page.tsx)
 ├── providers/
 │   ├── notification-provider.ts                       (NotificationProvider, SendNotificationInput/Result — Phase 3.2A)
 │   ├── email-provider.ts                               (EmailProvider, NoopEmailProvider, validateSendEmailInput, bridgeSend — Phase 3.2A/B)
@@ -398,7 +510,8 @@ src/modules/notifications/
 │   ├── notification-template.repository.ts
 │   ├── notification-event-rule.repository.ts
 │   ├── notification-delivery.repository.ts
-│   └── notification-email-settings.repository.ts        (Phase 3.2B — only place that ever reads smtpPasswordEncrypted)
+│   ├── notification-email-settings.repository.ts        (Phase 3.2B — only place that ever reads smtpPasswordEncrypted)
+│   └── notification-operations.repository.ts            (Phase 3.3 — KPIs/charts/watchlist counts/problem deliveries, all SQL-aggregated)
 ├── services/
 │   ├── notification.service.ts                       (createNotification, createNotificationFromEvent, inbox reads/mutations)
 │   ├── notification-template-renderer.ts              (pure {{variable}} substitution + validation)
@@ -409,7 +522,8 @@ src/modules/notifications/
 │   ├── notification-recipient-resolver.service.ts     (resolveRecipient — Phase 3.1)
 │   ├── notification-delivery.service.ts               (createDeliveriesForNotification, state machine, exponential backoff, runRetryJob — Phase 3.1/3.2B)
 │   ├── notification-dispatcher.service.ts             (dispatchPendingDeliveries — Phase 3.1 skeleton, provider-routed since Phase 3.2A, async since Phase 3.2B)
-│   └── notification-email-settings.service.ts          (get/upsert/enable/disable/testEmailSettings — Phase 3.2B)
+│   ├── notification-email-settings.service.ts          (get/upsert/enable/disable/testEmailSettings — Phase 3.2B)
+│   └── notification-operations.service.ts               (Phase 3.3 — getOperationsKpis, getDeliveryOperationsWatchlist, chart/table composition)
 ├── commands/
 │   ├── create-notification.command.ts
 │   ├── mark-notification-read.command.ts
@@ -446,7 +560,12 @@ src/modules/notifications/
     ├── notification-rule-form-sheet.tsx
     ├── notification-delivery-table.tsx
     ├── notification-delivery-columns.tsx
-    └── notification-email-settings-panel.tsx             (Phase 3.2B)
+    ├── notification-email-settings-panel.tsx             (Phase 3.2B)
+    ├── notification-operations-dashboard.tsx               (Phase 3.3 — tab layout)
+    ├── notification-operations-charts.tsx                   (Phase 3.3 — 5 ApexCharts wrappers)
+    ├── notification-operations-watchlist.tsx                (Phase 3.3)
+    ├── notification-operations-table.tsx                    (Phase 3.3 — Problem Deliveries table)
+    └── notification-operations-columns.tsx                  (Phase 3.3)
 ```
 
 `src/shared/lib/secret-encryption.ts` (encrypt/decrypt), `src/server/jobs/notification-dispatch.job.ts` (multi-org batch), and `src/app/api/internal/jobs/notifications/dispatch/route.ts` (the dispatcher route) live outside the module, following the same convention as `daily-billing.job.ts`/`daily-billing/route.ts`.
@@ -552,6 +671,7 @@ Both compare `organizationId` + `recipientUserId` + `type`/`eventType` + `metada
 | `notifications.viewDeliveries` | `NOTIFICATIONS_VIEW_DELIVERIES` | ORG_ADMIN / SUPER_ADMIN (wildcard) + SECRETARY (view-only, per spec) — not granted to TEACHER/STUDENT |
 | `notifications.retryDelivery` | `NOTIFICATIONS_RETRY_DELIVERY` | ORG_ADMIN / SUPER_ADMIN only |
 | `notifications.cancelDelivery` | `NOTIFICATIONS_CANCEL_DELIVERY` | ORG_ADMIN / SUPER_ADMIN only |
+| `notifications.viewOperations` | `NOTIFICATIONS_VIEW_OPERATIONS` | ORG_ADMIN / SUPER_ADMIN only (Phase 3.3) — gates the "Operações" tab; **not** granted to SECRETARY by default (unlike `NOTIFICATIONS_VIEW_DELIVERIES`), never to TEACHER/STUDENT |
 | `notifications.manageEmailSettings` | `NOTIFICATIONS_MANAGE_EMAIL_SETTINGS` | ORG_ADMIN / SUPER_ADMIN only (Phase 3.2B) — gates the "Email" tab and all 4 email-settings commands |
 
 `CreateNotificationCommand` has no permission gate — notifications are only ever created from domain event handlers (system-triggered) or other commands, never from a direct user-facing "create" action. Its protection is tenant + recipient-membership validation, not RBAC.
