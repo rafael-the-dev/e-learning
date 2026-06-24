@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\settings\\\\roles\\\\_components\" \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\\\\src\\\\app\\\\\\(org\\)\\\\settings\\\\roles\\\\[roleId]\\\\_components\")",
+      "Bash(pnpm db:seed)",
+      "Bash(pnpm add *)",
+      "Bash(node ./_verify-import.mjs)",
+      "Read(//c/Users/rtivane/AppData/Local/Temp/import-verify/**)",
+      "Read(//c/tmp/import-verify/**)",
+      "Bash(cygpath -w /tmp/import-verify/03-import-preview-step.png)",
+      "Bash(git commit -m ' *)",
+      "PowerShell(pnpm test 2>&1 | Out-File -FilePath test_final.txt -Encoding utf8; Write-Output \"EXIT:$LASTEXITCODE\")",
+      "Bash(pnpm test *)",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(timeout 90 npx tsx src/modules/roles/__tests__/tenant-isolation.integration.ts)",
+      "Bash(cd \"c:\\\\salc\\\\web\\\\mine\\\\e-learning\" && du -sh .next 2>/dev/null; du -sh /tmp/next-panic*.log 2>/dev/null | tail -5; ls -la /tmp/*.log 2>/dev/null)",
+      "Read(//c/tmp/**)",
+      "Bash(pnpm rebuild *)",
+      "Bash(npx tsx *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npx next *)",
+      "Bash(cat prisma.config.ts)",
+      "Bash(ls .env*)",
+      "Bash(cd \"/c/salc/web/mine/e-learning\" && ls prisma/migrations | tail -8)",
+      "Read(//c/c/salc/web/mine/e-learning/prisma/**)",
+      "Bash(cd \"/c/salc/web/mine/e-learning\" && cat eslint.config.* 2>/dev/null | head -60)",
+      "Read(//c/c/salc/web/mine/**)",
+      "Bash(grep -rn '$transaction' /c/salc/web/mine/e-learning/src/modules/notifications/)",
+      "Bash(pnpm db:generate)"
+    ],
+    "additionalDirectories": [
+      "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\settings\\roles\\[roleId]"
+    ]
+  }
+}
