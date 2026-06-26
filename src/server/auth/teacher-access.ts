@@ -132,6 +132,24 @@ async function teacherOwnsAssessment(
 }
 
 /**
+ * Resolves the `teacherId` to stamp on a record a user is creating (assessment,
+ * attendance session, …). For a teacher-scoped user it is ALWAYS their own
+ * resolved teacherId — a client-supplied value is ignored, so a teacher can
+ * never assign another teacher. For admins/secretaries the client's chosen
+ * `clientTeacherId` is kept as-is. Throws for a teacher-scoped account with no
+ * linked Teacher profile (it owns nothing and cannot create). See
+ * docs/teacher-access-scope.md.
+ */
+export async function resolveAssignedTeacherId(
+  context: AuthContext,
+  clientTeacherId: string | null | undefined
+): Promise<string | null> {
+  const ownTeacherId = await requireOwnTeacherId(context);
+  if (ownTeacherId !== null) return ownTeacherId; // teacher-scoped → force self
+  return clientTeacherId ?? null; // admin/secretary → keep client choice
+}
+
+/**
  * Asserts a teacher-scoped caller may access the given student. No-op for
  * non-teacher-scoped callers. Throws AuthorizationError otherwise.
  */

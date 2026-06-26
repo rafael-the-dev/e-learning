@@ -129,7 +129,14 @@ export async function getSessionFormOptions(
       orderBy: { name: "asc" },
     }),
     db.teacher.findMany({
-      where: { organizationId, deletedAt: null, status: "ACTIVE" },
+      // Teacher-scoped: only the teacher themselves (assigned-teacher field is
+      // locked to self). Org-wide for admins/secretaries.
+      where: {
+        organizationId,
+        deletedAt: null,
+        status: "ACTIVE",
+        ...(classGroupTeacherId !== undefined && { id: classGroupTeacherId }),
+      },
       select: { id: true, firstName: true, lastName: true },
       orderBy: [{ firstName: "asc" }],
     }),

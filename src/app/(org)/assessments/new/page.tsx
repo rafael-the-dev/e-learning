@@ -29,7 +29,12 @@ async function getFormDeps(organizationId: string, classGroupTeacherId: string |
         orderBy: { name: "asc" },
       }),
       db.teacher.findMany({
-        where: { organizationId, deletedAt: null },
+        // Teacher-scoped: only the teacher themselves; org-wide for admins/secretaries.
+        where: {
+          organizationId,
+          deletedAt: null,
+          ...(classGroupTeacherId !== undefined && { id: classGroupTeacherId }),
+        },
         select: { id: true, firstName: true, lastName: true },
         orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
       }),

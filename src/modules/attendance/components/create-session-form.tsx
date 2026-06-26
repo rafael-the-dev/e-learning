@@ -58,6 +58,12 @@ interface CreateSessionFormProps {
   teachers: TeacherOption[];
   classrooms: ClassroomOption[];
   getLevelSubjects: (courseLevelId: string) => Promise<LevelSubjectOption[]>;
+  /**
+   * When set (teacher-scoped user), the assigned teacher is locked to this id:
+   * the selector is replaced by read-only text and the value is forced to self.
+   * The server also forces it, so this is UX only. Undefined for admins/secretaries.
+   */
+  assignedTeacherLockedId?: string;
 }
 
 const NONE = "__none__";
@@ -68,11 +74,12 @@ export function CreateSessionForm({
   teachers,
   classrooms,
   getLevelSubjects,
+  assignedTeacherLockedId,
 }: CreateSessionFormProps) {
   const router = useRouter();
   const [classGroupId, setClassGroupId] = React.useState("");
   const [levelSubjectId, setLevelSubjectId] = React.useState("");
-  const [teacherId, setTeacherId] = React.useState(NONE);
+  const [teacherId, setTeacherId] = React.useState(assignedTeacherLockedId ?? NONE);
   const [classroomId, setClassroomId] = React.useState(NONE);
   const [sessionDate, setSessionDate] = React.useState("");
   const [startTime, setStartTime] = React.useState("");
@@ -214,19 +221,26 @@ export function CreateSessionForm({
 
         <div>
           <Label htmlFor="teacherId">Professor</Label>
-          <Select value={teacherId} onValueChange={setTeacherId}>
-            <SelectTrigger id="teacherId" className="mt-1.5">
-              <SelectValue placeholder="Nenhum" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>Nenhum</SelectItem>
-              {teachers.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.firstName} {t.lastName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {assignedTeacherLockedId ? (
+            // Teacher-scoped: assigned teacher is always the current teacher.
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Professor atribuído: você
+            </p>
+          ) : (
+            <Select value={teacherId} onValueChange={setTeacherId}>
+              <SelectTrigger id="teacherId" className="mt-1.5">
+                <SelectValue placeholder="Nenhum" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>Nenhum</SelectItem>
+                {teachers.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.firstName} {t.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         <div>

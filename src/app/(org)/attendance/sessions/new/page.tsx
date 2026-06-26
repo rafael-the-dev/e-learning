@@ -38,6 +38,7 @@ export default async function NewAttendanceSessionPage() {
           teachers={options.teachers}
           classrooms={options.classrooms}
           getLevelSubjects={fetchLevelSubjects}
+          assignedTeacherLockedId={scope.isTeacherScoped ? scope.teacherId : undefined}
         />
       </div>
     </>

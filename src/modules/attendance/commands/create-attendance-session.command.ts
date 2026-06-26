@@ -7,7 +7,7 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
-import { assertTeacherCanAccessClassGroup } from "@/server/auth/teacher-access";
+import { assertTeacherCanAccessClassGroup, resolveAssignedTeacherId } from "@/server/auth/teacher-access";
 import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getDb } from "@/server/db";
@@ -115,6 +115,10 @@ export class CreateAttendanceSessionCommand extends BaseCommand<
     const [endH, endM] = this.input.endTime.split(":").map(Number);
     const durationMinutes = (endH * 60 + endM) - (startH * 60 + startM);
 
+    // For a teacher-scoped user the assigned teacher is forced to themselves; a
+    // client-supplied teacherId is ignored. Admins/secretaries keep their choice.
+    const teacherId = await resolveAssignedTeacherId(this.context as AuthContext, this.input.teacherId);
+
     const session = await createAttendanceSession({
       organizationId: this.context.organizationId,
       academicYearId: this.input.academicYearId,
@@ -124,7 +128,7 @@ export class CreateAttendanceSessionCommand extends BaseCommand<
       courseLevelId: this.input.courseLevelId,
       subjectId: this.input.subjectId,
       levelSubjectId: this.input.levelSubjectId,
-      teacherId: this.input.teacherId ?? null,
+      teacherId,
       classroomId: this.input.classroomId ?? null,
       scheduleSlotId: this.input.scheduleSlotId ?? null,
       sessionDate: new Date(this.input.sessionDate),

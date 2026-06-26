@@ -26,6 +26,14 @@ function classGroupWhere() {
   return call?.[0]?.where;
 }
 
+function teacherWhere() {
+  // The teacher query selects firstName/lastName and filters status: "ACTIVE".
+  const call = findMany.mock.calls.find(
+    (c) => c[0]?.select?.firstName && c[0]?.where?.status === "ACTIVE"
+  );
+  return call?.[0]?.where;
+}
+
 describe("getSessionFormOptions — class-group dropdown scope", () => {
   it("is org-wide (no teacher filter) when no teacher scope is passed", async () => {
     await getSessionFormOptions("org-1");
@@ -40,5 +48,22 @@ describe("getSessionFormOptions — class-group dropdown scope", () => {
   it("an unlinked teacher (sentinel id) matches no real class group", async () => {
     await getSessionFormOptions("org-1", "__none__");
     expect(classGroupWhere().teacherId).toBe("__none__");
+  });
+});
+
+describe("getSessionFormOptions — assigned-teacher dropdown scope", () => {
+  it("lists all org teachers when no teacher scope is passed", async () => {
+    await getSessionFormOptions("org-1");
+    expect(teacherWhere().id).toBeUndefined();
+  });
+
+  it("restricts the teacher dropdown to the teacher themselves when teacher-scoped", async () => {
+    await getSessionFormOptions("org-1", "teacher-A");
+    expect(teacherWhere().id).toBe("teacher-A");
+  });
+
+  it("an unlinked teacher (sentinel id) sees no teacher option", async () => {
+    await getSessionFormOptions("org-1", "__none__");
+    expect(teacherWhere().id).toBe("__none__");
   });
 });

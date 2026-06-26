@@ -6,7 +6,7 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
-import { assertTeacherCanAccessClassGroup } from "@/server/auth/teacher-access";
+import { assertTeacherCanAccessClassGroup, resolveAssignedTeacherId } from "@/server/auth/teacher-access";
 import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getDb } from "@/server/db";
@@ -95,6 +95,10 @@ export class CreateAssessmentCommand extends BaseCommand<CreateAssessmentSchema,
   }
 
   async execute(): Promise<Assessment> {
+    // For a teacher-scoped user the assigned teacher is forced to themselves; a
+    // client-supplied teacherId is ignored. Admins/secretaries keep their choice.
+    const teacherId = await resolveAssignedTeacherId(this.context as AuthContext, this.input.teacherId);
+
     const assessment = await createAssessment({
       organizationId: this.context.organizationId,
       assessmentPolicyId: this.input.assessmentPolicyId,
@@ -107,7 +111,7 @@ export class CreateAssessmentCommand extends BaseCommand<CreateAssessmentSchema,
       courseLevelId: this.input.courseLevelId,
       levelSubjectId: this.input.levelSubjectId,
       subjectId: this.input.subjectId,
-      teacherId: this.input.teacherId ?? null,
+      teacherId,
       title: this.input.title,
       description: this.input.description ?? null,
       assessmentDate: new Date(this.input.assessmentDate),

@@ -23,6 +23,7 @@ import {
   assertTeacherCanAccessAttendanceSession,
   assertTeacherCanAccessAssessment,
   assertTeacherCanAccessEnrollment,
+  resolveAssignedTeacherId,
 } from "../teacher-access";
 
 const ORG = "org-1";
@@ -35,6 +36,36 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Teacher-A is the logged-in teacher for the teacher-scoped cases.
   mockGetTeacherByUserId.mockResolvedValue({ id: "teacher-A" });
+});
+
+// ── resolveAssignedTeacherId (create-time assigned teacher) ──────────────────
+
+describe("resolveAssignedTeacherId", () => {
+  it("forces a teacher-scoped user to themselves, ignoring a client-supplied teacherId (B → A)", async () => {
+    await expect(resolveAssignedTeacherId(ctx([SYSTEM_ROLES.TEACHER]), "teacher-B")).resolves.toBe("teacher-A");
+  });
+
+  it("uses the teacher's own id when none is supplied", async () => {
+    await expect(resolveAssignedTeacherId(ctx([SYSTEM_ROLES.TEACHER]), undefined)).resolves.toBe("teacher-A");
+  });
+
+  it("keeps the client-supplied teacherId for ORG_ADMIN", async () => {
+    await expect(resolveAssignedTeacherId(ctx([SYSTEM_ROLES.ORG_ADMIN]), "teacher-B")).resolves.toBe("teacher-B");
+    expect(mockGetTeacherByUserId).not.toHaveBeenCalled();
+  });
+
+  it("returns null for ORG_ADMIN when none supplied (unchanged behaviour)", async () => {
+    await expect(resolveAssignedTeacherId(ctx([SYSTEM_ROLES.ORG_ADMIN]), null)).resolves.toBeNull();
+  });
+
+  it("keeps the client value for SECRETARY (not teacher-scoped)", async () => {
+    await expect(resolveAssignedTeacherId(ctx([SYSTEM_ROLES.SECRETARY]), "teacher-B")).resolves.toBe("teacher-B");
+  });
+
+  it("throws for a teacher-scoped account with no linked profile", async () => {
+    mockGetTeacherByUserId.mockResolvedValue(null);
+    await expect(resolveAssignedTeacherId(ctx([SYSTEM_ROLES.TEACHER]), undefined)).rejects.toBeInstanceOf(AuthorizationError);
+  });
 });
 
 // ── No-op for non-teacher-scoped callers ─────────────────────────────────────

@@ -113,6 +113,17 @@ class-group dropdowns are likewise scoped: `/assessments/new` filters its
 `teacherId` to `getSessionFormOptions`, so a teacher only ever sees their own groups
 (an unlinked teacher sees none, via a sentinel id that matches nothing).
 
+**Assigned teacher is forced to self.** Both create commands' `execute()` resolve
+the stamped `teacherId` via `resolveAssignedTeacherId(context, input.teacherId)`:
+for a teacher-scoped user it is **always their own** resolved `teacherId` — a
+client-supplied value is ignored — so a teacher can never assign a record to another
+teacher (a data-quality safeguard on top of the class-group ownership guard).
+ORG_ADMIN/SECRETARY keep the teacher they choose. The create forms reflect this:
+the assigned-teacher dropdown is scoped to the teacher themselves (so org teacher
+names aren't even shipped to the client), and the attendance create form replaces
+the selector with read-only text ("Professor atribuído: você") for teacher-scoped
+users — but the server override is the real guarantee, not the disabled/hidden field.
+
 > **Still readable (intentional, not IDOR):** curriculum **reference** detail
 > (`/courses/[id]`, `/subjects/[id]`, `/lessons/[id]`) — shared org reference data,
 > not per-teacher PII.
