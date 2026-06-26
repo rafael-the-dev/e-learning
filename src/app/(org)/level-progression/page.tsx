@@ -4,6 +4,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/layout/empty-state";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -44,6 +45,8 @@ const DECISION_BADGE_VARIANT: Record<string, "default" | "secondary" | "destruct
 
 export default async function LevelProgressionPage() {
   const context = await requirePermissionOrRedirect(PERMISSIONS.LEVEL_PROGRESSION_VIEW);
+  // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
+  await redirectIfTeacherScoped(context);
 
   const perms = await getUserPermissions(context.userId, context.organizationId);
   const ability = createAbility(perms);

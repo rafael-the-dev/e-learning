@@ -1,5 +1,6 @@
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getSubjectsByOrganization } from "@/modules/courses/services/course.service";
@@ -11,6 +12,8 @@ export async function generateMetadata() {
 
 export default async function SubjectsPage() {
   const context = await requirePermissionOrRedirect(PERMISSIONS.SUBJECTS_VIEW);
+  // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
+  await redirectIfTeacherScoped(context);
 
   const perms = await getUserPermissions(context.userId, context.organizationId);
   const ability = createAbility(perms);

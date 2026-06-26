@@ -16,6 +16,7 @@ import {
 import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
@@ -71,6 +72,8 @@ export default async function CoursesPage({
   }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.COURSES_READ);
+  // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
+  await redirectIfTeacherScoped(context);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);

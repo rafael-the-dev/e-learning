@@ -12,6 +12,12 @@ export interface ListStudentsParams extends PaginationParams {
   search?: string;
   status?: string;
   branchId?: string;
+  /**
+   * Teacher scope (resolved server-side, never from client input): restrict to
+   * students with at least one enrollment in a class group taught by this
+   * teacher. See src/server/auth/teacher-scope.ts.
+   */
+  teacherId?: string;
 }
 
 const studentSelect = {
@@ -78,6 +84,9 @@ export async function findManyByOrganization(
     }),
     ...(params.status && { status: params.status }),
     ...(params.branchId && { branchId: params.branchId }),
+    ...(params.teacherId && {
+      enrollments: { some: { deletedAt: null, classGroup: { teacherId: params.teacherId } } },
+    }),
   };
 
   const [rows, total] = await Promise.all([

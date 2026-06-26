@@ -3,6 +3,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Button } from "@/shared/components/ui/button";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { resolveDataAccessScope } from "@/server/auth/teacher-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import {
@@ -54,6 +55,53 @@ export default async function AttendanceSessionsPage({
   const canCreate = ability.can(PERMISSIONS.ATTENDANCE_SESSIONS_CREATE);
   const canComplete = ability.can(PERMISSIONS.ATTENDANCE_SESSIONS_COMPLETE);
   const canCancel = ability.can(PERMISSIONS.ATTENDANCE_SESSIONS_CANCEL);
+
+  // Teacher scope: a teacher sees only sessions assigned to them, with a
+  // class-group filter limited to their own groups — never org-wide session
+  // stats. See docs/teacher-access-scope.md.
+  const scope = await resolveDataAccessScope(context);
+  if (scope.type === "teacher") {
+    const scopedDb = await getDb();
+    const [result, classGroups, subjects] = await Promise.all([
+      getAttendanceSessionsByOrganization(context.organizationId, {
+        ...pagination,
+        search,
+        status,
+        classGroupId,
+        subjectId,
+        teacherId: scope.teacherId,
+      }),
+      scopedDb.classGroup.findMany({
+        where: { organizationId: context.organizationId, teacherId: scope.teacherId, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      scopedDb.subject.findMany({
+        where: { organizationId: context.organizationId, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+
+    return (
+      <>
+        <PageHeader title="Presenças" description="As suas sessões de presença." />
+        <div className="p-8 space-y-6">
+          <SessionsTable
+            result={result}
+            classGroups={classGroups}
+            subjects={subjects}
+            defaultSearch={search}
+            defaultStatus={status}
+            defaultClassGroupId={classGroupId}
+            defaultSubjectId={subjectId}
+            canComplete={canComplete}
+            canCancel={canCancel}
+          />
+        </div>
+      </>
+    );
+  }
 
   const [result, stats, filterOptions] = await Promise.all([
     getAttendanceSessionsByOrganization(context.organizationId, {

@@ -16,6 +16,7 @@ import {
 import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { resolveDataAccessScope } from "@/server/auth/teacher-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -81,6 +82,76 @@ export default async function ClassGroupsPage({
   const canEdit = ability.can(PERMISSIONS.CLASS_GROUPS_UPDATE);
   const canArchive = ability.can(PERMISSIONS.CLASS_GROUPS_ARCHIVE);
   const canDelete = ability.can(PERMISSIONS.CLASS_GROUPS_DELETE);
+
+  // Teacher scope: a teacher-scoped user sees only their own class groups, as a
+  // plain scoped table — never the org-wide KPI/trend/distribution dashboard
+  // below. See docs/teacher-access-scope.md.
+  const scope = await resolveDataAccessScope(context);
+  if (scope.type === "teacher") {
+    const scopedDb = await getDb();
+    const [courses, branches, academicYears, classGroups] = await Promise.all([
+      scopedDb.course.findMany({
+        where: { organizationId, deletedAt: null, status: { not: "ARCHIVED" } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      scopedDb.branch.findMany({
+        where: { organizationId, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      scopedDb.academicYear.findMany({
+        where: { organizationId, deletedAt: null, status: { not: "ARCHIVED" } },
+        select: { id: true, name: true },
+        orderBy: { startDate: "desc" },
+      }),
+      getClassGroupsByOrganization(organizationId, {
+        teacherId: scope.teacherId,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        search: sp.search,
+        status: sp.status,
+        courseId: sp.courseId,
+        branchId: sp.branchId,
+        academicYearId: sp.yearId,
+      }),
+    ]);
+
+    return (
+      <>
+        <PageHeader title="Minhas Turmas" description="As turmas que lhe estão atribuídas." />
+        <div className="p-4 sm:p-8">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="size-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Registo de Turmas</CardTitle>
+                </div>
+                <Badge variant="secondary" className="text-xs">{classGroups.total.toLocaleString("pt-PT")}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 sm:px-4 sm:pb-4">
+              <ClassGroupsTable
+                result={classGroups}
+                courses={courses}
+                branches={branches}
+                academicYears={academicYears}
+                defaultSearch={sp.search}
+                defaultStatus={sp.status}
+                defaultCourseId={sp.courseId}
+                defaultBranchId={sp.branchId}
+                defaultAcademicYearId={sp.yearId}
+                canEdit={canEdit}
+                canArchive={canArchive}
+                canDelete={canDelete}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   const db = await getDb();
   const [courses, branches, academicYears] = await Promise.all([

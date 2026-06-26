@@ -14,6 +14,7 @@ import {
   DashboardInsightRow,
 } from "@/shared/components/layout/executive-dashboard";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { resolveDataAccessScope } from "@/server/auth/teacher-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -85,6 +86,39 @@ export default async function StudentsPage({
   const canCreateEnrollments = ability.can(PERMISSIONS.ENROLLMENTS_CREATE);
   const canViewEnrollments = ability.can(PERMISSIONS.ENROLLMENTS_VIEW);
   const canViewPayments = ability.can(PERMISSIONS.PAYMENTS_VIEW);
+
+  // Teacher scope: a teacher sees only students enrolled in their own class
+  // groups, as a plain scoped table — never the org-wide KPI/risk/finance
+  // dashboard below. See docs/teacher-access-scope.md.
+  const scope = await resolveDataAccessScope(context);
+  if (scope.type === "teacher") {
+    const result = await getStudentsByOrganization(context.organizationId, {
+      ...pagination,
+      search,
+      status,
+      branchId,
+      teacherId: scope.teacherId,
+    });
+
+    return (
+      <>
+        <PageHeader title="Meus Alunos" description="Alunos inscritos nas suas turmas." />
+        <div className="p-4 sm:p-8">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium">Registo de Alunos</CardTitle>
+                <Badge variant="secondary" className="text-xs">{result.total.toLocaleString("pt-PT")}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 sm:px-4 sm:pb-4">
+              <StudentsTable result={result} />
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   const [
     statusCounts,

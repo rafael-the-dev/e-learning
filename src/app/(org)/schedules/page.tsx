@@ -1,6 +1,7 @@
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -31,6 +32,8 @@ export default async function SchedulesPage({
   }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.SCHEDULE_PERIODS_VIEW);
+  // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
+  await redirectIfTeacherScoped(context);
 
   const sp = await searchParams;
   const activeTab = sp.tab === "slots" ? "slots" : "periods";

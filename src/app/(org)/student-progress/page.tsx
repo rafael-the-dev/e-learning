@@ -14,6 +14,7 @@ import {
 import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import {
@@ -74,6 +75,8 @@ export default async function StudentProgressPage({
   }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.STUDENT_COURSE_PROGRESS_VIEW);
+  // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
+  await redirectIfTeacherScoped(context);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);

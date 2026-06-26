@@ -16,6 +16,7 @@ import {
 import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { resolveDataAccessScope } from "@/server/auth/teacher-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
@@ -90,6 +91,50 @@ export default async function AssessmentsPage({
   const canCreate = ability.can(PERMISSIONS.ASSESSMENTS_CREATE);
   const canEdit = ability.can(PERMISSIONS.ASSESSMENTS_UPDATE);
   const canCancel = ability.can(PERMISSIONS.ASSESSMENTS_CANCEL);
+
+  // Teacher scope: a teacher sees only their own assessments, as a plain scoped
+  // table — never the org-wide KPI/trend/distribution dashboard below (which
+  // includes a per-teacher pending-grading breakdown). See docs/teacher-access-scope.md.
+  const scope = await resolveDataAccessScope(context);
+  if (scope.type === "teacher") {
+    const assessments = await listAssessmentsForDashboard(organizationId, {
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      search: sp.search,
+      status: sp.status,
+      assessmentPeriodId: sp.periodId,
+      classGroupId: sp.classGroupId,
+      teacherId: scope.teacherId,
+    });
+
+    return (
+      <>
+        <PageHeader title="Avaliações" description="As avaliações das suas turmas." />
+        <div className="p-4 sm:p-8">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="size-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Registo de Avaliações</CardTitle>
+                </div>
+                <Badge variant="secondary" className="text-xs">{assessments.total.toLocaleString("pt-PT")}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 sm:px-4 sm:pb-4">
+              <AssessmentsDashboardTable
+                result={assessments}
+                defaultSearch={sp.search}
+                defaultStatus={sp.status}
+                canEdit={canEdit}
+                canCancel={canCancel}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   const [
     kpis,

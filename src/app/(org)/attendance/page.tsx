@@ -2,7 +2,9 @@ import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Button } from "@/shared/components/ui/button";
+import { redirect } from "next/navigation";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { resolveTeacherScope } from "@/server/auth/teacher-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import {
@@ -15,6 +17,12 @@ export const metadata = { title: "Presenças" };
 
 export default async function AttendancePage() {
   const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
+
+  // The hub shows org-wide session stats — a teacher-scoped user goes straight
+  // to their own scoped sessions list instead. See docs/teacher-access-scope.md.
+  if ((await resolveTeacherScope(context)).isTeacherScoped) {
+    redirect("/attendance/sessions");
+  }
 
   const perms = await getUserPermissions(context.userId, context.organizationId);
   const ability = createAbility(perms);
