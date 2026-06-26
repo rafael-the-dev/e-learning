@@ -132,6 +132,40 @@ async function teacherOwnsAssessment(
 }
 
 /**
+ * Resolves the set of `subjectId`s a teacher is academically responsible for —
+ * the basis for subject-level grade/progress visibility (so a teacher in a
+ * multi-subject class group never sees another teacher's subject data).
+ *
+ * Two sources, unioned:
+ *   • `TeacherSubject` — the canonical "teacher teaches subject X" assignment.
+ *   • subjects of assessments this teacher authored (`Assessment.teacherId = me`)
+ *     — covers a subject a teacher actively assesses even without an explicit
+ *     TeacherSubject row.
+ *
+ * `TeacherSubject` carries no `organizationId` (it hangs off Teacher, which is
+ * org-bound), so it is scoped by `teacherId`; the assessment query is also
+ * org-scoped. Returns distinct subjectIds. An **empty** result means the teacher
+ * has no subject-ownership signal at all — callers fall back to class-group
+ * ownership so access stays useful (see docs/teacher-access-scope.md).
+ */
+export async function getTeacherOwnedSubjectIds(
+  organizationId: string,
+  teacherId: string
+): Promise<string[]> {
+  const db = await getDb();
+  const [assigned, authored] = await Promise.all([
+    db.teacherSubject.findMany({ where: { teacherId }, select: { subjectId: true } }),
+    db.assessment.findMany({
+      // CANCELLED/ARCHIVED assessments don't confer subject ownership.
+      where: { teacherId, organizationId, deletedAt: null, status: { notIn: ["CANCELLED", "ARCHIVED"] } },
+      select: { subjectId: true },
+      distinct: ["subjectId"],
+    }),
+  ]);
+  return [...new Set([...assigned.map((a) => a.subjectId), ...authored.map((a) => a.subjectId)])];
+}
+
+/**
  * Resolves the `teacherId` to stamp on a record a user is creating (assessment,
  * attendance session, …). For a teacher-scoped user it is ALWAYS their own
  * resolved teacherId — a client-supplied value is ignored, so a teacher can

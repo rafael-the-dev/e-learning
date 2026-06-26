@@ -14,6 +14,8 @@ const TEACHER_NAV_ALLOWLIST = new Set<string>([
   "/students",
   "/attendance",
   "/assessments",
+  "/grades",
+  "/student-progress",
   "/notifications",
 ]);
 

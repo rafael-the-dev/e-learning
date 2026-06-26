@@ -8,7 +8,8 @@ const { mockGetTeacherByUserId, db } = vi.hoisted(() => ({
     enrollment: { findFirst: vi.fn() },
     classGroup: { findFirst: vi.fn() },
     attendanceSession: { findFirst: vi.fn() },
-    assessment: { findFirst: vi.fn() },
+    assessment: { findFirst: vi.fn(), findMany: vi.fn() },
+    teacherSubject: { findMany: vi.fn() },
   },
 }));
 
@@ -24,6 +25,7 @@ import {
   assertTeacherCanAccessAssessment,
   assertTeacherCanAccessEnrollment,
   resolveAssignedTeacherId,
+  getTeacherOwnedSubjectIds,
 } from "../teacher-access";
 
 const ORG = "org-1";
@@ -65,6 +67,32 @@ describe("resolveAssignedTeacherId", () => {
   it("throws for a teacher-scoped account with no linked profile", async () => {
     mockGetTeacherByUserId.mockResolvedValue(null);
     await expect(resolveAssignedTeacherId(ctx([SYSTEM_ROLES.TEACHER]), undefined)).rejects.toBeInstanceOf(AuthorizationError);
+  });
+});
+
+// ── getTeacherOwnedSubjectIds (subject-level ownership source) ────────────────
+
+describe("getTeacherOwnedSubjectIds", () => {
+  it("unions TeacherSubject assignments with authored-assessment subjects, distinct", async () => {
+    db.teacherSubject.findMany.mockResolvedValue([{ subjectId: "subj-A" }, { subjectId: "subj-B" }]);
+    db.assessment.findMany.mockResolvedValue([{ subjectId: "subj-B" }, { subjectId: "subj-C" }]);
+
+    const ids = await getTeacherOwnedSubjectIds(ORG, "teacher-A");
+    expect([...ids].sort()).toEqual(["subj-A", "subj-B", "subj-C"]);
+    // TeacherSubject is scoped by teacherId; assessments by teacherId + org.
+    expect(db.teacherSubject.findMany.mock.calls[0][0].where).toEqual({ teacherId: "teacher-A" });
+    expect(db.assessment.findMany.mock.calls[0][0].where).toMatchObject({
+      teacherId: "teacher-A",
+      organizationId: ORG,
+      deletedAt: null,
+      status: { notIn: ["CANCELLED", "ARCHIVED"] },
+    });
+  });
+
+  it("returns an empty list when the teacher has no subject signal (caller falls back)", async () => {
+    db.teacherSubject.findMany.mockResolvedValue([]);
+    db.assessment.findMany.mockResolvedValue([]);
+    await expect(getTeacherOwnedSubjectIds(ORG, "teacher-A")).resolves.toEqual([]);
   });
 });
 

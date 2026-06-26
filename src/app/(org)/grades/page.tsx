@@ -16,10 +16,12 @@ import {
 import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
-import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
+import { resolveDataAccessScope } from "@/server/auth/teacher-scope";
+import { getTeacherOwnedSubjectIds } from "@/server/auth/teacher-access";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
+import { EmptyState } from "@/shared/components/layout/empty-state";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import {
   getGradeKPIs,
@@ -27,6 +29,7 @@ import {
   getGradeStatusDistribution,
   getCoursePerformance,
   getTopRiskSubjects,
+  getTeacherGradeKPIs,
   listGradeResults,
 } from "@/modules/grades/services/grade-metrics.service";
 import { getGradeInsights } from "@/modules/grades/services/grade-insights.service";
@@ -79,13 +82,134 @@ export default async function GradesPage({
   }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.GRADES_VIEW);
-  // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
-  await redirectIfTeacherScoped(context);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);
   const db = await getDb();
   const { organizationId } = context;
+
+  // Teacher scope: a teacher sees only their own grade results, as a scoped
+  // "Minhas Notas" workspace — never the org-wide executive dashboard below
+  // (org averages, per-course performance, all-teacher risk). The scope's
+  // teacherId is resolved server-side from currentUser.id, never a query param.
+  // See docs/teacher-access-scope.md.
+  const scope = await resolveDataAccessScope(context);
+  if (scope.type === "teacher") {
+    const { teacherId } = scope;
+    const hasFilters = Boolean(sp.search || sp.subjectId || sp.classGroupId || sp.status);
+
+    // Subjects this teacher is academically responsible for — drives both the
+    // grade-result scope and the (scoped) subject filter dropdown.
+    const ownedSubjectIds = await getTeacherOwnedSubjectIds(organizationId, teacherId);
+
+    const [subjects, classGroups] = await Promise.all([
+      ownedSubjectIds.length
+        ? db.subject.findMany({
+            where: { id: { in: ownedSubjectIds }, organizationId },
+            select: { id: true, name: true },
+            orderBy: { name: "asc" },
+          })
+        : Promise.resolve([]),
+      db.classGroup.findMany({
+        where: { organizationId, deletedAt: null, teacherId },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+
+    const [kpis, gradeResults] = await Promise.all([
+      getTeacherGradeKPIs(organizationId, teacherId, ownedSubjectIds),
+      listGradeResults(organizationId, {
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        subjectId: sp.subjectId,
+        classGroupId: sp.classGroupId,
+        status: sp.status,
+        search: sp.search,
+        teacherId,
+        ownedSubjectIds,
+      }),
+    ]);
+
+    return (
+      <>
+        <PageHeader
+          title="Minhas Notas"
+          description="As notas e resultados das suas turmas."
+          actions={
+            <Button asChild size="sm">
+              <Link href="/assessments?status=OPEN">
+                <ClipboardList className="size-4 mr-1.5" />
+                Lançar Notas
+              </Link>
+            </Button>
+          }
+        />
+
+        <div className="p-4 sm:p-8 space-y-6">
+          <ExecutiveKpiGrid>
+            <StatCard
+              title="Avaliações por Corrigir"
+              value={kpis.toGradeCount}
+              icon={<FileEdit className="size-4 text-amber-500" />}
+              description="resultados por lançar"
+            />
+            <StatCard
+              title="Resultados Lançados"
+              value={kpis.gradedCount}
+              icon={<CheckCircle2 className="size-4 text-emerald-500" />}
+              description="notas finalizadas"
+            />
+            <StatCard
+              title="Média das Minhas Avaliações"
+              value={kpis.avgNormalizedGrade != null ? `${kpis.avgNormalizedGrade.toLocaleString("pt-PT")}%` : "—"}
+              icon={<TrendingUp className="size-4 text-indigo-500" />}
+              description="nota normalizada"
+            />
+            <StatCard
+              title="Alunos em Risco"
+              value={kpis.atRiskStudentCount}
+              icon={<AlertTriangle className="size-4 text-red-500" />}
+              description="com disciplina reprovada"
+            />
+          </ExecutiveKpiGrid>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="size-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Resultados por Lançar / Corrigir</CardTitle>
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  {gradeResults.total.toLocaleString("pt-PT")}
+                </Badge>
+              </div>
+              <GradeTableFilters
+                subjects={subjects}
+                classGroups={classGroups}
+                defaultSearch={sp.search}
+                defaultSubjectId={sp.subjectId}
+                defaultClassGroupId={sp.classGroupId}
+                defaultStatus={sp.status}
+              />
+            </CardHeader>
+            <CardContent className="p-0 sm:px-4 sm:pb-4">
+              {gradeResults.total === 0 && !hasFilters ? (
+                <EmptyState
+                  icon={<ClipboardList className="size-8" />}
+                  title="Tudo em dia"
+                  description="Não existem avaliações por corrigir."
+                />
+              ) : (
+                <GradesTable result={gradeResults} />
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   const perms = await getUserPermissions(context.userId, organizationId);
   const ability = createAbility(perms);

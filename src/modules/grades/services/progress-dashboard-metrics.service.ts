@@ -74,6 +74,12 @@ export interface ListProgressParams {
   search?: string;
   status?: string;
   courseId?: string;
+  /**
+   * Teacher scope. When set, rows are restricted to enrollments in class groups
+   * this teacher teaches (enrollment.classGroup.teacherId). Always the
+   * server-resolved teacherId — a query param can never widen it.
+   */
+  teacherId?: string;
 }
 
 // ─── KPIs ─────────────────────────────────────────────────────────────────────
@@ -280,6 +286,153 @@ export async function getActiveCoursesForFilter(organizationId: string): Promise
   });
 }
 
+/** Courses present in this teacher's class groups only — scopes the filter dropdown. */
+export async function getTeacherCoursesForFilter(
+  organizationId: string,
+  teacherId: string
+): Promise<CourseFilterItem[]> {
+  const db = await getDb();
+  const rows = await db.studentCourseProgress.findMany({
+    where: { organizationId, enrollment: { classGroup: { teacherId } } },
+    select: { courseId: true },
+    distinct: ["courseId"],
+  });
+  const courseIds = rows.map((r) => r.courseId);
+  if (courseIds.length === 0) return [];
+  return db.course.findMany({
+    where: { id: { in: courseIds }, organizationId },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+// ─── Teacher-scoped KPIs ──────────────────────────────────────────────────────
+// Powers the "Progresso dos Meus Alunos" workspace. Two-tier ownership:
+//   • Student/course-level KPIs (in-progress, blocked, recovery) are scoped to
+//     students in class groups this teacher teaches (enrollment.classGroup.teacherId).
+//   • Subject-level KPIs (passed/failed/low-attendance/not-assessed) require BOTH
+//     the class-group bound AND subject ownership (levelSubject.subjectId ∈ owned)
+//     — "meus alunos, nas minhas disciplinas".
+// FAIL-CLOSED: when the teacher has no owned subjects, every subject-level KPI is
+// 0 and no StudentSubjectProgress query runs — never a class-group-wide fallback.
+// teacherId + ownedSubjectIds are always server-resolved (never a client param).
+// No org-wide aggregation, no finance. See docs/teacher-access-scope.md.
+
+const LOW_ATTENDANCE_THRESHOLD = 75;
+/** Safety cap on distinct-studentId KPI queries — bounded defense-in-depth. */
+const SUBJECT_QUERY_LIMIT = 500;
+
+export interface TeacherProgressKPIs {
+  inProgressCount: number;        // StudentCourseProgress IN_PROGRESS (students in my class groups)
+  subjectPassedCount: number;     // StudentSubjectProgress PASSED in my subjects
+  subjectFailedCount: number;     // StudentSubjectProgress FAILED in my subjects
+  recoveryCount: number;          // StudentCourseProgress RECOVERY_REQUIRED (course-level)
+  blockedCount: number;           // StudentLevelProgress BLOCKED (students in my class groups)
+  lowAttendanceCount: number;     // distinct students with attendance < 75% in my subjects
+  noAssessmentCount: number;      // distinct students not yet assessed in my subjects
+  interventionCount: number;      // distinct at-risk students (blocked / failed-subject / low attendance)
+}
+
+/**
+ * Subject-ownership scope for StudentSubjectProgress queries — "meus alunos, nas
+ * minhas disciplinas": requires BOTH the class-group bound
+ * (`enrollment.classGroup.teacherId = me`) AND subject ownership
+ * (`levelSubject.subjectId ∈ ownedSubjectIds`). Returns `null` (fail-closed) when
+ * the teacher has no owned subjects — callers then report 0 and run no query.
+ */
+function subjectProgressScope(
+  organizationId: string,
+  teacherId: string,
+  ownedSubjectIds: string[]
+): Record<string, unknown> | null {
+  if (ownedSubjectIds.length === 0) return null;
+  return {
+    organizationId,
+    enrollment: { classGroup: { teacherId } },
+    levelSubject: { subjectId: { in: ownedSubjectIds } },
+  };
+}
+
+export async function getTeacherProgressKPIs(
+  organizationId: string,
+  teacherId: string,
+  ownedSubjectIds: string[]
+): Promise<TeacherProgressKPIs> {
+  const db = await getDb();
+
+  // Student/course-level signals → scoped to students in my class groups.
+  const inGroups = { enrollment: { classGroup: { teacherId } } };
+  // Subject-level signals → my class group AND my subject. null = fail closed.
+  const subjectScope = subjectProgressScope(organizationId, teacherId, ownedSubjectIds);
+
+  // Student/course-level KPIs always run (they don't depend on subject ownership).
+  const [courseStatusGroups, blocked] = await Promise.all([
+    db.studentCourseProgress.groupBy({
+      by: ["status"],
+      where: { organizationId, ...inGroups },
+      _count: { _all: true },
+    }),
+    db.studentLevelProgress.findMany({
+      where: { organizationId, status: "BLOCKED", ...inGroups },
+      select: { studentId: true },
+      distinct: ["studentId"],
+      take: SUBJECT_QUERY_LIMIT,
+    }),
+  ]);
+
+  // Subject-level KPIs only run when subject ownership is proven; else 0.
+  let bySubject: Record<string, number> = {};
+  let failedSubjectStudents: { studentId: string }[] = [];
+  let lowAttendanceStudents: { studentId: string }[] = [];
+  let notAssessedStudents: { studentId: string }[] = [];
+
+  if (subjectScope) {
+    [bySubject, failedSubjectStudents, lowAttendanceStudents, notAssessedStudents] = await Promise.all([
+      db.studentSubjectProgress
+        .groupBy({ by: ["status"], where: subjectScope, _count: { _all: true } })
+        .then((groups) => Object.fromEntries(groups.map((g) => [g.status, g._count._all]))),
+      db.studentSubjectProgress.findMany({
+        where: { ...subjectScope, status: "FAILED" },
+        select: { studentId: true },
+        distinct: ["studentId"],
+        take: SUBJECT_QUERY_LIMIT,
+      }),
+      db.studentSubjectProgress.findMany({
+        where: { ...subjectScope, attendancePercentage: { not: null, lt: LOW_ATTENDANCE_THRESHOLD } },
+        select: { studentId: true },
+        distinct: ["studentId"],
+        take: SUBJECT_QUERY_LIMIT,
+      }),
+      db.studentSubjectProgress.findMany({
+        where: { ...subjectScope, status: "NOT_STARTED" },
+        select: { studentId: true },
+        distinct: ["studentId"],
+        take: SUBJECT_QUERY_LIMIT,
+      }),
+    ]);
+  }
+
+  const byCourse = Object.fromEntries(courseStatusGroups.map((g) => [g.status, g._count._all]));
+
+  // "Elegíveis para Intervenção" — distinct students flagged by any at-risk signal.
+  const interventionStudents = new Set<string>([
+    ...blocked.map((r) => r.studentId),
+    ...failedSubjectStudents.map((r) => r.studentId),
+    ...lowAttendanceStudents.map((r) => r.studentId),
+  ]);
+
+  return {
+    inProgressCount: byCourse["IN_PROGRESS"] ?? 0,
+    subjectPassedCount: bySubject["PASSED"] ?? 0,
+    subjectFailedCount: bySubject["FAILED"] ?? 0,
+    recoveryCount: byCourse["RECOVERY_REQUIRED"] ?? 0,
+    blockedCount: blocked.length,
+    lowAttendanceCount: lowAttendanceStudents.length,
+    noAssessmentCount: notAssessedStudents.length,
+    interventionCount: interventionStudents.size,
+  };
+}
+
 // ─── Paginated dashboard rows — N+1 free ─────────────────────────────────────
 
 export async function listProgressForDashboard(
@@ -323,6 +476,7 @@ export async function listProgressForDashboard(
     ...(params.status && { status: params.status }),
     ...(params.courseId && { courseId: params.courseId }),
     ...(studentIdFilter && { studentId: { in: studentIdFilter } }),
+    ...(params.teacherId && { enrollment: { classGroup: { teacherId: params.teacherId } } }),
   };
 
   const [total, rows] = await Promise.all([

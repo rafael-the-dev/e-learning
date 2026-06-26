@@ -14,8 +14,10 @@ import {
 import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
-import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
+import { resolveDataAccessScope } from "@/server/auth/teacher-scope";
+import { getTeacherOwnedSubjectIds } from "@/server/auth/teacher-access";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { EmptyState } from "@/shared/components/layout/empty-state";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
 import {
   getProgressKPIs,
@@ -24,6 +26,8 @@ import {
   getCourseProgressDistribution,
   getLevelBlockDistribution,
   getActiveCoursesForFilter,
+  getTeacherProgressKPIs,
+  getTeacherCoursesForFilter,
   listProgressForDashboard,
 } from "@/modules/grades/services/progress-dashboard-metrics.service";
 import { getProgressInsights } from "@/modules/grades/services/progress-dashboard-insights.service";
@@ -75,12 +79,131 @@ export default async function StudentProgressPage({
   }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.STUDENT_COURSE_PROGRESS_VIEW);
-  // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
-  await redirectIfTeacherScoped(context);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);
   const { organizationId } = context;
+
+  // Teacher scope: a teacher sees only the progress of students in their own
+  // class groups, as a scoped "Progresso dos Meus Alunos" workspace — never the
+  // org-wide executive dashboard below. The scope's teacherId is resolved
+  // server-side from currentUser.id, never a query param. Subject/progress data
+  // is restricted to the teacher's class groups. See docs/teacher-access-scope.md.
+  const scope = await resolveDataAccessScope(context);
+  if (scope.type === "teacher") {
+    const { teacherId } = scope;
+    const hasFilters = Boolean(sp.search || sp.status || sp.courseId);
+
+    // Subject-level KPIs count only the teacher's own subjects; the student table
+    // shows students in the teacher's class groups (see docs/teacher-access-scope.md).
+    const ownedSubjectIds = await getTeacherOwnedSubjectIds(organizationId, teacherId);
+
+    const [kpis, courses, progressRows] = await Promise.all([
+      getTeacherProgressKPIs(organizationId, teacherId, ownedSubjectIds),
+      getTeacherCoursesForFilter(organizationId, teacherId),
+      listProgressForDashboard(organizationId, {
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        search: sp.search,
+        status: sp.status,
+        courseId: sp.courseId,
+        teacherId,
+      }),
+    ]);
+
+    return (
+      <>
+        <PageHeader
+          title="Progresso dos Meus Alunos"
+          description="O progresso académico dos alunos das suas turmas."
+        />
+
+        <div className="p-4 sm:p-8 space-y-6">
+          <ExecutiveKpiGrid>
+            <StatCard
+              title="Alunos em Curso"
+              value={kpis.inProgressCount}
+              icon={<GraduationCap className="size-4 text-indigo-500" />}
+              description="progressos em curso ativo"
+            />
+            <StatCard
+              title="Disciplinas Aprovadas"
+              value={kpis.subjectPassedCount}
+              icon={<CheckCircle2 className="size-4 text-emerald-500" />}
+              description="aprovações ao nível de disciplina"
+            />
+            <StatCard
+              title="Disciplinas Reprovadas"
+              value={kpis.subjectFailedCount}
+              icon={<XCircle className="size-4 text-red-500" />}
+              description="reprovações por disciplina"
+            />
+            <StatCard
+              title="Em Recuperação"
+              value={kpis.recoveryCount}
+              icon={<AlertTriangle className="size-4 text-orange-500" />}
+              description="aguardam resolução"
+            />
+            <StatCard
+              title="Bloqueados"
+              value={kpis.blockedCount}
+              icon={<Lock className="size-4 text-red-600" />}
+              description="não podem avançar de nível"
+            />
+            <StatCard
+              title="Baixa Frequência"
+              value={kpis.lowAttendanceCount}
+              icon={<BarChart3 className="size-4 text-amber-500" />}
+              description="presença abaixo de 75%"
+            />
+            <StatCard
+              title="Sem Avaliação"
+              value={kpis.noAssessmentCount}
+              icon={<BookOpen className="size-4 text-slate-500" />}
+              description="matrículas sem resultado"
+            />
+            <StatCard
+              title="Elegíveis para Intervenção"
+              value={kpis.interventionCount}
+              icon={<ShieldAlert className="size-4 text-rose-500" />}
+              description="alunos em risco a acompanhar"
+            />
+          </ExecutiveKpiGrid>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="size-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Progresso dos Alunos</CardTitle>
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  {progressRows.total.toLocaleString("pt-PT")}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 sm:px-4 sm:pb-4">
+              {progressRows.total === 0 && !hasFilters ? (
+                <EmptyState
+                  icon={<GraduationCap className="size-8" />}
+                  title="Sem alunos"
+                  description="Não existem alunos associados às suas turmas."
+                />
+              ) : (
+                <StudentProgressDashboardTable
+                  result={progressRows}
+                  courses={courses}
+                  defaultSearch={sp.search}
+                  defaultStatus={sp.status}
+                  defaultCourseId={sp.courseId}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   const [
     kpis,

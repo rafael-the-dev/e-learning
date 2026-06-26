@@ -46,9 +46,37 @@ A teacher-scoped user may reach only the **scoped surfaces** below; every other 
 | `/attendance` | Redirects to `/attendance/sessions` (hub shows org-wide stats) | `redirectIfTeacherScoped(context, "/attendance/sessions")`-style redirect |
 | `/attendance/sessions` | Only sessions where `teacherId = me`; class-group filter limited to my groups | Early-return minimal table; `getAttendanceSessionsByOrganization({ teacherId })` |
 | `/assessments` | Only assessments where `teacherId = me` | Early-return minimal table; `listAssessmentsForDashboard({ teacherId })` |
+| `/grades` | Results for **my own subjects** — `assessmentEvent.teacherId = me` OR (`enrollment.classGroup.teacherId = me` AND `subjectId ∈ my subjects`) | Early-return **"Minhas Notas"** workspace; `listGradeResults({ teacherId, ownedSubjectIds })` + `getTeacherGradeKPIs` |
+| `/student-progress` | Students in my class groups; subject KPIs only for **my own subjects** (`levelSubject.subjectId ∈ my subjects`) | Early-return **"Progresso dos Meus Alunos"** workspace; `listProgressForDashboard({ teacherId })` + `getTeacherProgressKPIs({ ownedSubjectIds })` |
 | `/notifications` | Already scoped by `recipientUserId` (unchanged) | Existing notifications module |
 
-For the four dashboard pages above (class-groups, students, attendance/sessions, assessments), the teacher gets an **early-return minimal scoped view**: a `PageHeader` + the scoped table only. The org-wide KPI cards, trend charts, distribution donuts, and watchlists — whose underlying services have no teacher-scope parameter — are **not fetched and not rendered** for a teacher-scoped request. The admin code path below the early return is untouched.
+For the dashboard pages above (class-groups, students, attendance/sessions, assessments, grades, student-progress), the teacher gets an **early-return scoped view**: a `PageHeader` + teacher-scoped KPIs + the scoped table only. The org-wide KPI cards, trend charts, distribution donuts, watchlists, and per-teacher comparisons — whose underlying services have no teacher-scope parameter — are **not fetched and not rendered** for a teacher-scoped request. The admin code path below the early return is untouched.
+
+#### Scoped academic workspaces — `/grades` & `/student-progress`
+
+Both branch on `resolveDataAccessScope(context)`: `type === "teacher"` renders the scoped workspace and returns early; `type === "organization"` falls through to the existing executive dashboard (ORG_ADMIN / SUPER_ADMIN / SECRETARY unchanged).
+
+- **`/grades` → "Minhas Notas".** KPIs: *Avaliações por Corrigir* (DRAFT+SUBMITTED), *Resultados Lançados* (GRADED), *Média das Minhas Avaliações* (avg normalized grade), *Alunos em Risco* (distinct students FAILED in **my** subjects). Table: *Resultados por Lançar / Corrigir*, filterable by class group / subject / status / search — the subject dropdown lists **only the teacher's own subjects**. Empty state: *"Não existem avaliações por corrigir."*
+- **`/student-progress` → "Progresso dos Meus Alunos".** Student/course-level KPIs (scoped to students in my class groups): *Alunos em Curso*, *Bloqueados*, *Em Recuperação*. Subject-level KPIs (scoped to **my own subjects**): *Disciplinas Aprovadas*, *Disciplinas Reprovadas*, *Baixa Frequência* (`attendancePercentage < 75`), *Sem Avaliação* (`NOT_STARTED`), *Elegíveis para Intervenção* (distinct at-risk students — blocked ∪ my-failed-subject ∪ my-low-attendance). The course-progress table reuses `StudentProgressDashboardTable` (rows link to `/enrollments/[id]`, itself ownership-guarded). Empty state: *"Não existem alunos associados às suas turmas."*
+
+#### Two-tier ownership — class group controls *students*, subject controls *grades/progress*
+
+A class group has a single homeroom `teacherId`, but **different teachers may teach different subjects within it**. So class-group ownership alone would let a homeroom teacher see a co-teacher's subject grades. These two surfaces therefore use a **two-tier** model:
+
+- **Class-group ownership** (`classGroup.teacherId = me`) controls which **students/classes** are visible — `/students`, `/class-groups`, the `/student-progress` course-progress table, attendance.
+- **Subject ownership** controls which **grades / subject-progress** are visible. A teacher's owned subjects come from `getTeacherOwnedSubjectIds(orgId, teacherId)` = `TeacherSubject.subjectId` (the canonical assignment) **∪** the subjects of assessments they authored (`Assessment.teacherId = me`).
+
+**`/grades` ownership predicate** (`teacherGradeScopeAnd`): a result is the teacher's iff
+`assessmentEvent.teacherId = me` **OR** (`enrollment.classGroup.teacherId = me` **AND** `subjectId ∈ ownedSubjectIds`).
+The event branch lets a teacher's authored-event results appear even in another teacher's class group; the AND branch stops a homeroom teacher from seeing a co-teacher's subject grades in a shared class group **and** stops a teacher from seeing their subject in a class group they don't teach (the class-group bound is required, not optional). Query-param filters (`classGroupId`, `subjectId`, `status`, `search`) are **ANDed on top**, so they can only narrow — never widen — and a forged `subjectId` for a subject the teacher doesn't own returns nothing (only their own authored-event rows, if any).
+
+**`/student-progress` subject KPIs** (`subjectProgressScope`) require **both** `enrollment.classGroup.teacherId = me` **and** `levelSubject.subjectId ∈ ownedSubjectIds` — *"meus alunos, nas minhas disciplinas"*. A teacher never counts their subject's progress for students in a class group they don't teach. Student/course-level KPIs (in-progress, blocked, recovery) stay class-group scoped only.
+
+**Fail-closed — no fallback.** When `getTeacherOwnedSubjectIds` returns **empty** (no `TeacherSubject` assignment *and* no authored assessment — no subject-ownership signal at all), the system **cannot prove academic ownership**, so it fails closed:
+- `/grades` — branch B is disabled; only authored-event results are visible (a teacher who authored assessments still sees those). There is **no** fallback to bare class-group access, so a homeroom teacher with no subject signal sees **no** co-teacher grades.
+- `/student-progress` — every subject-level KPI is **0** and no `StudentSubjectProgress` query runs; the subject filter dropdown is empty. Student/class-level KPIs (students in my class groups) still render.
+
+`getTeacherOwnedSubjectIds` = `TeacherSubject.subjectId` ∪ subjects of the teacher's **non-cancelled, non-archived** authored assessments. `teacherId` and `ownedSubjectIds` are **always** resolved server-side from `currentUser.id`, never from the request. No finance data, no org-wide KPIs, no other teachers' students or per-teacher comparisons are fetched on these paths.
 
 Single-record / action pages reached *from* these surfaces are **not** blocked wholesale, but they must **enforce ownership** — a permission gate alone is not enough, because a teacher holds the same `*.view`/`*.mark`/`*.grade` permissions org-wide and could otherwise open another teacher's record by replaying its id (IDOR). Ownership is asserted server-side from the resolved `teacherId`; it never relies on the id being unguessable. See **Detail & write-path ownership** below.
 
@@ -56,11 +84,13 @@ Single-record / action pages reached *from* these surfaces are **not** blocked w
 
 These render org-wide KPIs/charts/watchlists/reports with no teacher-scope parameter, so rather than half-scope them (which would leave aggregate leaks) they redirect teacher-scoped users to their Portal:
 
-`/enrollments`, `/grades`, `/grades/entry`, `/student-progress`, `/courses`, `/level-progression`, `/subjects`, `/lessons`, `/schedules`, `/classroom-bookings`, `/academic-calendar`, `/attendance/reports`, `/attendance/justifications`, `/classrooms`, `/assessment-policies`, `/assessment-periods`.
+`/enrollments`, `/grades/entry`, `/courses`, `/level-progression`, `/subjects`, `/lessons`, `/schedules`, `/classroom-bookings`, `/academic-calendar`, `/attendance/reports`, `/attendance/justifications`, `/classrooms`, `/assessment-policies`, `/assessment-periods`.
 
 Each calls `await redirectIfTeacherScoped(context)` immediately after its permission guard. (`/attendance` itself redirects teacher-scoped users straight to `/attendance/sessions`, their scoped list.)
 
 `/grades/entry`, `/attendance/reports` and `/attendance/justifications` are org-wide over *student* data (not just config) — they were the highest-impact leaks closed by this policy. `/classrooms`, `/assessment-policies`, `/assessment-periods` are org-wide *reference/config* pages; under the strict policy teachers are redirected from them too.
+
+**`/level-progression` stays blocked — by design.** Even though the teacher holds `LEVEL_PROGRESSION_VIEW`, level progression is an **academic/administrative decision** (promoting a student between course levels, approving progression requests), not teacher-owned operational work. Unlike grades and subject-progress — which a teacher *produces and acts on daily for their own students* — progression is owned by the secretariat/administration. It is therefore deliberately **not** given a scoped teacher view; teacher-scoped users are redirected to `/teacher`.
 
 ### Detail & write-path ownership — `src/server/auth/teacher-access.ts`
 
@@ -166,7 +196,7 @@ in the same file also asserts each fixed route keeps its specific guard.
 
 ## Known limitations / trade-offs
 
-- **Lock-down over retrofit.** The 8 heavy executive dashboards aren't individually re-scoped (their ~40 KPI/trend/distribution/watchlist services have no scope param). Teachers get a minimal scoped table on the 4 kept surfaces and are redirected away from the rest. Re-scoping a blocked page's full dashboard for teachers is a future enhancement, not a security gap.
+- **Lock-down over retrofit, then selective re-scoping.** The heavy executive dashboards aren't *individually* re-scoped wholesale (their org-wide KPI/trend/distribution/watchlist services have no scope param). Teachers instead get a purpose-built scoped view on the kept surfaces — `/class-groups`, `/students`, `/attendance/sessions`, `/assessments` (minimal scoped table), plus `/grades` and `/student-progress` (scoped KPIs + table). The remaining org-wide dashboards still redirect. Adding a scoped view to another blocked page is a future enhancement, not a security gap.
 - **Lesson authoring, subjects, calendar, schedules** are currently blocked for teachers under the minimal-nav policy. If teachers need a scoped version of any of these, add it per the steps above.
 - **"My students" = enrolled in any class group I teach.** A student in two teachers' class groups appears for both — the intended definition of "my students."
 - **`canViewOrgWide` proxy** (used by the Teacher Portal's Quick Actions, see `docs/teacher-portal.md`) and this module's `isTeacherScopedRoles` are two sides of the same role test; both treat ORG_ADMIN/SUPER_ADMIN as unrestricted.

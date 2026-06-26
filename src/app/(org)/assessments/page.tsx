@@ -109,7 +109,20 @@ export default async function AssessmentsPage({
 
     return (
       <>
-        <PageHeader title="Avaliações" description="As avaliações das suas turmas." />
+        <PageHeader
+          title="Avaliações"
+          description="As avaliações das suas turmas."
+          actions={
+            canCreate ? (
+              <Button asChild size="sm">
+                <Link href="/assessments/new">
+                  <ClipboardList className="size-4 mr-1.5" />
+                  Nova Avaliação
+                </Link>
+              </Button>
+            ) : undefined
+          }
+        />
         <div className="p-4 sm:p-8">
           <Card>
             <CardHeader className="pb-3">

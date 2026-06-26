@@ -127,6 +127,8 @@ describe("teacher route-guard manifest (pinned)", () => {
     { file: "class-groups/page.tsx", token: "resolveDataAccessScope" },
     { file: "attendance/sessions/page.tsx", token: "resolveDataAccessScope" },
     { file: "assessments/page.tsx", token: "resolveDataAccessScope" },
+    { file: "grades/page.tsx", token: "resolveDataAccessScope" },
+    { file: "student-progress/page.tsx", token: "resolveDataAccessScope" },
     // Scoped detail pages — per-record ownership
     { file: "students/[studentId]/page.tsx", token: "assertTeacherCanAccessStudent" },
     { file: "students/[studentId]/timeline/page.tsx", token: "assertTeacherCanAccessStudent" },
@@ -138,9 +140,7 @@ describe("teacher route-guard manifest (pinned)", () => {
     { file: "assessments/[assessmentId]/grade/page.tsx", token: "assertTeacherCanAccessAssessment" },
     // Blocked org-wide pages — redirect to /teacher
     { file: "enrollments/page.tsx", token: "redirectIfTeacherScoped" },
-    { file: "grades/page.tsx", token: "redirectIfTeacherScoped" },
     { file: "grades/entry/page.tsx", token: "redirectIfTeacherScoped" },
-    { file: "student-progress/page.tsx", token: "redirectIfTeacherScoped" },
     { file: "schedules/page.tsx", token: "redirectIfTeacherScoped" },
     { file: "level-progression/page.tsx", token: "redirectIfTeacherScoped" },
     { file: "courses/page.tsx", token: "redirectIfTeacherScoped" },
@@ -175,7 +175,16 @@ describe("teacher sidebar allowlist", () => {
     expect(block, "TEACHER_NAV_ALLOWLIST not found").toBeTruthy();
     const hrefs = Array.from(block![1]!.matchAll(/"([^"]+)"/g)).map((m) => m[1]!).sort();
     expect(hrefs).toEqual(
-      ["/assessments", "/attendance", "/class-groups", "/notifications", "/students", "/teacher"].sort()
+      [
+        "/assessments",
+        "/attendance",
+        "/class-groups",
+        "/grades",
+        "/notifications",
+        "/student-progress",
+        "/students",
+        "/teacher",
+      ].sort()
     );
   });
 });

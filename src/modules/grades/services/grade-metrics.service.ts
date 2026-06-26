@@ -229,7 +229,124 @@ export async function getTopRiskSubjects(organizationId: string): Promise<RiskSu
     .slice(0, 8);
 }
 
+// ─── Teacher-scoped KPIs ──────────────────────────────────────────────────────
+// Powers the "Minhas Notas" workspace. Two-tier ownership: grade results are
+// scoped by SUBJECT ownership (authored event OR my-subject-in-my-class-group;
+// see teacherGradeScopeAnd), and the "Alunos em Risco" KPI counts MY students
+// (class group I teach) failing one of MY subjects. teacherId + ownedSubjectIds
+// are always server-resolved (never a client param). Fail-closed when the
+// teacher has no subject signal. No org-wide aggregation, no finance, no other
+// teachers' data. See docs/teacher-access-scope.md.
+
+/** Safety cap on distinct-studentId KPI queries — bounded defense-in-depth. */
+const SUBJECT_QUERY_LIMIT = 500;
+
+export interface TeacherGradeKPIs {
+  /** DRAFT + SUBMITTED results awaiting grading. */
+  toGradeCount: number;
+  /** GRADED results. */
+  gradedCount: number;
+  /** Average normalized grade across this teacher's GRADED results, or null. */
+  avgNormalizedGrade: number | null;
+  /** Distinct students with a FAILED progress in one of the teacher's subjects. */
+  atRiskStudentCount: number;
+}
+
+export async function getTeacherGradeKPIs(
+  organizationId: string,
+  teacherId: string,
+  ownedSubjectIds: string[]
+): Promise<TeacherGradeKPIs> {
+  const db = await getDb();
+
+  // Same subject-ownership predicate as the list — never just classGroup.
+  const resultScope = { organizationId, AND: teacherGradeScopeAnd(teacherId, ownedSubjectIds) };
+
+  // "Alunos em Risco" = MY students (class group I teach) failing one of MY
+  // subjects — both bounds required. Fail closed: no owned subjects → 0.
+  const atRiskScope =
+    ownedSubjectIds.length > 0
+      ? {
+          organizationId,
+          status: "FAILED",
+          enrollment: { classGroup: { teacherId } },
+          levelSubject: { subjectId: { in: ownedSubjectIds } },
+        }
+      : null;
+
+  const [statusGroups, gradeAvg, atRiskStudents] = await Promise.all([
+    db.studentAssessmentResult.groupBy({
+      by: ["status"],
+      where: { ...resultScope, status: { not: "CANCELLED" } },
+      _count: { _all: true },
+    }),
+    db.studentAssessmentResult.aggregate({
+      where: { ...resultScope, status: "GRADED" },
+      _avg: { normalizedGrade: true },
+    }),
+    atRiskScope
+      ? db.studentSubjectProgress.findMany({
+          where: atRiskScope,
+          select: { studentId: true },
+          distinct: ["studentId"],
+          take: SUBJECT_QUERY_LIMIT,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const byStatus = Object.fromEntries(statusGroups.map((g) => [g.status, g._count._all]));
+
+  return {
+    toGradeCount: (byStatus["DRAFT"] ?? 0) + (byStatus["SUBMITTED"] ?? 0),
+    gradedCount: byStatus["GRADED"] ?? 0,
+    avgNormalizedGrade:
+      gradeAvg._avg.normalizedGrade != null
+        ? Math.round(Number(gradeAvg._avg.normalizedGrade) * 10) / 10
+        : null,
+    atRiskStudentCount: atRiskStudents.length,
+  };
+}
+
 // ─── Paginated grade results (for table) ─────────────────────────────────────
+
+/**
+ * Builds the teacher subject-ownership AND-clause for grade-result queries.
+ * A teacher owns a result when EITHER:
+ *   • (A) they authored the assessment event — `assessmentEvent.teacherId = me`
+ *         (visible even in another teacher's class group), OR
+ *   • (B) it is for one of their own subjects in a class group they teach —
+ *         `enrollment.classGroup.teacherId = me` AND `subjectId ∈ ownedSubjectIds`.
+ *
+ * Branch B stops a homeroom teacher from seeing a co-teacher's subject grades in
+ * a shared class group, AND keeps a teacher from counting their subject in an
+ * unrelated class group (the class-group bound is required, not optional).
+ *
+ * FAIL-CLOSED: when `ownedSubjectIds` is empty (no subject-ownership signal at
+ * all) branch B is disabled entirely — only authored events (A) are visible.
+ * There is NO fallback to bare class-group access, because without a subject
+ * signal the system cannot prove academic ownership. See docs/teacher-access-scope.md.
+ *
+ * `teacherId` is always the server-resolved value, so a query param ANDed on top
+ * can only narrow, never widen.
+ */
+function teacherGradeScopeAnd(
+  teacherId: string,
+  ownedSubjectIds: string[]
+): Record<string, unknown>[] {
+  const eventBranch = { assessmentEvent: { teacherId } };
+
+  if (ownedSubjectIds.length === 0) {
+    // Fail closed — authored events only, never bare class-group access.
+    return [{ OR: [eventBranch] }];
+  }
+
+  // Branch B: my class group AND my subject (both required).
+  const classGroupAndSubject = {
+    enrollment: { classGroup: { teacherId } },
+    subjectId: { in: ownedSubjectIds },
+  };
+  return [{ OR: [eventBranch, classGroupAndSubject] }];
+}
 
 interface ListGradeResultsParams {
   page: number;
@@ -238,6 +355,15 @@ interface ListGradeResultsParams {
   classGroupId?: string;
   status?: string;
   search?: string;
+  /**
+   * Teacher scope — ALWAYS the server-resolved teacherId (from currentUser.id),
+   * never a client value. Applies the subject-ownership predicate (see
+   * teacherGradeScopeAnd). Query-param filters below are ANDed on top, so they
+   * can only narrow, never widen.
+   */
+  teacherId?: string;
+  /** Subjects the teacher owns — from getTeacherOwnedSubjectIds. */
+  ownedSubjectIds?: string[];
 }
 
 export async function listGradeResults(
@@ -254,6 +380,8 @@ export async function listGradeResults(
   if (params.subjectId) where.subjectId = params.subjectId;
   if (params.status) where.status = params.status;
   if (params.classGroupId) where.enrollment = { classGroupId: params.classGroupId };
+  if (params.teacherId) where.AND = teacherGradeScopeAnd(params.teacherId, params.ownedSubjectIds ?? []);
+
   if (params.search) {
     where.student = {
       OR: [
