@@ -1,6 +1,7 @@
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import {
@@ -18,6 +19,9 @@ export default async function AttendanceJustificationsPage({
   searchParams: Promise<{ page?: string; search?: string; status?: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_VIEW);
+  // Org-wide absence justifications across all students — never shown to a
+  // teacher-scoped user. See docs/teacher-access-scope.md.
+  await redirectIfTeacherScoped(context);
 
   const { page, search, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

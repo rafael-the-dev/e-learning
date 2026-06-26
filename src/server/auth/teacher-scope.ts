@@ -43,9 +43,10 @@ const ADMIN_ROLES: string[] = [SYSTEM_ROLES.ORG_ADMIN, SYSTEM_ROLES.SUPER_ADMIN]
  * TEACHER role (they're trusted with org-wide data). SECRETARY/STUDENT are
  * not teacher-scoped. Anyone else holding TEACHER is.
  */
-export function isTeacherScopedRoles(roles: string[]): boolean {
-  if (roles.some((r) => ADMIN_ROLES.includes(r))) return false;
-  return roles.includes(SYSTEM_ROLES.TEACHER);
+export function isTeacherScopedRoles(roles: string[] | undefined | null): boolean {
+  const list = roles ?? [];
+  if (list.some((r) => ADMIN_ROLES.includes(r))) return false;
+  return list.includes(SYSTEM_ROLES.TEACHER);
 }
 
 /**

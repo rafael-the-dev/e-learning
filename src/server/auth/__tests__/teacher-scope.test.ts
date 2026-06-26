@@ -54,6 +54,12 @@ describe("isTeacherScopedRoles", () => {
   it("scopes a TEACHER+SECRETARY hybrid (has TEACHER, not admin)", () => {
     expect(isTeacherScopedRoles([SYSTEM_ROLES.TEACHER, SYSTEM_ROLES.SECRETARY])).toBe(true);
   });
+
+  it("is defensive: undefined/null/empty roles return false instead of throwing", () => {
+    expect(isTeacherScopedRoles(undefined)).toBe(false);
+    expect(isTeacherScopedRoles(null)).toBe(false);
+    expect(isTeacherScopedRoles([])).toBe(false);
+  });
 });
 
 describe("resolveTeacherScope", () => {

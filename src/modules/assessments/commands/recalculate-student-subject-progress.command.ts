@@ -6,6 +6,8 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { assertTeacherCanAccessEnrollment } from "@/server/auth/teacher-access";
+import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
@@ -65,6 +67,9 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
     if (!createAbility(perms).can(PERMISSIONS.ASSESSMENT_RESULTS_GRADE)) {
       throw new AuthorizationError();
     }
+    // Defense-in-depth: a teacher-scoped user may only recalculate progress for an
+    // enrollment in a class group they teach. No-op for admins/secretaries.
+    await assertTeacherCanAccessEnrollment(this.context as AuthContext, this.input.enrollmentId);
   }
 
   async execute(): Promise<StudentSubjectProgress> {

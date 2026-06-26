@@ -7,6 +7,8 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { assertTeacherCanAccessAssessment } from "@/server/auth/teacher-access";
+import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
@@ -39,6 +41,9 @@ export class PublishAssessmentResultsCommand extends BaseCommand<
     if (!createAbility(perms).can(PERMISSIONS.ASSESSMENT_PUBLICATIONS_PUBLISH)) {
       throw new AuthorizationError();
     }
+    // Defense-in-depth against write IDOR: a teacher-scoped user may only publish
+    // an assessment they own (or for a class group they teach). No-op for admins.
+    await assertTeacherCanAccessAssessment(this.context as AuthContext, this.input.assessmentId);
   }
 
   async execute(): Promise<void> {

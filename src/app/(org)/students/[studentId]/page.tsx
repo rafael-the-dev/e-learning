@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { assertTeacherCanAccessStudent } from "@/server/auth/teacher-access";
 import { PERMISSIONS } from "@/server/auth/permissions";
-import { NotFoundError } from "@/shared/lib/command";
+import { AuthorizationError, NotFoundError } from "@/shared/lib/command";
 import {
   getStudent360Core,
   buildHealthScoreInput,
@@ -69,9 +70,13 @@ export default async function StudentDetailPage({
 
   let core;
   try {
+    // Teacher-scoped users may only open a student enrolled in a class group they
+    // teach — never any org student by id (IDOR). 404 (not 403) so we don't
+    // disclose that the record exists. See docs/teacher-access-scope.md.
+    await assertTeacherCanAccessStudent(context, studentId);
     core = await getStudent360Core(studentId, context.organizationId);
   } catch (e) {
-    if (e instanceof NotFoundError) notFound();
+    if (e instanceof NotFoundError || e instanceof AuthorizationError) notFound();
     throw e;
   }
 

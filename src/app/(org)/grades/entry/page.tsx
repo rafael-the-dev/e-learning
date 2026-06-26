@@ -4,6 +4,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/layout/empty-state";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { findActiveComponentsByPolicy } from "@/modules/assessments/repositories/assessment-component.repository";
@@ -23,6 +24,9 @@ export default async function GradeEntryPage({
   }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.GRADES_CREATE);
+  // Org-wide grade entry (lists every class group/subject) — teachers grade via
+  // the scoped /assessments/[id]/grade path instead. See docs/teacher-access-scope.md.
+  await redirectIfTeacherScoped(context);
 
   const sp = await searchParams;
   const db = await getDb();

@@ -4,8 +4,10 @@ import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { assertTeacherCanAccessAssessment } from "@/server/auth/teacher-access";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { AuthorizationError } from "@/shared/lib/command";
 import { findAssessmentById } from "@/modules/assessments/repositories/assessment.repository";
 import { findAllResultsByAssessment } from "@/modules/assessments/repositories/assessment-result.repository";
 import { AssessmentDetail } from "@/modules/assessments/components/assessment-detail";
@@ -20,6 +22,15 @@ export default async function AssessmentDetailPage({
   const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENTS_VIEW);
 
   const { assessmentId } = await params;
+
+  // Teacher-scoped users may only open an assessment they own or for a class
+  // group they teach (IDOR guard). 404 so we don't disclose existence.
+  try {
+    await assertTeacherCanAccessAssessment(context, assessmentId);
+  } catch (e) {
+    if (e instanceof AuthorizationError) notFound();
+    throw e;
+  }
 
   const [assessment, results] = await Promise.all([
     findAssessmentById(assessmentId, context.organizationId),

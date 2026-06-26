@@ -7,6 +7,8 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { assertTeacherCanAccessAttendanceSession } from "@/server/auth/teacher-access";
+import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getDb } from "@/server/db";
 import { findAttendanceSessionById } from "@/modules/attendance/repositories/attendance-session.repository";
@@ -63,6 +65,9 @@ export class MarkAttendanceCommand extends BaseCommand<MarkAttendanceSchema, Att
     if (!createAbility(perms).can(PERMISSIONS.ATTENDANCE_RECORDS_MARK)) {
       throw new AuthorizationError();
     }
+    // Defense-in-depth against write IDOR: a teacher-scoped user may only mark a
+    // session they teach. No-op for admins/secretaries. See docs/teacher-access-scope.md.
+    await assertTeacherCanAccessAttendanceSession(this.context as AuthContext, this.input.sessionId);
   }
 
   async execute(): Promise<AttendanceRecord> {

@@ -3,6 +3,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -38,6 +39,9 @@ export default async function ClassroomsPage({
   }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.CLASSROOMS_VIEW);
+  // Org-wide reference page — blocked for teacher-scoped users (strict policy).
+  // See docs/teacher-access-scope.md.
+  await redirectIfTeacherScoped(context);
 
   const { page, search, status, type, branchId } = await searchParams;
   const pagination = normalizePaginationParams(page);

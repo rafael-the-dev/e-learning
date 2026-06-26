@@ -1,5 +1,6 @@
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { resolveTeacherScope } from "@/server/auth/teacher-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { findAssessmentPoliciesByOrganization } from "@/modules/assessments/repositories/assessment-policy.repository";
@@ -9,14 +10,21 @@ import { CreateAssessmentForm } from "@/modules/assessments/components/create-as
 
 export const metadata = { title: "Nova Avaliação" };
 
-async function getFormDeps(organizationId: string) {
+async function getFormDeps(organizationId: string, classGroupTeacherId: string | undefined) {
   const db = await getDb();
   const [policiesResult, periodsResult, classGroups, teachers, academicYears, academicTerms] =
     await Promise.all([
       findAssessmentPoliciesByOrganization(organizationId, { page: 1, pageSize: 200, status: "ACTIVE" }),
       findAssessmentPeriodsByOrganization(organizationId, { page: 1, pageSize: 200, status: "ACTIVE" }),
       db.classGroup.findMany({
-        where: { organizationId, deletedAt: null, status: "ACTIVE" },
+        // Teacher-scoped: only the teacher's own class groups (classGroupTeacherId).
+        // Org-wide for admins/secretaries (undefined → no teacher filter).
+        where: {
+          organizationId,
+          deletedAt: null,
+          status: "ACTIVE",
+          ...(classGroupTeacherId !== undefined && { teacherId: classGroupTeacherId }),
+        },
         select: { id: true, name: true, courseLevelId: true },
         orderBy: { name: "asc" },
       }),
@@ -70,8 +78,13 @@ async function getFormDeps(organizationId: string) {
 export default async function NewAssessmentPage() {
   const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENTS_CREATE);
 
+  // Teacher-scoped users only see their own class groups in the dropdown; an
+  // unlinked teacher (teacherId undefined) sees none. See docs/teacher-access-scope.md.
+  const scope = await resolveTeacherScope(context);
+  const classGroupTeacherId = scope.isTeacherScoped ? (scope.teacherId ?? "__none__") : undefined;
+
   const { policiesResult, periodsResult, classGroups, teachers, academicYears, academicTerms, policyLevelSubjectMap } =
-    await getFormDeps(context.organizationId);
+    await getFormDeps(context.organizationId, classGroupTeacherId);
 
   const policies = policiesResult.data;
   const periods = periodsResult.data;

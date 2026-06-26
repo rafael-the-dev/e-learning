@@ -1,6 +1,7 @@
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { normalizePaginationParams } from "@/shared/lib/pagination";
@@ -17,6 +18,9 @@ export default async function AssessmentPeriodsPage({
   searchParams: Promise<{ page?: string; search?: string; status?: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENT_PERIODS_VIEW);
+  // Org-wide config page — blocked for teacher-scoped users (strict policy).
+  // See docs/teacher-access-scope.md.
+  await redirectIfTeacherScoped(context);
 
   const { page, search, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

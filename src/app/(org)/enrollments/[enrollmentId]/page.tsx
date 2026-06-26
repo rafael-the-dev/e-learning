@@ -4,6 +4,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { assertTeacherCanAccessEnrollment } from "@/server/auth/teacher-access";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -11,7 +12,7 @@ import {
   getEnrollmentHistory,
 } from "@/modules/enrollments/services/enrollment.service";
 import { EnrollmentStatusActions } from "@/modules/enrollments/components/enrollment-status-actions";
-import { NotFoundError } from "@/shared/lib/command";
+import { AuthorizationError, NotFoundError } from "@/shared/lib/command";
 import {
   BookOpen,
   Pencil,
@@ -114,9 +115,12 @@ export default async function EnrollmentDetailPage({
 
   let enrollment;
   try {
+    // Teacher-scoped users may only open an enrollment in a class group they
+    // teach (IDOR guard). 404 so we don't disclose existence.
+    await assertTeacherCanAccessEnrollment(context, enrollmentId);
     enrollment = await getEnrollmentById(enrollmentId, context.organizationId);
   } catch (e) {
-    if (e instanceof NotFoundError) notFound();
+    if (e instanceof NotFoundError || e instanceof AuthorizationError) notFound();
     throw e;
   }
 

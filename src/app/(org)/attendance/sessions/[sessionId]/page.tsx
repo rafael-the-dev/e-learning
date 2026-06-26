@@ -5,7 +5,9 @@ import { StatCard } from "@/shared/components/layout/stat-card";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { assertTeacherCanAccessAttendanceSession } from "@/server/auth/teacher-access";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { AuthorizationError } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { findAttendanceSessionById } from "@/modules/attendance/repositories/attendance-session.repository";
 import { findRecordsBySession } from "@/modules/attendance/repositories/attendance-record.repository";
@@ -24,6 +26,16 @@ export default async function AttendanceSessionDetailPage({
   const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
 
   const { sessionId } = await params;
+  // Teacher-scoped users may only open a session they teach (or one for a class
+  // group they teach) — never any org session by id (IDOR). 404 so we don't
+  // disclose existence. See docs/teacher-access-scope.md.
+  try {
+    await assertTeacherCanAccessAttendanceSession(context, sessionId);
+  } catch (e) {
+    if (e instanceof AuthorizationError) notFound();
+    throw e;
+  }
+
   const [session, records, summary] = await Promise.all([
     findAttendanceSessionById(sessionId, context.organizationId),
     findRecordsBySession(sessionId, context.organizationId),

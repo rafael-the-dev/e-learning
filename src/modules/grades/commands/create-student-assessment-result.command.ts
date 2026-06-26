@@ -7,6 +7,8 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { assertTeacherCanAccessEnrollment } from "@/server/auth/teacher-access";
+import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getDb } from "@/server/db";
 import { upsertStudentAssessmentResult } from "@/modules/grades/repositories/student-assessment-result.repository";
@@ -66,6 +68,9 @@ export class CreateStudentAssessmentResultCommand extends BaseCommand<
     if (!createAbility(perms).can(PERMISSIONS.GRADES_CREATE)) {
       throw new AuthorizationError();
     }
+    // Defense-in-depth against write IDOR: a teacher-scoped user may only grade an
+    // enrollment in a class group they teach. No-op for admins/secretaries.
+    await assertTeacherCanAccessEnrollment(this.context as AuthContext, this.input.enrollmentId);
   }
 
   async execute(): Promise<StudentAssessmentResult> {

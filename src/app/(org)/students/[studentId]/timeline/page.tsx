@@ -7,6 +7,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { assertTeacherCanAccessStudent } from "@/server/auth/teacher-access";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getStudentById } from "@/modules/students/services/student.service";
@@ -14,7 +15,7 @@ import { getStudentTimeline } from "@/modules/student-timeline/services/student-
 import { TimelineList } from "@/modules/student-timeline/components/timeline-list";
 import { TimelineFilters } from "@/modules/student-timeline/components/timeline-filters";
 import { AddNoteButton } from "@/modules/student-timeline/components/add-note-button";
-import { NotFoundError } from "@/shared/lib/command";
+import { AuthorizationError, NotFoundError } from "@/shared/lib/command";
 import { ChevronLeft, ChevronRight, History } from "lucide-react";
 import type { TimelineEventType, TimelineReferenceType } from "@/modules/student-timeline/types";
 
@@ -40,9 +41,12 @@ export default async function StudentTimelinePage({
 
   let student;
   try {
+    // Teacher-scoped users may only open the timeline of a student they teach
+    // (IDOR guard). 404 so we don't disclose existence. See docs/teacher-access-scope.md.
+    await assertTeacherCanAccessStudent(context, studentId);
     student = await getStudentById(studentId, context.organizationId);
   } catch (e) {
-    if (e instanceof NotFoundError) notFound();
+    if (e instanceof NotFoundError || e instanceof AuthorizationError) notFound();
     throw e;
   }
 

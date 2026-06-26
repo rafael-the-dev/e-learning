@@ -4,7 +4,9 @@ import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { assertTeacherCanAccessAssessment } from "@/server/auth/teacher-access";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { AuthorizationError } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { getDb } from "@/server/db";
 import { findAssessmentById } from "@/modules/assessments/repositories/assessment.repository";
@@ -20,6 +22,15 @@ export default async function GradeAssessmentPage({
   const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENT_RESULTS_VIEW);
 
   const { assessmentId } = await params;
+  // Teacher-scoped users may only grade an assessment they own or for a class
+  // group they teach (IDOR guard). 404 so we don't disclose existence.
+  try {
+    await assertTeacherCanAccessAssessment(context, assessmentId);
+  } catch (e) {
+    if (e instanceof AuthorizationError) notFound();
+    throw e;
+  }
+
   const assessment = await findAssessmentById(assessmentId, context.organizationId);
   if (!assessment) notFound();
 

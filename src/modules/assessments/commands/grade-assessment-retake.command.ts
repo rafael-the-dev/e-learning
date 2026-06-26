@@ -7,6 +7,8 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { assertTeacherCanAccessAssessment } from "@/server/auth/teacher-access";
+import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import {
   findRetakeById,
@@ -55,6 +57,13 @@ export class GradeAssessmentRetakeCommand extends BaseCommand<
     const perms = await getUserPermissions(this.context.userId, this.context.organizationId);
     if (!createAbility(perms).can(PERMISSIONS.ASSESSMENT_RESULTS_GRADE)) {
       throw new AuthorizationError();
+    }
+    // Defense-in-depth against write IDOR: a teacher-scoped user may only grade a
+    // retake of an assessment they own (or for a class group they teach). The
+    // retake exists here (validate() ran first and asserts it).
+    const retake = await findRetakeById(this.input.retakeId, this.context.organizationId);
+    if (retake) {
+      await assertTeacherCanAccessAssessment(this.context as AuthContext, retake.assessmentId);
     }
   }
 

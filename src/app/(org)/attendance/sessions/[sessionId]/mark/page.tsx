@@ -1,7 +1,9 @@
 import { redirect, notFound } from "next/navigation";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { assertTeacherCanAccessAttendanceSession } from "@/server/auth/teacher-access";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { AuthorizationError } from "@/shared/lib/command";
 import { findAttendanceSessionById } from "@/modules/attendance/repositories/attendance-session.repository";
 import { findRecordsBySession } from "@/modules/attendance/repositories/attendance-record.repository";
 import {
@@ -19,6 +21,15 @@ export default async function MarkAttendancePage({
   const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_RECORDS_MARK);
 
   const { sessionId } = await params;
+  // Teacher-scoped users may only mark a session they teach (IDOR guard). 404 so
+  // we don't disclose existence. See docs/teacher-access-scope.md.
+  try {
+    await assertTeacherCanAccessAttendanceSession(context, sessionId);
+  } catch (e) {
+    if (e instanceof AuthorizationError) notFound();
+    throw e;
+  }
+
   const session = await findAttendanceSessionById(sessionId, context.organizationId);
   if (!session) notFound();
 

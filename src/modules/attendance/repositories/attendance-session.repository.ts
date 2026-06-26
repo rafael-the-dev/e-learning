@@ -89,20 +89,37 @@ export async function findAttendanceSessionsByOrganization(
   if (params.academicTermId) where.academicTermId = params.academicTermId;
   if (params.classGroupId) where.classGroupId = params.classGroupId;
   if (params.subjectId) where.subjectId = params.subjectId;
-  if (params.teacherId) where.teacherId = params.teacherId;
   if (params.status) where.status = params.status;
   if (params.from || params.to) {
     where.sessionDate = {};
     if (params.from) where.sessionDate.gte = new Date(params.from);
     if (params.to) where.sessionDate.lte = new Date(params.to);
   }
-  if (params.search) {
-    where.OR = [
-      { title: { contains: params.search } },
-      { classGroup: { name: { contains: params.search } } },
-      { subject: { name: { contains: params.search } } },
-    ];
+
+  // Two independent OR groups (teacher scope + search) must be AND-ed together
+  // rather than overwriting one `where.OR`.
+  const andClauses: Record<string, unknown>[] = [];
+  // Teacher scope: session assigned to me OR for a class group I teach. The
+  // classGroup fallback covers sessions where the nullable teacherId was never
+  // set. teacherId is resolved server-side — never from client input.
+  if (params.teacherId) {
+    andClauses.push({
+      OR: [
+        { teacherId: params.teacherId },
+        { classGroup: { teacherId: params.teacherId } },
+      ],
+    });
   }
+  if (params.search) {
+    andClauses.push({
+      OR: [
+        { title: { contains: params.search } },
+        { classGroup: { name: { contains: params.search } } },
+        { subject: { name: { contains: params.search } } },
+      ],
+    });
+  }
+  if (andClauses.length > 0) where.AND = andClauses;
 
   const [rows, total] = await Promise.all([
     db.attendanceSession.findMany({

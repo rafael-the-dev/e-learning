@@ -96,7 +96,12 @@ export async function getEnrolledStudentsForSession(
 }
 
 // Options used by create-session form
-export async function getSessionFormOptions(organizationId: string) {
+export async function getSessionFormOptions(
+  organizationId: string,
+  // Teacher-scoped: restrict the class-group dropdown to the teacher's own groups
+  // (resolved server-side). Undefined → org-wide (admins/secretaries).
+  classGroupTeacherId?: string
+) {
   const db = await getDb();
   const [academicYears, classGroups, teachers, classrooms] = await Promise.all([
     db.academicYear.findMany({
@@ -105,7 +110,12 @@ export async function getSessionFormOptions(organizationId: string) {
       orderBy: { startDate: "desc" },
     }),
     db.classGroup.findMany({
-      where: { organizationId, deletedAt: null, status: { in: ["FORMING", "ACTIVE"] } },
+      where: {
+        organizationId,
+        deletedAt: null,
+        status: { in: ["FORMING", "ACTIVE"] },
+        ...(classGroupTeacherId !== undefined && { teacherId: classGroupTeacherId }),
+      },
       select: {
         id: true,
         name: true,

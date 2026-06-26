@@ -4,6 +4,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { assertTeacherCanAccessClassGroup } from "@/server/auth/teacher-access";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getClassGroupById } from "@/modules/class-groups/services/class-group.service";
@@ -13,7 +14,7 @@ import {
 } from "@/modules/schedules/services/schedule.service";
 import { ClassGroupSchedulePanel } from "@/modules/schedules/components/class-group-schedule-panel";
 import { getDb } from "@/server/db";
-import { NotFoundError } from "@/shared/lib/command";
+import { AuthorizationError, NotFoundError } from "@/shared/lib/command";
 import {
   BookOpen,
   Pencil,
@@ -48,9 +49,12 @@ export default async function ClassGroupDetailPage({
 
   let group;
   try {
+    // Teacher-scoped users may only open a class group they teach (IDOR guard).
+    // 404 rather than 403 so we don't disclose other groups' existence.
+    await assertTeacherCanAccessClassGroup(context, classGroupId);
     group = await getClassGroupById(classGroupId, context.organizationId);
   } catch (e) {
-    if (e instanceof NotFoundError) notFound();
+    if (e instanceof NotFoundError || e instanceof AuthorizationError) notFound();
     throw e;
   }
 

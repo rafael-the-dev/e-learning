@@ -50,15 +50,80 @@ A teacher-scoped user may reach only the **scoped surfaces** below; every other 
 
 For the four dashboard pages above (class-groups, students, attendance/sessions, assessments), the teacher gets an **early-return minimal scoped view**: a `PageHeader` + the scoped table only. The org-wide KPI cards, trend charts, distribution donuts, and watchlists — whose underlying services have no teacher-scope parameter — are **not fetched and not rendered** for a teacher-scoped request. The admin code path below the early return is untouched.
 
-Single-record / action pages reached *from* these surfaces (e.g. `/attendance/sessions/[id]/mark`, `/assessments/[id]/grade`, `/class-groups/[id]`, `/students/[id]`, the teacher's own `/teachers/[teacherId]`) are intentionally **not** blocked: each operates on one record that already belongs to the teacher (or their class), and each has its own permission gate. Only the org-wide *list/dashboard* surfaces are the leak risk.
+Single-record / action pages reached *from* these surfaces are **not** blocked wholesale, but they must **enforce ownership** — a permission gate alone is not enough, because a teacher holds the same `*.view`/`*.mark`/`*.grade` permissions org-wide and could otherwise open another teacher's record by replaying its id (IDOR). Ownership is asserted server-side from the resolved `teacherId`; it never relies on the id being unguessable. See **Detail & write-path ownership** below.
 
 ### Blocked — redirect to `/teacher`
 
-These render org-wide KPIs/charts/watchlists with no teacher-scope parameter, so rather than half-scope them (which would leave aggregate leaks) they redirect teacher-scoped users to their Portal:
+These render org-wide KPIs/charts/watchlists/reports with no teacher-scope parameter, so rather than half-scope them (which would leave aggregate leaks) they redirect teacher-scoped users to their Portal:
 
-`/enrollments`, `/grades`, `/student-progress`, `/courses`, `/level-progression`, `/subjects`, `/lessons`, `/schedules`, `/classroom-bookings`, `/academic-calendar`.
+`/enrollments`, `/grades`, `/grades/entry`, `/student-progress`, `/courses`, `/level-progression`, `/subjects`, `/lessons`, `/schedules`, `/classroom-bookings`, `/academic-calendar`, `/attendance/reports`, `/attendance/justifications`, `/classrooms`, `/assessment-policies`, `/assessment-periods`.
 
-Each calls `await redirectIfTeacherScoped(context)` immediately after its permission guard.
+Each calls `await redirectIfTeacherScoped(context)` immediately after its permission guard. (`/attendance` itself redirects teacher-scoped users straight to `/attendance/sessions`, their scoped list.)
+
+`/grades/entry`, `/attendance/reports` and `/attendance/justifications` are org-wide over *student* data (not just config) — they were the highest-impact leaks closed by this policy. `/classrooms`, `/assessment-policies`, `/assessment-periods` are org-wide *reference/config* pages; under the strict policy teachers are redirected from them too.
+
+### Detail & write-path ownership — `src/server/auth/teacher-access.ts`
+
+Single-record pages and the commands behind them enforce ownership with the
+`assertTeacherCanAccess*` guards. Each is a **no-op** for ORG_ADMIN / SUPER_ADMIN
+/ SECRETARY (anyone not teacher-scoped), and throws `AuthorizationError` for a
+teacher-scoped caller who doesn't own the record (a teacher-scoped account with
+no linked profile owns nothing, so it always throws). Ownership is resolved
+server-side from the `teacherId`; **no reliance on id secrecy**.
+
+| Guard | Owns when… |
+|---|---|
+| `assertTeacherCanAccessStudent` | student has an enrollment (`deletedAt: null`) in a class group I teach — mirrors the `/students` list filter exactly |
+| `assertTeacherCanAccessClassGroup` | `classGroup.teacherId = me` |
+| `assertTeacherCanAccessEnrollment` | enrollment is in a class group I teach (`classGroup.teacherId = me`) |
+| `assertTeacherCanAccessAttendanceSession` | `session.teacherId = me` **OR** `session.classGroup.teacherId = me` |
+| `assertTeacherCanAccessAssessment` | `assessment.teacherId = me` **OR** `assessment.classGroup.teacherId = me` |
+
+**classGroup ownership is the source of truth.** Sessions and assessments carry a
+*nullable* `teacherId`, so the guards (and the `/attendance/sessions` + `/assessments`
+list scoping — see M1 below) accept *either* the record's own `teacherId` *or* the
+owning class group's `teacherId`. This means a record for a class group I teach is
+mine even if its `teacherId` was never set.
+
+**Read pages** translate the thrown `AuthorizationError` into `notFound()` (404,
+not 403) so they don't disclose that the record exists:
+
+| Route | Guard |
+|---|---|
+| `/students/[studentId]` · `/students/[studentId]/timeline` | `assertTeacherCanAccessStudent` |
+| `/class-groups/[classGroupId]` | `assertTeacherCanAccessClassGroup` |
+| `/enrollments/[enrollmentId]` | `assertTeacherCanAccessEnrollment` |
+| `/attendance/sessions/[sessionId]` · `…/mark` | `assertTeacherCanAccessAttendanceSession` |
+| `/assessments/[assessmentId]` · `…/grade` | `assertTeacherCanAccessAssessment` |
+
+**Write commands** call the same guards in `authorize()` (defense-in-depth, since
+a server action can be invoked directly, bypassing the page): mark / bulk-mark /
+complete / cancel attendance session (`assertTeacherCanAccessAttendanceSession`),
+bulk-grade / update / publish assessment (`assertTeacherCanAccessAssessment`), and
+per-enrollment grade entry (`assertTeacherCanAccessEnrollment`).
+
+**Create-time class-group targeting is also scoped.** When a teacher-scoped user
+creates an assessment (`CreateAssessmentCommand`) or attendance session
+(`CreateAttendanceSessionCommand`), `authorize()` runs
+`assertTeacherCanAccessClassGroup(context, input.classGroupId)` — so they can only
+create records for a class group they teach, and a client-supplied `input.teacherId`
+cannot widen that (ownership is the server-resolved `teacherId`). The create-form
+class-group dropdowns are likewise scoped: `/assessments/new` filters its
+`getFormDeps` class-group query, and `/attendance/sessions/new` passes the resolved
+`teacherId` to `getSessionFormOptions`, so a teacher only ever sees their own groups
+(an unlinked teacher sees none, via a sentinel id that matches nothing).
+
+> **Still readable (intentional, not IDOR):** curriculum **reference** detail
+> (`/courses/[id]`, `/subjects/[id]`, `/lessons/[id]`) — shared org reference data,
+> not per-teacher PII.
+
+### M1 — list scoping uses the same OR
+
+`/assessments` and `/attendance/sessions` list scoping now matches the ownership
+guards: a teacher sees rows where `record.teacherId = me` **OR**
+`record.classGroup.teacherId = me`, so the list and the detail page never diverge.
+A `classGroupId` query param is AND-ed with this OR, so it can only *narrow* the
+result — it can never widen scope to another teacher's data.
 
 ### Forbidden — finance & admin (already unreachable)
 
@@ -70,10 +135,23 @@ TEACHER holds **zero** finance permissions (`invoices.*`, `payments.*`, `receipt
 
 ## Adding a new TEACHER-reachable page later
 
+**List / dashboard page:**
 1. Add a `teacherId`/`scope` filter to its list repository (or reuse an existing `teacherId` param).
 2. In the page, after the permission guard, `const scope = await resolveDataAccessScope(context)` and early-return a scoped view when `scope.type === "teacher"` (skip org-wide widgets).
 3. Add the route to `TEACHER_NAV_ALLOWLIST`.
 4. If it can't be safely scoped yet, instead call `await redirectIfTeacherScoped(context)` and leave it off the allowlist.
+
+**Single-record / write page:** after the permission guard, call the matching
+`assertTeacherCanAccess*` (page → translate `AuthorizationError` to `notFound()`;
+command → call it in `authorize()`). If no guard fits the entity, add one to
+`teacher-access.ts`.
+
+**Regression test.** `src/server/auth/__tests__/teacher-route-guards.test.ts` scans
+every `(org)/**/page.tsx`: any page whose entry permission is one a TEACHER holds
+*and* that exposes existing student/class/attendance/assessment/grade data must
+contain a guard token, or the test fails. So a new unscoped TEACHER-reachable page
+breaks the build until it declares scoped or blocked behaviour. A pinned manifest
+in the same file also asserts each fixed route keeps its specific guard.
 
 ## Known limitations / trade-offs
 

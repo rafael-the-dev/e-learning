@@ -6,6 +6,8 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { assertTeacherCanAccessClassGroup } from "@/server/auth/teacher-access";
+import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getDb } from "@/server/db";
 import { createAssessment } from "@/modules/assessments/repositories/assessment.repository";
@@ -86,6 +88,10 @@ export class CreateAssessmentCommand extends BaseCommand<CreateAssessmentSchema,
     if (!createAbility(perms).can(PERMISSIONS.ASSESSMENTS_CREATE)) {
       throw new AuthorizationError();
     }
+    // Create-time scope: a teacher-scoped user may only create assessments for a
+    // class group they teach (the resolved teacherId, never client input). No-op
+    // for admins/secretaries. See docs/teacher-access-scope.md.
+    await assertTeacherCanAccessClassGroup(this.context as AuthContext, this.input.classGroupId);
   }
 
   async execute(): Promise<Assessment> {

@@ -6,6 +6,8 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { assertTeacherCanAccessAttendanceSession } from "@/server/auth/teacher-access";
+import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import {
   findAttendanceSessionById,
@@ -41,6 +43,9 @@ export class CompleteAttendanceSessionCommand extends BaseCommand<
     if (!createAbility(perms).can(PERMISSIONS.ATTENDANCE_SESSIONS_COMPLETE)) {
       throw new AuthorizationError();
     }
+    // Defense-in-depth against write IDOR: a teacher-scoped user may only complete
+    // a session they teach. No-op for admins/secretaries.
+    await assertTeacherCanAccessAttendanceSession(this.context as AuthContext, this.input.sessionId);
   }
 
   async execute(): Promise<void> {

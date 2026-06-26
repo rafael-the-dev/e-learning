@@ -90,7 +90,15 @@ export async function findAssessmentsByOrganization(
   if (params.assessmentPeriodId) where.assessmentPeriodId = params.assessmentPeriodId;
   if (params.levelSubjectId) where.levelSubjectId = params.levelSubjectId;
   if (params.academicYearId) where.academicYearId = params.academicYearId;
-  if (params.teacherId) where.teacherId = params.teacherId;
+  // Teacher scope: assessment assigned to me OR for a class group I teach. The
+  // classGroup fallback covers assessments where the nullable teacherId was
+  // never set. teacherId is resolved server-side — never from client input.
+  if (params.teacherId) {
+    where.OR = [
+      { teacherId: params.teacherId },
+      { classGroup: { teacherId: params.teacherId } },
+    ];
+  }
   if (params.search) where.title = { contains: params.search };
 
   const [rows, total] = await Promise.all([

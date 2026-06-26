@@ -7,6 +7,8 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { assertTeacherCanAccessAssessment } from "@/server/auth/teacher-access";
+import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { findAssessmentById, updateAssessment } from "@/modules/assessments/repositories/assessment.repository";
 import { upsertAssessmentResult } from "@/modules/assessments/repositories/assessment-result.repository";
@@ -75,6 +77,11 @@ export class BulkGradeAssessmentCommand extends BaseCommand<
     if (!ability.can(PERMISSIONS.ASSESSMENT_RESULTS_GRADE)) {
       throw new AuthorizationError();
     }
+
+    // Defense-in-depth against write IDOR: a teacher-scoped user may only grade
+    // an assessment they own (or for a class group they teach). No-op for
+    // admins/secretaries. See docs/teacher-access-scope.md.
+    await assertTeacherCanAccessAssessment(this.context as AuthContext, this.input.assessmentId);
 
     // Editing a GRADED assessment requires GRADES_UPDATE on top of grade permission
     const assessment = await findAssessmentById(this.input.assessmentId, this.context.organizationId);

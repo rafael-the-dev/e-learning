@@ -7,6 +7,8 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { assertTeacherCanAccessAssessment } from "@/server/auth/teacher-access";
+import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { findResultById } from "@/modules/assessments/repositories/assessment-result.repository";
 import { findAssessmentById } from "@/modules/assessments/repositories/assessment.repository";
@@ -70,6 +72,9 @@ export class CreateAssessmentRetakeCommand extends BaseCommand<
     if (!createAbility(perms).can(PERMISSIONS.ASSESSMENTS_CREATE)) {
       throw new AuthorizationError();
     }
+    // Defense-in-depth against write IDOR: a teacher-scoped user may only create a
+    // retake on an assessment they own (or for a class group they teach).
+    await assertTeacherCanAccessAssessment(this.context as AuthContext, this.input.assessmentId);
   }
 
   async execute(): Promise<AssessmentRetake> {

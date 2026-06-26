@@ -6,6 +6,8 @@ import {
 } from "@/shared/lib/command";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import { assertTeacherCanAccessAssessment } from "@/server/auth/teacher-access";
+import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getDb } from "@/server/db";
 import {
@@ -54,6 +56,9 @@ export class UpdateAssessmentCommand extends BaseCommand<UpdateAssessmentSchema,
     if (!createAbility(perms).can(PERMISSIONS.ASSESSMENTS_UPDATE)) {
       throw new AuthorizationError();
     }
+    // Defense-in-depth against write IDOR: a teacher-scoped user may only update
+    // an assessment they own (or for a class group they teach). No-op for admins.
+    await assertTeacherCanAccessAssessment(this.context as AuthContext, this.input.assessmentId);
   }
 
   async execute(): Promise<Assessment> {
