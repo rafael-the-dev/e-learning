@@ -12,6 +12,7 @@ import {
   updateTeacher,
   findTeacherByIdNumber,
   findTeacherByLicenseNumber,
+  findTeacherByUserId,
 } from "@/modules/teachers/repositories/teacher.repository";
 import { findBranchById } from "@/modules/organizations/repositories/branch.repository";
 import {
@@ -89,6 +90,19 @@ export class UpdateTeacherCommand extends BaseCommand<UpdateTeacherInput, Teache
         });
       }
     }
+
+    if (this.input.userId) {
+      const duplicate = await findTeacherByUserId(
+        this.context.organizationId,
+        this.input.userId,
+        this.input.teacherId
+      );
+      if (duplicate) {
+        throw new ValidationError("Dados inválidos", {
+          userId: ["Esta conta de utilizador já está associada a outro professor"],
+        });
+      }
+    }
   }
 
   async authorize(): Promise<void> {
@@ -119,6 +133,7 @@ export class UpdateTeacherCommand extends BaseCommand<UpdateTeacherInput, Teache
       licenseNumber: this.input.licenseNumber || null,
       specialization: this.input.specialization || null,
       branchId: this.input.branchId || null,
+      userId: this.input.userId || null,
       notes: this.input.notes || null,
       status: this.input.status,
       updatedBy: this.context.userId,

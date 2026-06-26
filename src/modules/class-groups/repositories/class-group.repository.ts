@@ -15,6 +15,7 @@ export interface ListClassGroupsParams extends PaginationParams {
   branchId?: string;
   academicYearId?: string;
   academicTermId?: string;
+  teacherId?: string;
 }
 
 const classGroupSelect = {
@@ -125,6 +126,7 @@ export async function findClassGroupsByOrganization(
     ...(params.branchId && { branchId: params.branchId }),
     ...(params.academicYearId && { academicYearId: params.academicYearId }),
     ...(params.academicTermId && { academicTermId: params.academicTermId }),
+    ...(params.teacherId && { teacherId: params.teacherId }),
   };
 
   const [rows, total] = await Promise.all([

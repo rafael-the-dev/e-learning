@@ -1,251 +1,307 @@
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { PageHeader } from "@/shared/components/layout/page-header";
-import { Button } from "@/shared/components/ui/button";
-import { StatusBadge } from "@/shared/components/data/status-badge";
-import { Separator } from "@/shared/components/ui/separator";
-import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { notFound, redirect } from "next/navigation";
+import { requireOrganization } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
-import { getTeacherWithSubjects } from "@/modules/teachers/services/teacher.service";
-import { TeacherDetailActions } from "@/modules/teachers/components/teacher-detail-actions";
 import { NotFoundError } from "@/shared/lib/command";
-import { GENDER_LABELS, ID_TYPE_LABELS } from "@/modules/teachers/types";
+import { getActiveSubjectsByOrganization } from "@/modules/courses/services/course.service";
+import { getTeacherById } from "@/modules/teachers/services/teacher.service";
 import {
-  Mail,
-  Phone,
-  MapPin,
-  Calendar,
-  CreditCard,
-  Building2,
-  Pencil,
-  BookOpen,
+  getTeacher360Core,
+  buildHealthScoreInput,
+  buildAlertsInput,
+  buildSummaryCards,
+  computeYearsOfService,
+  getScheduleTabData,
+  getSubjectsTabData,
+  getClassGroupsTabData,
+  getAssessmentsTabData,
+  getAttendanceTabData,
+  getPerformanceTabData,
+  getTimelineTabData,
+  getDocumentsTabData,
+  type Teacher360Core,
+} from "@/modules/teachers/teacher-360/services/teacher-360.service";
+import { calculateTeacherHealthScore } from "@/modules/teachers/teacher-360/services/teacher-health.service";
+import { computeTeacherAlerts } from "@/modules/teachers/teacher-360/services/teacher-alerts.service";
+import {
+  getTeacher360TabAccess,
+  resolveActiveTeacher360Tab,
+  canViewTeacher360,
+} from "@/modules/teachers/teacher-360/services/teacher-360-access.service";
+import { Teacher360Header } from "@/modules/teachers/teacher-360/components/teacher-360-header";
+import { TeacherHealthCard } from "@/modules/teachers/teacher-360/components/teacher-health-card";
+import { TeacherAlertsPanel } from "@/modules/teachers/teacher-360/components/teacher-alerts-panel";
+import { TeacherSummaryCards } from "@/modules/teachers/teacher-360/components/teacher-summary-cards";
+import { Teacher360TabsNav } from "@/modules/teachers/teacher-360/components/teacher-360-tabs-nav";
+import { TeacherOverviewTab } from "@/modules/teachers/teacher-360/components/tabs/teacher-overview-tab";
+import { TeacherScheduleTab } from "@/modules/teachers/teacher-360/components/tabs/teacher-schedule-tab";
+import { TeacherClassGroupsTab } from "@/modules/teachers/teacher-360/components/tabs/teacher-class-groups-tab";
+import { TeacherSubjectsTab } from "@/modules/teachers/teacher-360/components/tabs/teacher-subjects-tab";
+import { TeacherAssessmentsTab } from "@/modules/teachers/teacher-360/components/tabs/teacher-assessments-tab";
+import { TeacherAttendanceTab } from "@/modules/teachers/teacher-360/components/tabs/teacher-attendance-tab";
+import { TeacherPerformanceTab } from "@/modules/teachers/teacher-360/components/tabs/teacher-performance-tab";
+import { TeacherTimelineTab } from "@/modules/teachers/teacher-360/components/tabs/teacher-timeline-tab";
+import { TeacherDocumentsTab } from "@/modules/teachers/teacher-360/components/tabs/teacher-documents-tab";
+import {
+  LayoutDashboard,
+  CalendarDays,
   Users,
+  BookOpen,
   ClipboardList,
-  Award,
+  ClipboardCheck,
+  TrendingUp,
+  History,
+  FileText,
 } from "lucide-react";
+import type { Teacher360TabDef } from "@/modules/teachers/teacher-360/components/teacher-360-tabs-nav";
 
-export default async function TeacherDetailPage({
+export async function generateMetadata({
   params,
 }: {
   params: Promise<{ teacherId: string }>;
 }) {
-  const context = await requirePermissionOrRedirect(PERMISSIONS.TEACHERS_READ);
+  const { teacherId } = await params;
+  return { title: `Professor ${teacherId}` };
+}
+
+export default async function TeacherDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ teacherId: string }>;
+  searchParams: Promise<{ tab?: string; page?: string }>;
+}) {
+  const context = await requireOrganization();
 
   const { teacherId } = await params;
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
 
-  let teacher;
+  // Lightweight lookup first — confirms tenant (404 on cross-org) and resolves
+  // ownership for the self-scope check, before paying for the full
+  // Teacher360Core aggregate fetch. Mirrors the Student 360 convention of
+  // authorizing before loading core data (requirePermissionOrRedirect runs
+  // before getStudent360Core there).
+  let teacherForAuth;
   try {
-    teacher = await getTeacherWithSubjects(teacherId, context.organizationId);
+    teacherForAuth = await getTeacherById(teacherId, context.organizationId);
   } catch (e) {
     if (e instanceof NotFoundError) notFound();
     throw e;
   }
 
-  const breadcrumb = (
-    <nav className="flex items-center gap-2 text-muted-foreground">
-      <Link href="/teachers" className="hover:text-foreground transition-colors">
-        Professores
-      </Link>
-      <span>/</span>
-      <span className="text-foreground">{teacher.fullName}</span>
-    </nav>
-  );
+  const isOwner = teacherForAuth.userId === context.userId;
+  if (!canViewTeacher360((p) => context.ability.can(p), isOwner)) {
+    redirect("/forbidden");
+  }
+
+  let core: Teacher360Core;
+  try {
+    core = await getTeacher360Core(teacherId, context.organizationId);
+  } catch (e) {
+    if (e instanceof NotFoundError) notFound();
+    throw e;
+  }
+
+  const yearsOfService = computeYearsOfService(core.teacher.hireDate);
+
+  const tabAccess = getTeacher360TabAccess((permission) => context.ability.can(permission));
+  const activeTab = resolveActiveTeacher360Tab(sp.tab, tabAccess);
+  const visible = new Set(tabAccess.filter((t) => t.visible).map((t) => t.key));
+
+  const health = calculateTeacherHealthScore(buildHealthScoreInput(core));
+  const alerts = computeTeacherAlerts(buildAlertsInput(core));
+  const summary = buildSummaryCards(core);
+
+  const tabs: Teacher360TabDef[] = [
+    { key: "overview", label: "Visão Geral", icon: <LayoutDashboard className="size-3.5" /> },
+  ];
+  if (visible.has("schedule")) {
+    tabs.push({ key: "schedule", label: "Horário", icon: <CalendarDays className="size-3.5" /> });
+  }
+  if (visible.has("classGroups")) {
+    tabs.push({
+      key: "classGroups",
+      label: "Turmas",
+      icon: <Users className="size-3.5" />,
+      count: core.counts.activeClassGroupCount,
+    });
+  }
+  if (visible.has("subjects")) {
+    tabs.push({
+      key: "subjects",
+      label: "Disciplinas",
+      icon: <BookOpen className="size-3.5" />,
+      count: core.counts.subjectCount,
+    });
+  }
+  if (visible.has("assessments")) {
+    tabs.push({
+      key: "assessments",
+      label: "Avaliações",
+      icon: <ClipboardList className="size-3.5" />,
+      count: core.assessmentMetrics.openCount,
+    });
+  }
+  if (visible.has("attendance")) {
+    tabs.push({ key: "attendance", label: "Presenças", icon: <ClipboardCheck className="size-3.5" /> });
+  }
+  if (visible.has("performance")) {
+    tabs.push({ key: "performance", label: "Performance", icon: <TrendingUp className="size-3.5" /> });
+  }
+  if (visible.has("timeline")) {
+    tabs.push({ key: "timeline", label: "Timeline", icon: <History className="size-3.5" /> });
+  }
+  if (visible.has("documents")) {
+    tabs.push({
+      key: "documents",
+      label: "Documentos",
+      icon: <FileText className="size-3.5" />,
+      count: core.documentCount,
+    });
+  }
 
   return (
     <>
-      <PageHeader
-        title={teacher.fullName}
-        description={teacher.email ?? teacher.phone ?? ""}
-        breadcrumb={breadcrumb}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/teachers/${teacher.id}/edit`}>
-                <Pencil className="size-4 mr-1.5" />
-                Editar
-              </Link>
-            </Button>
-            <TeacherDetailActions teacher={teacher} />
-          </div>
-        }
+      <Teacher360Header
+        teacher={core.teacher}
+        canEdit={context.ability.can(PERMISSIONS.TEACHERS_UPDATE)}
+        canAssignSubject={context.ability.can(PERMISSIONS.TEACHERS_ASSIGN_SUBJECT)}
+        canCreateClassGroup={context.ability.can(PERMISSIONS.CLASS_GROUPS_CREATE)}
+        canViewSchedule={visible.has("schedule")}
+        yearsOfService={yearsOfService}
       />
 
-      <div className="p-8 space-y-6 max-w-2xl">
-        {/* Status + branch */}
-        <div className="flex flex-wrap items-center gap-3">
-          <StatusBadge status={teacher.status} />
-          {teacher.branch && (
-            <span className="text-sm border rounded-full px-2.5 py-0.5 flex items-center gap-1.5">
-              <Building2 className="size-3" />
-              {teacher.branch.name}
-            </span>
-          )}
-          {teacher.code && (
-            <span className="text-sm border rounded-full px-2.5 py-0.5 font-mono">
-              #{teacher.code}
-            </span>
-          )}
-          {teacher.specialization && (
-            <span className="text-sm border rounded-full px-2.5 py-0.5 flex items-center gap-1.5">
-              <Award className="size-3" />
-              {teacher.specialization}
-            </span>
-          )}
-        </div>
-
-        <Separator />
-
-        {/* Contact info */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <h3 className="text-sm font-semibold">Informações de Contacto</h3>
-          <dl className="space-y-2 text-sm">
-            <DetailRow icon={<Phone className="size-3.5" />} label="Telefone" value={teacher.phone ?? "—"} />
-            <DetailRow icon={<Mail className="size-3.5" />} label="E-mail" value={teacher.email ?? "—"} />
-            <DetailRow icon={<MapPin className="size-3.5" />} label="Morada" value={teacher.address ?? "—"} />
-          </dl>
-        </div>
-
-        {/* Personal info */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <h3 className="text-sm font-semibold">Informação Pessoal</h3>
-          <dl className="space-y-2 text-sm">
-            <DetailRow
-              icon={<Calendar className="size-3.5" />}
-              label="Data de Nasc."
-              value={
-                teacher.dateOfBirth
-                  ? new Date(teacher.dateOfBirth).toLocaleDateString("pt-PT")
-                  : "—"
-              }
-            />
-            <DetailRow
-              label="Género"
-              value={teacher.gender ? (GENDER_LABELS[teacher.gender] ?? teacher.gender) : "—"}
-            />
-            <DetailRow
-              icon={<CreditCard className="size-3.5" />}
-              label="Documento"
-              value={
-                teacher.idNumber
-                  ? `${teacher.idType ? (ID_TYPE_LABELS[teacher.idType] ?? teacher.idType) + " · " : ""}${teacher.idNumber}`
-                  : "—"
-              }
-            />
-          </dl>
-        </div>
-
-        {/* Professional info */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <h3 className="text-sm font-semibold">Informação Profissional</h3>
-          <dl className="space-y-2 text-sm">
-            <DetailRow
-              icon={<Award className="size-3.5" />}
-              label="Licença"
-              value={teacher.licenseNumber ?? "—"}
-            />
-            <DetailRow
-              icon={<BookOpen className="size-3.5" />}
-              label="Especialização"
-              value={teacher.specialization ?? "—"}
-            />
-          </dl>
-        </div>
-
-        {/* Assigned subjects */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <h3 className="text-sm font-semibold">Disciplinas Atribuídas</h3>
-          {teacher.teacherSubjects.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Nenhuma disciplina atribuída. As disciplinas podem ser atribuídas após configurar os cursos.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {teacher.teacherSubjects.map((ts) => (
-                <li key={ts.id} className="text-sm flex items-start gap-2">
-                  <BookOpen className="size-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-                  <span>
-                    <span className="font-medium">{ts.subjectName}</span>
-                    {ts.subjectCode && (
-                      <span className="text-muted-foreground ml-1">({ts.subjectCode})</span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Timestamps */}
-        <div className="rounded-xl border p-5 space-y-4">
-          <h3 className="text-sm font-semibold">Registo</h3>
-          <dl className="space-y-2 text-sm">
-            <DetailRow
-              icon={<Calendar className="size-3.5" />}
-              label="Registado a"
-              value={new Date(teacher.createdAt).toLocaleDateString("pt-PT")}
-            />
-            <DetailRow
-              icon={<Calendar className="size-3.5" />}
-              label="Atualizado a"
-              value={new Date(teacher.updatedAt).toLocaleDateString("pt-PT")}
-            />
-          </dl>
-        </div>
-
-        {/* Class groups placeholder */}
-        <div className="rounded-xl border border-dashed p-5 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Users className="size-4" />
-            <h3 className="text-sm font-semibold">Turmas</h3>
+      <div className="p-4 sm:p-8 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <TeacherHealthCard health={health} />
           </div>
-          <p className="text-xs text-muted-foreground">
-            {/* TODO: implement class groups module */}
-            Nenhuma turma atribuída.
-          </p>
+          <TeacherAlertsPanel alerts={alerts} />
         </div>
 
-        {/* Practical lessons placeholder */}
-        <div className="rounded-xl border border-dashed p-5 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <ClipboardList className="size-4" />
-            <h3 className="text-sm font-semibold">Aulas Práticas</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {/* TODO: implement practical lessons module */}
-            Nenhuma aula prática registada.
-          </p>
-        </div>
+        <TeacherSummaryCards summary={summary} />
 
-        {/* Attendance placeholder */}
-        <div className="rounded-xl border border-dashed p-5 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <ClipboardList className="size-4" />
-            <h3 className="text-sm font-semibold">Presenças</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {/* TODO: implement attendance module */}
-            Nenhum registo de presença.
-          </p>
-        </div>
+        <Teacher360TabsNav active={activeTab} tabs={tabs} />
+
+        <ActiveTabPanel
+          activeTab={activeTab}
+          core={core}
+          organizationId={context.organizationId}
+          page={page}
+          canAssignSubject={context.ability.can(PERMISSIONS.TEACHERS_ASSIGN_SUBJECT)}
+          canRemoveSubject={context.ability.can(PERMISSIONS.TEACHERS_ASSIGN_SUBJECT)}
+          canUploadDocument={context.ability.can(PERMISSIONS.TEACHER_DOCUMENTS_UPLOAD)}
+          canDeleteDocument={context.ability.can(PERMISSIONS.TEACHER_DOCUMENTS_DELETE)}
+        />
       </div>
     </>
   );
 }
 
-function DetailRow({
-  icon,
-  label,
-  value,
+async function ActiveTabPanel({
+  activeTab,
+  core,
+  organizationId,
+  page,
+  canAssignSubject,
+  canRemoveSubject,
+  canUploadDocument,
+  canDeleteDocument,
 }: {
-  icon?: React.ReactNode;
-  label: string;
-  value: string;
+  activeTab: string;
+  core: Teacher360Core;
+  organizationId: string;
+  page: number;
+  canAssignSubject: boolean;
+  canRemoveSubject: boolean;
+  canUploadDocument: boolean;
+  canDeleteDocument: boolean;
 }) {
-  return (
-    <div className="flex items-start gap-2">
-      {icon && <span className="mt-0.5 text-muted-foreground">{icon}</span>}
-      <dt className="w-28 shrink-0 text-muted-foreground">{label}</dt>
-      <dd className="font-medium wrap-break-word">{value}</dd>
-    </div>
-  );
+  const teacherId = core.teacher.id;
+
+  switch (activeTab) {
+    case "schedule": {
+      const schedule = await getScheduleTabData(teacherId, organizationId);
+      return <TeacherScheduleTab schedule={schedule} />;
+    }
+
+    case "classGroups": {
+      const classGroups = await getClassGroupsTabData(teacherId, organizationId, page, 10);
+      return (
+        <TeacherClassGroupsTab
+          classGroups={classGroups}
+          activeClassGroupCount={core.counts.activeClassGroupCount}
+          distinctActiveStudentCount={core.workload.distinctActiveStudentCount}
+          avgOccupancyPercent={core.workload.avgOccupancyPercent}
+        />
+      );
+    }
+
+    case "subjects": {
+      const [rows, allSubjects] = await Promise.all([
+        getSubjectsTabData(core, organizationId),
+        getActiveSubjectsByOrganization(organizationId),
+      ]);
+      const assignedIds = new Set(core.teacher.teacherSubjects.map((ts) => ts.subjectId));
+      const availableSubjects = allSubjects.filter((s) => !assignedIds.has(s.id));
+      return (
+        <TeacherSubjectsTab
+          teacher={core.teacher}
+          rows={rows}
+          availableSubjects={availableSubjects}
+          canAssign={canAssignSubject}
+          canRemove={canRemoveSubject}
+        />
+      );
+    }
+
+    case "assessments": {
+      const assessments = await getAssessmentsTabData(teacherId, organizationId, page, 10);
+      return <TeacherAssessmentsTab assessments={assessments} metrics={core.assessmentMetrics} />;
+    }
+
+    case "attendance": {
+      const { kpis, monthlyTrend, sessions } = await getAttendanceTabData(teacherId, organizationId, page, 10);
+      return <TeacherAttendanceTab kpis={kpis} monthlyTrend={monthlyTrend} sessions={sessions} page={page} pageSize={10} />;
+    }
+
+    case "performance": {
+      const { subjectPassRates, gradeTrend, organizationAveragePassRate } = await getPerformanceTabData(
+        core,
+        organizationId
+      );
+      const denominator = core.qualityRaw.passedCount + core.qualityRaw.failedCount;
+      const teacherPassRate = denominator > 0 ? Math.round((core.qualityRaw.passedCount / denominator) * 100) : null;
+      return (
+        <TeacherPerformanceTab
+          subjectPassRates={subjectPassRates}
+          gradeTrend={gradeTrend}
+          organizationAveragePassRate={organizationAveragePassRate}
+          teacherPassRate={teacherPassRate}
+          avgStudentAttendance={core.qualityRaw.avgAttendance}
+        />
+      );
+    }
+
+    case "timeline": {
+      const { items, total } = await getTimelineTabData(teacherId, organizationId, page, 20);
+      return <TeacherTimelineTab events={items} total={total} page={page} pageSize={20} />;
+    }
+
+    case "documents": {
+      const documents = await getDocumentsTabData(teacherId, organizationId);
+      return (
+        <TeacherDocumentsTab
+          teacherId={teacherId}
+          documents={documents}
+          canUpload={canUploadDocument}
+          canDelete={canDeleteDocument}
+        />
+      );
+    }
+
+    case "overview":
+    default:
+      return <TeacherOverviewTab core={core} />;
+  }
 }

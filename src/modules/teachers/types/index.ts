@@ -5,6 +5,7 @@
 export interface Teacher {
   id: string;
   code: string | null;
+  userId: string | null;
   firstName: string;
   lastName: string;
   fullName: string;
@@ -17,6 +18,7 @@ export interface Teacher {
   idNumber: string | null;
   licenseNumber: string | null;
   specialization: string | null;
+  hireDate: Date | null;
   status: string;
   notes: string | null;
   createdAt: Date;

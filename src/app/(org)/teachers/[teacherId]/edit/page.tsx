@@ -6,6 +6,7 @@ import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getTeacherById,
   getActiveBranches,
+  getLinkableTeacherUsers,
 } from "@/modules/teachers/services/teacher.service";
 import { EditTeacherForm } from "@/modules/teachers/components/teacher-form";
 import { NotFoundError } from "@/shared/lib/command";
@@ -29,7 +30,10 @@ export default async function EditTeacherPage({
     throw e;
   }
 
-  const branches = await getActiveBranches(context.organizationId);
+  const [branches, linkableUsers] = await Promise.all([
+    getActiveBranches(context.organizationId),
+    getLinkableTeacherUsers(context.organizationId, teacher.id),
+  ]);
 
   const breadcrumb = (
     <nav className="flex items-center gap-2 text-muted-foreground">
@@ -57,7 +61,7 @@ export default async function EditTeacherPage({
       />
 
       <div className="p-8 max-w-2xl">
-        <EditTeacherForm teacher={teacher} branches={branches} />
+        <EditTeacherForm teacher={teacher} branches={branches} linkableUsers={linkableUsers} />
       </div>
     </>
   );

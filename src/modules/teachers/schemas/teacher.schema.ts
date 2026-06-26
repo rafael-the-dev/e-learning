@@ -35,6 +35,7 @@ export const updateTeacherSchema = z.object({
   licenseNumber: z.string().max(100).optional(),
   specialization: z.string().max(200).optional(),
   branchId: z.string().optional(),
+  userId: z.string().optional(),
   notes: z.string().optional(),
   status: z.enum(["ACTIVE", "SUSPENDED", "INACTIVE"]).optional(),
 });

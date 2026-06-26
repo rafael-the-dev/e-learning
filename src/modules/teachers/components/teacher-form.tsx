@@ -33,6 +33,7 @@ import {
   TEACHER_STATUS_LABELS,
 } from "@/modules/teachers/types";
 import type { Teacher, TeacherBranch } from "@/modules/teachers/types";
+import type { LinkableTeacherUser } from "@/modules/teachers/repositories/teacher.repository";
 
 // =============================================================================
 // CREATE FORM
@@ -256,9 +257,10 @@ export function CreateTeacherForm({ branches }: CreateTeacherFormProps) {
 interface EditTeacherFormProps {
   teacher: Teacher;
   branches: TeacherBranch[];
+  linkableUsers: LinkableTeacherUser[];
 }
 
-export function EditTeacherForm({ teacher, branches }: EditTeacherFormProps) {
+export function EditTeacherForm({ teacher, branches, linkableUsers }: EditTeacherFormProps) {
   const router = useRouter();
 
   const {
@@ -283,6 +285,7 @@ export function EditTeacherForm({ teacher, branches }: EditTeacherFormProps) {
       licenseNumber: teacher.licenseNumber ?? "",
       specialization: teacher.specialization ?? "",
       branchId: teacher.branch?.id ?? "",
+      userId: teacher.userId ?? "",
       notes: teacher.notes ?? "",
       status: teacher.status as UpdateTeacherSchema["status"],
     },
@@ -456,6 +459,32 @@ export function EditTeacherForm({ teacher, branches }: EditTeacherFormProps) {
               </SelectContent>
             </Select>
           </div>
+        </div>
+      </FormSection>
+
+      <FormSection title="Conta de Utilizador">
+        <div className="space-y-1.5">
+          <Label>Conta Vinculada</Label>
+          <Select
+            defaultValue={teacher.userId ?? "none"}
+            onValueChange={(v) => setValue("userId", v === "none" ? "" : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Sem conta vinculada" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sem conta vinculada</SelectItem>
+              {linkableUsers.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name} ({u.email})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.userId && <p className="text-xs text-destructive">{errors.userId.message}</p>}
+          <p className="text-xs text-muted-foreground">
+            Permite que este professor inicie sessão e veja apenas o seu próprio perfil 360.
+          </p>
         </div>
       </FormSection>
 

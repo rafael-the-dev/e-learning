@@ -90,6 +90,7 @@ export async function findAssessmentsByOrganization(
   if (params.assessmentPeriodId) where.assessmentPeriodId = params.assessmentPeriodId;
   if (params.levelSubjectId) where.levelSubjectId = params.levelSubjectId;
   if (params.academicYearId) where.academicYearId = params.academicYearId;
+  if (params.teacherId) where.teacherId = params.teacherId;
   if (params.search) where.title = { contains: params.search };
 
   const [rows, total] = await Promise.all([

@@ -4,6 +4,7 @@ import {
   findByIdWithSubjects,
   countByStatus,
   listActiveBranches,
+  listLinkableTeacherUsers,
   type ListTeachersParams,
 } from "@/modules/teachers/repositories/teacher.repository";
 import { NotFoundError } from "@/shared/lib/command";
@@ -39,4 +40,8 @@ export async function getTeacherStats(organizationId: string) {
 
 export async function getActiveBranches(organizationId: string) {
   return listActiveBranches(organizationId);
+}
+
+export async function getLinkableTeacherUsers(organizationId: string, currentTeacherId?: string) {
+  return listLinkableTeacherUsers(organizationId, currentTeacherId);
 }

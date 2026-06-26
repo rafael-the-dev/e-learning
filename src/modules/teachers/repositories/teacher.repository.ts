@@ -17,6 +17,7 @@ export interface ListTeachersParams extends PaginationParams {
 const teacherSelect = {
   id: true,
   code: true,
+  userId: true,
   firstName: true,
   lastName: true,
   email: true,
@@ -28,6 +29,7 @@ const teacherSelect = {
   idNumber: true,
   licenseNumber: true,
   specialization: true,
+  hireDate: true,
   status: true,
   notes: true,
   createdAt: true,
@@ -38,6 +40,7 @@ const teacherSelect = {
 function mapToTeacher(row: {
   id: string;
   code: string | null;
+  userId: string | null;
   firstName: string;
   lastName: string;
   email: string | null;
@@ -49,6 +52,7 @@ function mapToTeacher(row: {
   idNumber: string | null;
   licenseNumber: string | null;
   specialization: string | null;
+  hireDate: Date | null;
   status: string;
   notes: string | null;
   createdAt: Date;
@@ -211,6 +215,7 @@ export async function updateTeacher(
     licenseNumber?: string | null;
     specialization?: string | null;
     branchId?: string | null;
+    userId?: string | null;
     notes?: string | null;
     status?: string;
     updatedBy: string;
@@ -338,6 +343,63 @@ export async function listActiveBranches(organizationId: string): Promise<Teache
     select: { id: true, name: true, code: true },
     orderBy: [{ isDefault: "desc" }, { name: "asc" }],
   });
+}
+
+export async function findTeacherByUserId(
+  organizationId: string,
+  userId: string,
+  excludeId?: string
+): Promise<Teacher | null> {
+  const db = await getDb();
+  const row = await db.teacher.findFirst({
+    where: {
+      organizationId,
+      userId,
+      deletedAt: null,
+      ...(excludeId && { NOT: { id: excludeId } }),
+    },
+    select: teacherSelect,
+  });
+  return row ? mapToTeacher(row) : null;
+}
+
+export interface LinkableTeacherUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+/**
+ * Users with the TEACHER role in this org who are not yet linked to any Teacher
+ * record — plus, when editing an existing teacher, the user already linked to
+ * `currentTeacherId` (so the current selection still appears in the picker).
+ */
+export async function listLinkableTeacherUsers(
+  organizationId: string,
+  currentTeacherId?: string
+): Promise<LinkableTeacherUser[]> {
+  const db = await getDb();
+  const [users, linked] = await Promise.all([
+    db.user.findMany({
+      where: {
+        deletedAt: null,
+        userRoles: { some: { organizationId, role: { name: "TEACHER" } } },
+      },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
+    db.teacher.findMany({
+      where: {
+        organizationId,
+        userId: { not: null },
+        deletedAt: null,
+        ...(currentTeacherId && { NOT: { id: currentTeacherId } }),
+      },
+      select: { userId: true },
+    }),
+  ]);
+  const linkedIds = new Set(linked.map((t) => t.userId));
+  return users.filter((u) => !linkedIds.has(u.id));
 }
 
 export async function assignSubject(

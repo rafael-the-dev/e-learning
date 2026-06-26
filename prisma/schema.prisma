@@ -113,6 +113,7 @@ model Organization {
   financialIntegrityIssues  FinancialIntegrityIssue[]
   financialAuditLogs        FinancialAuditLog[]
   studentDocuments          StudentDocument[]
+  teacherDocuments          TeacherDocument[]
 
   @@map("organizations")
 }
@@ -198,6 +199,7 @@ model User {
   userRoles         UserRole[]
   notifications     Notification[]
   auditLogs         AuditLog[]         @relation("AuditActor")
+  teacherProfile    Teacher?
   importJobs        ImportJob[]
 
   @@map("users")
@@ -389,6 +391,8 @@ model Teacher {
   id             String    @id @default(cuid())
   organizationId String
   branchId       String?
+  // Linked platform login (TEACHER role) — optional; enables self-service Teacher 360 access. Nullable: most teachers are managed administratively without a login.
+  userId         String?   @unique
   code           String?
   firstName      String
   lastName       String
@@ -415,13 +419,37 @@ model Teacher {
 
   organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   branch             Branch?             @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user               User?               @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   teacherSubjects    TeacherSubject[]
   classGroups        ClassGroup[]
   practicalLessons   PracticalLesson[]
   attendanceSessions AttendanceSession[]
   assessments        Assessment[]
+  documents          TeacherDocument[]
 
   @@map("teachers")
+}
+
+model TeacherDocument {
+  id             String    @id @default(cuid())
+  organizationId String
+  teacherId      String
+  // TeacherDocumentType: CONTRACT | CV | CERTIFICATE | IDENTIFICATION | LICENSE | OTHER
+  type           String
+  name           String
+  url            String    @db.NVarChar(Max)
+  mimeType       String?
+  size           Int?
+  uploadedById   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacher      Teacher      @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, teacherId])
+  @@map("teacher_documents")
 }
 
 // =============================================================================

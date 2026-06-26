@@ -314,6 +314,7 @@ export interface ListAssessmentsParams {
   levelSubjectId?: string;
   status?: string;
   academicYearId?: string;
+  teacherId?: string;
 }
 
 export interface ListAssessmentResultsParams {
