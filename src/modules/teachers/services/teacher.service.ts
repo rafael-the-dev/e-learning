@@ -2,6 +2,7 @@ import {
   findManyByOrganization,
   findByIdInOrganization,
   findByIdWithSubjects,
+  findTeacherByUserId,
   countByStatus,
   listActiveBranches,
   listLinkableTeacherUsers,
@@ -44,4 +45,9 @@ export async function getActiveBranches(organizationId: string) {
 
 export async function getLinkableTeacherUsers(organizationId: string, currentTeacherId?: string) {
   return listLinkableTeacherUsers(organizationId, currentTeacherId);
+}
+
+/** Returns null (not NotFoundError) — an unlinked account is an expected state for the Teacher Portal's blocked view, not an error. */
+export async function getTeacherByUserId(organizationId: string, userId: string) {
+  return findTeacherByUserId(organizationId, userId);
 }

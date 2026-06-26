@@ -344,6 +344,9 @@ export const PERMISSIONS = {
   TEACHER_DOCUMENTS_UPLOAD: "teacherDocuments.upload",
   TEACHER_DOCUMENTS_DELETE: "teacherDocuments.delete",
 
+  // Teacher Portal — operational workspace for the logged-in teacher (distinct from Teacher 360, the profile)
+  TEACHER_PORTAL_VIEW: "teacherPortal.view",
+
   // Assessment Policies
   ASSESSMENT_POLICIES_VIEW: "assessmentPolicies.view",
   ASSESSMENT_POLICIES_CREATE: "assessmentPolicies.create",
@@ -663,6 +666,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.TEACHERS_VIEW_SCHEDULE,
     PERMISSIONS.TEACHERS_VIEW_PERFORMANCE,
     PERMISSIONS.TEACHER_DOCUMENTS_VIEW,
+    PERMISSIONS.TEACHER_PORTAL_VIEW,
   ],
 
   STUDENT: [

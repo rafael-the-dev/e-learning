@@ -35,7 +35,8 @@ export type NavIconName =
   | "TrendingUp"
   | "Upload"
   | "History"
-  | "Bell";
+  | "Bell"
+  | "LayoutGrid";
 
 export interface NavigationItem {
   href: string;
@@ -70,6 +71,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         label: "Dashboard",
         iconName: "LayoutDashboard",
         requiredPermission: "dashboard.view",
+      },
+      {
+        href: "/teacher",
+        label: "Portal do Professor",
+        iconName: "LayoutGrid",
+        requiredPermission: "teacherPortal.view",
       },
       {
         href: "/notifications",

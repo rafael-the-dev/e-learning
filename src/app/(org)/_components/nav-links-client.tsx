@@ -34,6 +34,7 @@ import {
   Upload,
   History,
   Bell,
+  LayoutGrid,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -72,6 +73,7 @@ const ICONS: Record<NavIconName, LucideIcon> = {
   Upload,
   History,
   Bell,
+  LayoutGrid,
 };
 
 const STORAGE_KEY = "elearning-nav-collapsed";
