@@ -19,6 +19,13 @@ const TEACHER_NAV_ALLOWLIST = new Set<string>([
   "/notifications",
 ]);
 
+// Teacher-only surfaces — shown ONLY to teacher-scoped users, never to anyone
+// else. ORG_ADMIN/SUPER_ADMIN hold `teacherPortal.view` via their full-permission
+// wildcard, so a `requiredPermission` gate alone can't hide the Teacher Portal
+// from them; this set does. The Portal is a teacher's own daily workspace and
+// has no meaning for an admin/secretary.
+const TEACHER_ONLY_HREFS = new Set<string>(["/teacher"]);
+
 // Server component — fetches permissions server-side and passes
 // only the allowed hrefs to the client renderer.
 // requireOrganization() is React.cache()-wrapped so this adds zero
@@ -32,6 +39,7 @@ export async function NavLinks() {
     allowedHrefs = NAVIGATION_GROUPS.flatMap((g) => g.items)
       .filter((item) => !item.requiredPermission || ctx.ability.can(item.requiredPermission as Permission))
       .filter((item) => !teacherScoped || TEACHER_NAV_ALLOWLIST.has(item.href))
+      .filter((item) => teacherScoped || !TEACHER_ONLY_HREFS.has(item.href))
       .map((item) => item.href);
   } catch {
     allowedHrefs = [];

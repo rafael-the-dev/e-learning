@@ -187,4 +187,17 @@ describe("teacher sidebar allowlist", () => {
       ].sort()
     );
   });
+
+  it("keeps the Teacher Portal teacher-only (hidden from ORG_ADMIN/SUPER_ADMIN despite their wildcard perms)", () => {
+    const navSource = readFileSync(
+      join(process.cwd(), "src", "app", "(org)", "_components", "nav-links.tsx"),
+      "utf8"
+    );
+    // /teacher must be declared teacher-only and the filter must apply it.
+    const block = navSource.match(/TEACHER_ONLY_HREFS\s*=\s*new Set<string>\(\[([\s\S]*?)\]\)/);
+    expect(block, "TEACHER_ONLY_HREFS not found").toBeTruthy();
+    const hrefs = Array.from(block![1]!.matchAll(/"([^"]+)"/g)).map((m) => m[1]!);
+    expect(hrefs).toContain("/teacher");
+    expect(navSource).toContain("teacherScoped || !TEACHER_ONLY_HREFS.has(item.href)");
+  });
 });
