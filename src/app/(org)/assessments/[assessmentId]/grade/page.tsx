@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { assertTeacherCanAccessAssessment } from "@/server/auth/teacher-access";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { AuthorizationError } from "@/shared/lib/command";
@@ -20,6 +21,8 @@ export default async function GradeAssessmentPage({
   params: Promise<{ assessmentId: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.ASSESSMENT_RESULTS_VIEW);
+  // A student-scoped user is routed to their own /student Portal — never this org-wide grading screen. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const { assessmentId } = await params;
   // Teacher-scoped users may only grade an assessment they own or for a class

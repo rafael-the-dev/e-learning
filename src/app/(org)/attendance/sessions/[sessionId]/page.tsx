@@ -5,6 +5,7 @@ import { StatCard } from "@/shared/components/layout/stat-card";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { assertTeacherCanAccessAttendanceSession } from "@/server/auth/teacher-access";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { AuthorizationError } from "@/shared/lib/command";
@@ -24,6 +25,8 @@ export default async function AttendanceSessionDetailPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
+  // A student-scoped user is routed to their own /student Portal — never org-wide/other-student data. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const { sessionId } = await params;
   // Teacher-scoped users may only open a session they teach (or one for a class

@@ -29,6 +29,9 @@ export async function getPostLoginRedirect(): Promise<string> {
     // Checked before STUDENTS_READ because TEACHER holds both — the portal is
     // the teacher's intended daily home.
     if (ability.can(PERMISSIONS.TEACHER_PORTAL_VIEW)) return "/teacher";
+    // STUDENT lands on their own self-service Portal. Checked before
+    // STUDENTS_READ (which they don't hold anyway) for symmetry with TEACHER.
+    if (ability.can(PERMISSIONS.STUDENT_PORTAL_VIEW)) return "/student";
     // SECRETARY (and any role with student access) lands on their primary
     // operational page.
     if (ability.can(PERMISSIONS.STUDENTS_READ)) return "/students";

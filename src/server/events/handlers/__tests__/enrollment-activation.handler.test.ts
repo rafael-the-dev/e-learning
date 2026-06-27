@@ -34,7 +34,14 @@ vi.mock("@/modules/notifications/services/notification.service", () => ({
   createNotificationFromEvent: vi.fn(),
 }));
 
+// Provisioning is its own unit-tested service; isolate it here so these tests
+// stay focused on the activation/notification logic.
+vi.mock("@/modules/students/services/student-user-provisioning.service", () => ({
+  ensureStudentPortalUser: vi.fn().mockResolvedValue({ status: "skipped_by_policy", invited: false }),
+}));
+
 import { createNotificationFromEvent } from "@/modules/notifications/services/notification.service";
+import { ensureStudentPortalUser } from "@/modules/students/services/student-user-provisioning.service";
 import { DomainEventType, DomainAggregateType } from "../../event-types";
 import type { PersistedDomainEvent } from "../../domain-event";
 import { EnrollmentActivationEventHandler } from "../enrollment-activation.handler";
@@ -89,6 +96,11 @@ describe("EnrollmentActivationEventHandler — auto-activation routes through cr
 
     expect(enrollmentUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "enrollment-1" }, data: expect.objectContaining({ status: "ACTIVE" }) })
+    );
+
+    // Payment-driven activation must provision the student's Portal login.
+    expect(ensureStudentPortalUser).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: ORG_ID, studentId: "student-1", reason: "ENROLLMENT_ACTIVATED" })
     );
 
     // No call accepts a literal title/message — the only way to send text here

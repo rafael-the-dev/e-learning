@@ -5,6 +5,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
   getCalendarDashboardData,
@@ -21,6 +22,8 @@ export default async function AcademicCalendarPage() {
   const context = await requirePermissionOrRedirect(PERMISSIONS.ACADEMIC_CALENDAR_VIEW);
   // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
   await redirectIfTeacherScoped(context);
+  // ...and a student-scoped user is routed to their own /student Portal.
+  await redirectIfStudentScoped(context);
 
   const [dashboard, yearsResult, holidaysResult, eventsResult] = await Promise.all([
     getCalendarDashboardData(context.organizationId),

@@ -20,6 +20,9 @@ export async function upsertSettings(
     receiptPrefix?: string;
     allowLatePayments?: boolean;
     gracePeriodDays?: number;
+    autoCreateStudentUserOnActivation?: boolean;
+    sendStudentPortalInvite?: boolean;
+    studentPortalInviteStrategy?: string;
   }
 ): Promise<OrganizationSettings> {
   const db = await getDb();

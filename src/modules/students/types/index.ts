@@ -4,6 +4,8 @@
 
 export interface Student {
   id: string;
+  /** Linked platform login (STUDENT role). null when the student has no self-service account. */
+  userId: string | null;
   code: string | null;
   firstName: string;
   lastName: string;

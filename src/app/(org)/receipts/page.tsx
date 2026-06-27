@@ -1,6 +1,7 @@
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getReceiptsByOrganization, getReceiptStats } from "@/modules/finance/services/receipt.service";
 import { ReceiptsTable } from "@/modules/finance/components/receipts-table";
@@ -14,6 +15,9 @@ export default async function ReceiptsPage({
   searchParams: Promise<{ page?: string; search?: string; status?: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.RECEIPTS_VIEW);
+  // A student-scoped user sees only their own receipts, on /student — never this
+  // org-wide finance list. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const { page, search, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getReceiptById } from "@/modules/finance/services/receipt.service";
 import { Wallet, ArrowRight } from "lucide-react";
@@ -21,6 +22,8 @@ export default async function ReceiptDetailPage({
   params: Promise<{ receiptId: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.RECEIPTS_VIEW);
+  // A student-scoped user is routed to their own /student Portal — never org-wide/other-student data. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const { receiptId } = await params;
   const receipt = await getReceiptById(receiptId, context.organizationId).catch(() => null);

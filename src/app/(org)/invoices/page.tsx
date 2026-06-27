@@ -22,6 +22,7 @@ import { ApexDonutChart, ApexBarChart, ApexLineChart } from "@/shared/components
 import { InvoiceActionFilterBar } from "@/modules/finance/components/invoice-action-filter-bar";
 import { InvoiceTableFilters } from "@/modules/finance/components/invoice-table-filters";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -79,6 +80,9 @@ export default async function InvoicesPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.INVOICES_VIEW);
+  // A student-scoped user sees only their own invoices, on /student — never this
+  // org-wide finance list. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const params = await searchParams;
   const pagination = normalizePaginationParams(params.page);

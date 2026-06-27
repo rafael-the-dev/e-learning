@@ -4,6 +4,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getInvoiceById } from "@/modules/finance/services/invoice.service";
@@ -18,6 +19,8 @@ export default async function InvoiceDetailPage({
   params: Promise<{ invoiceId: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.INVOICES_VIEW);
+  // A student-scoped user is routed to their own /student Portal — never org-wide/other-student data. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const { invoiceId } = await params;
 

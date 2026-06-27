@@ -22,6 +22,7 @@ import { EnrollmentActionBar } from "@/modules/enrollments/components/enrollment
 import { EnrollmentTableFilters } from "@/modules/enrollments/components/enrollment-table-filters";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getEnrollmentsByOrganization } from "@/modules/enrollments/services/enrollment.service";
@@ -70,6 +71,8 @@ export default async function EnrollmentsPage({
   const context = await requirePermissionOrRedirect(PERMISSIONS.ENROLLMENTS_VIEW);
   // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
   await redirectIfTeacherScoped(context);
+  // ...and a student-scoped user is routed to their own /student Portal.
+  await redirectIfStudentScoped(context);
 
   const { page, search, status, courseId, branchId, classGroupId, yearId, financialStatus } = await searchParams;
   const pagination = normalizePaginationParams(page);

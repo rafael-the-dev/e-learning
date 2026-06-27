@@ -4,6 +4,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { assertTeacherCanAccessEnrollment } from "@/server/auth/teacher-access";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
@@ -102,6 +103,8 @@ export default async function EnrollmentDetailPage({
   params: Promise<{ enrollmentId: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.ENROLLMENTS_VIEW);
+  // A student-scoped user is routed to their own /student Portal — never org-wide/other-student data. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const { enrollmentId } = await params;
 

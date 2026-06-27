@@ -6,6 +6,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { EmptyState } from "@/shared/components/layout/empty-state";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { getStudentTranscript } from "@/modules/grades/services/academic-progress.service";
@@ -46,6 +47,8 @@ export default async function StudentTranscriptPage({
   params: Promise<{ studentId: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.TRANSCRIPTS_VIEW);
+  // A student-scoped user is routed to their own /student Portal — never org-wide/other-student data. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const { studentId } = await params;
   const db = await getDb();

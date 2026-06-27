@@ -2,6 +2,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -29,6 +30,8 @@ export default async function LessonsPage({
   const context = await requirePermissionOrRedirect(PERMISSIONS.LESSONS_VIEW);
   // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
   await redirectIfTeacherScoped(context);
+  // ...and a student-scoped user is routed to their own /student Portal.
+  await redirectIfStudentScoped(context);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);

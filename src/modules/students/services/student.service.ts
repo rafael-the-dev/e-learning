@@ -1,6 +1,7 @@
 import {
   findManyByOrganization,
   findByIdInOrganization,
+  findStudentByUserId,
   countByStatus,
   listActiveBranches,
   countNewStudentsThisMonth,
@@ -33,6 +34,11 @@ export async function getStudentById(id: string, organizationId: string) {
   const student = await findByIdInOrganization(id, organizationId);
   if (!student) throw new NotFoundError("Aluno", id);
   return student;
+}
+
+/** Returns null (not NotFoundError) — an unlinked account is an expected state for the Student Portal's blocked view, not an error. */
+export async function getStudentByUserId(organizationId: string, userId: string) {
+  return findStudentByUserId(organizationId, userId);
 }
 
 export async function getStudentStats(organizationId: string) {

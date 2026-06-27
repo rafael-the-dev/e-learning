@@ -5,6 +5,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getClassroomBookingById } from "@/modules/classrooms/services/classroom.service";
@@ -30,6 +31,8 @@ export default async function ClassroomBookingDetailPage({
   params: Promise<{ bookingId: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.CLASSROOM_BOOKINGS_VIEW);
+  // A student-scoped user is routed to their own /student Portal — never org-wide/other-student data. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const { bookingId } = await params;
   const [booking, perms] = await Promise.all([

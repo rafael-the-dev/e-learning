@@ -22,6 +22,7 @@ export interface ListStudentsParams extends PaginationParams {
 
 const studentSelect = {
   id: true,
+  userId: true,
   code: true,
   firstName: true,
   lastName: true,
@@ -41,6 +42,7 @@ const studentSelect = {
 
 function mapToStudent(row: {
   id: string;
+  userId: string | null;
   code: string | null;
   firstName: string;
   lastName: string;
@@ -110,6 +112,24 @@ export async function findByIdInOrganization(
   const db = await getDb();
   const row = await db.student.findFirst({
     where: { id, organizationId, deletedAt: null },
+    select: studentSelect,
+  });
+  return row ? mapToStudent(row) : null;
+}
+
+/**
+ * Resolves the Student profile linked to a platform login. Scoped to the org so
+ * the same user can never resolve to a student in another tenant. Returns null
+ * (not NotFoundError) — an unlinked account is an expected state for the Student
+ * Portal's blocked view, not an error.
+ */
+export async function findStudentByUserId(
+  organizationId: string,
+  userId: string
+): Promise<Student | null> {
+  const db = await getDb();
+  const row = await db.student.findFirst({
+    where: { organizationId, userId, deletedAt: null },
     select: studentSelect,
   });
   return row ? mapToStudent(row) : null;

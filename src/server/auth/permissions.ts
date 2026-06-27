@@ -50,6 +50,8 @@ export const PERMISSIONS = {
   STUDENTS_DELETE: "students.delete",
   STUDENTS_SUSPEND: "students.suspend",
   STUDENTS_IMPORT: "students.import",
+  // Manage a student's Portal login from Student 360 (create/link, resend invite, unlink). Admin-only.
+  STUDENTS_MANAGE_PORTAL_ACCOUNT: "students.managePortalAccount",
   IMPORT_JOBS_VIEW: "imports.jobs.view",
 
   // Teachers
@@ -346,6 +348,9 @@ export const PERMISSIONS = {
 
   // Teacher Portal — operational workspace for the logged-in teacher (distinct from Teacher 360, the profile)
   TEACHER_PORTAL_VIEW: "teacherPortal.view",
+
+  // Student Portal — self-service workspace for the logged-in student (distinct from Student 360, the administrative view)
+  STUDENT_PORTAL_VIEW: "studentPortal.view",
 
   // Assessment Policies
   ASSESSMENT_POLICIES_VIEW: "assessmentPolicies.view",
@@ -670,6 +675,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ],
 
   STUDENT: [
+    PERMISSIONS.STUDENT_PORTAL_VIEW,
     PERMISSIONS.GRADES_VIEW,
     PERMISSIONS.ASSESSMENT_RESULTS_VIEW,
     PERMISSIONS.STUDENT_SUBJECT_PROGRESS_VIEW,

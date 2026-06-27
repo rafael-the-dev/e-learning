@@ -20,6 +20,7 @@ import { ApexDonutChart, ApexLineChart } from "@/shared/components/charts";
 import { PaymentActionBar } from "@/modules/finance/components/payment-action-bar";
 import { PaymentTableFilters } from "@/modules/finance/components/payment-table-filters";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
@@ -67,6 +68,9 @@ export default async function PaymentsPage({
   }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.PAYMENTS_VIEW);
+  // A student-scoped user sees only their own payments, on /student — never this
+  // org-wide finance list. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const { page, search, status, method, receiptStatus, branchId, dateFrom, dateTo } = await searchParams;
   const pagination = normalizePaginationParams(page);

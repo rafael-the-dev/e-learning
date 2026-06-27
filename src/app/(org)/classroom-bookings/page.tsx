@@ -4,6 +4,7 @@ import { Button } from "@/shared/components/ui/button";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getClassroomBookingsByOrganization } from "@/modules/classrooms/services/classroom.service";
@@ -27,6 +28,8 @@ export default async function ClassroomBookingsPage({
   const context = await requirePermissionOrRedirect(PERMISSIONS.CLASSROOM_BOOKINGS_VIEW);
   // Teacher-scoped users never see this org-wide page — routed to their scoped Portal. See docs/teacher-access-scope.md.
   await redirectIfTeacherScoped(context);
+  // ...and a student-scoped user is routed to their own /student Portal.
+  await redirectIfStudentScoped(context);
 
   const { page, classroomId, yearId, status } = await searchParams;
   const pagination = normalizePaginationParams(page);

@@ -5,6 +5,7 @@ import { Button } from "@/shared/components/ui/button";
 import { redirect } from "next/navigation";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { resolveTeacherScope } from "@/server/auth/teacher-scope";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import {
@@ -17,6 +18,10 @@ export const metadata = { title: "Presenças" };
 
 export default async function AttendancePage() {
   const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
+
+  // A student-scoped user sees only their own attendance, on /student — never
+  // this org-wide hub. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   // The hub shows org-wide session stats — a teacher-scoped user goes straight
   // to their own scoped sessions list instead. See docs/teacher-access-scope.md.

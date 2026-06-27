@@ -3,6 +3,7 @@ import type { DomainEventHandler } from "../event-handlers";
 import type { PersistedDomainEvent } from "../domain-event";
 import { DomainEventType } from "../event-types";
 import { createNotificationFromEvent } from "@/modules/notifications/services/notification.service";
+import { ensureStudentPortalUser } from "@/modules/students/services/student-user-provisioning.service";
 
 // =============================================================================
 // ENROLLMENT ACTIVATION HANDLER
@@ -106,6 +107,19 @@ export class EnrollmentActivationEventHandler implements DomainEventHandler {
         reason: `Ativação automática — regra: ${activationRule}`,
       },
     });
+
+    // Payment-driven activation does not re-emit enrollment.activated, so the
+    // StudentUserProvisioningHandler won't fire — provision the Portal login here
+    // directly. Idempotent + swallows recoverable outcomes, so it never breaks
+    // the activation side-effect.
+    if (enrollment.studentId) {
+      await ensureStudentPortalUser({
+        organizationId: event.organizationId,
+        studentId: enrollment.studentId,
+        triggeredByUserId: (payload._actorId as string | undefined) ?? null,
+        reason: "ENROLLMENT_ACTIVATED",
+      });
+    }
 
     // Resolve the student's user account via email (Student has no direct userId FK).
     const studentId = enrollment.studentId;

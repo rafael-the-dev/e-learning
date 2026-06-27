@@ -1,6 +1,7 @@
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { redirectIfTeacherScoped } from "@/server/auth/teacher-scope";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { AttendanceReportsView } from "@/modules/attendance/components/attendance-reports-view";
 import { getDb } from "@/server/db";
@@ -39,6 +40,8 @@ export default async function AttendanceReportsPage({
   // Org-wide attendance rates across all students — never shown to a teacher-scoped
   // user; they're routed to their scoped Portal. See docs/teacher-access-scope.md.
   await redirectIfTeacherScoped(context);
+  // ...and a student-scoped user is routed to their own /student Portal.
+  await redirectIfStudentScoped(context);
 
   const { classGroupId, academicYearId } = await searchParams;
   const options = await getReportFilterOptions(context.organizationId);

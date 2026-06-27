@@ -15,6 +15,7 @@ import {
   getTimelineTabData,
   resolveCurrentEnrollmentLevel,
 } from "@/modules/students/student-360/services/student-360.service";
+import { getStudentPortalAccountStatus } from "@/modules/students/services/student-user-provisioning.service";
 import { calculateHealthScore } from "@/modules/students/student-360/services/student-health.service";
 import { computeStudentAlerts } from "@/modules/students/student-360/services/student-alerts.service";
 import {
@@ -152,6 +153,7 @@ export default async function StudentDetailPage({
           organizationId={context.organizationId}
           page={page}
           core={core}
+          canManagePortalAccount={context.ability.can(PERMISSIONS.STUDENTS_MANAGE_PORTAL_ACCOUNT)}
           canDeleteDocument={context.ability.can(PERMISSIONS.STUDENT_DOCUMENTS_DELETE)}
           canVerifyDocument={context.ability.can(PERMISSIONS.STUDENT_DOCUMENTS_VERIFY)}
           canUploadDocument={context.ability.can(PERMISSIONS.STUDENT_DOCUMENTS_UPLOAD)}
@@ -170,6 +172,7 @@ async function ActiveTabPanel({
   organizationId,
   page,
   core,
+  canManagePortalAccount,
   canDeleteDocument,
   canVerifyDocument,
   canUploadDocument,
@@ -182,6 +185,7 @@ async function ActiveTabPanel({
   organizationId: string;
   page: number;
   core: Awaited<ReturnType<typeof getStudent360Core>>;
+  canManagePortalAccount: boolean;
   canDeleteDocument: boolean;
   canVerifyDocument: boolean;
   canUploadDocument: boolean;
@@ -264,7 +268,15 @@ async function ActiveTabPanel({
     }
 
     case "overview":
-    default:
-      return <StudentOverviewTab core={core} />;
+    default: {
+      const portalAccount = await getStudentPortalAccountStatus(studentId, organizationId);
+      return (
+        <StudentOverviewTab
+          core={core}
+          portalAccount={portalAccount}
+          canManagePortalAccount={canManagePortalAccount}
+        />
+      );
+    }
   }
 }

@@ -15,6 +15,7 @@ import { ApexLineChart } from "@/shared/components/charts/apex-line-chart";
 import { ApexDonutChart } from "@/shared/components/charts/apex-donut-chart";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { resolveDataAccessScope } from "@/server/auth/teacher-scope";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { getTeacherOwnedSubjectIds } from "@/server/auth/teacher-access";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { EmptyState } from "@/shared/components/layout/empty-state";
@@ -79,6 +80,9 @@ export default async function StudentProgressPage({
   }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.STUDENT_COURSE_PROGRESS_VIEW);
+  // A student-scoped user sees only their own progress, on /student — never this
+  // org-wide list. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const sp = await searchParams;
   const pagination = normalizePaginationParams(sp.page);

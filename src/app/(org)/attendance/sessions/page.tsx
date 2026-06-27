@@ -3,6 +3,7 @@ import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { Button } from "@/shared/components/ui/button";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
+import { redirectIfStudentScoped } from "@/server/auth/student-scope";
 import { resolveDataAccessScope } from "@/server/auth/teacher-scope";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
@@ -46,6 +47,8 @@ export default async function AttendanceSessionsPage({
   }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW);
+  // A student-scoped user is routed to their own /student Portal — never org-wide/other-student data. See student-scope.ts.
+  await redirectIfStudentScoped(context);
 
   const { page, search, status, classGroupId, subjectId } = await searchParams;
   const pagination = normalizePaginationParams(page);

@@ -16,12 +16,22 @@ import {
 } from "lucide-react";
 import { resolveCurrentEnrollmentLevel } from "@/modules/students/student-360/services/student-360.service";
 import type { Student360Core } from "@/modules/students/student-360/services/student-360.service";
+import { StudentPortalAccountCard } from "@/modules/students/student-360/components/student-portal-account-card";
+import type { StudentPortalAccountDto } from "@/modules/students/services/student-user-provisioning.service";
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("pt-PT", { style: "currency", currency: "MZN" });
 }
 
-export function StudentOverviewTab({ core }: { core: Student360Core }) {
+export function StudentOverviewTab({
+  core,
+  portalAccount,
+  canManagePortalAccount = false,
+}: {
+  core: Student360Core;
+  portalAccount?: StudentPortalAccountDto;
+  canManagePortalAccount?: boolean;
+}) {
   const { student, currentEnrollment, statement, subjectProgress, levelProgress, attendanceSubjects, recentTimeline, documentCount } = core;
   const currentLevel = resolveCurrentEnrollmentLevel(currentEnrollment);
 
@@ -43,6 +53,10 @@ export function StudentOverviewTab({ core }: { core: Student360Core }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {portalAccount && (
+        <StudentPortalAccountCard account={portalAccount} canManage={canManagePortalAccount} />
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
