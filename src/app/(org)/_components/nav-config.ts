@@ -73,6 +73,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         requiredPermission: "dashboard.view",
       },
       {
+        href: "/secretary",
+        label: "Portal da Secretaria",
+        iconName: "LayoutGrid",
+        requiredPermission: "secretaryPortal.view",
+      },
+      {
         href: "/teacher",
         label: "Portal do Professor",
         iconName: "LayoutGrid",

@@ -352,6 +352,9 @@ export const PERMISSIONS = {
   // Student Portal — self-service workspace for the logged-in student (distinct from Student 360, the administrative view)
   STUDENT_PORTAL_VIEW: "studentPortal.view",
 
+  // Secretary Portal — operational workspace for the logged-in secretary (queues for enrollments, payments, documents, attendance). Distinct from the Executive Dashboard (strategic).
+  SECRETARY_PORTAL_VIEW: "secretaryPortal.view",
+
   // Assessment Policies
   ASSESSMENT_POLICIES_VIEW: "assessmentPolicies.view",
   ASSESSMENT_POLICIES_CREATE: "assessmentPolicies.create",
@@ -485,6 +488,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   ) as Permission[],
 
   SECRETARY: [
+    PERMISSIONS.SECRETARY_PORTAL_VIEW,
     PERMISSIONS.GRADE_POLICIES_VIEW,
     PERMISSIONS.GRADE_COMPONENTS_VIEW,
     PERMISSIONS.GRADES_VIEW,
