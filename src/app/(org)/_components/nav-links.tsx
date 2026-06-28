@@ -1,6 +1,7 @@
 import { requireOrganization } from "@/server/auth/context";
 import { isTeacherScopedRoles } from "@/server/auth/teacher-scope";
 import { isStudentScopedRoles } from "@/server/auth/student-scope";
+import { isGuardianScopedRoles } from "@/server/auth/guardian-scope";
 import type { Permission } from "@/server/auth/permissions";
 import { NAVIGATION_GROUPS } from "./nav-config";
 import { NavLinksClient } from "./nav-links-client";
@@ -37,6 +38,17 @@ const STUDENT_NAV_ALLOWLIST = new Set<string>(["/student", "/notifications"]);
 // this set hides /student from everyone who isn't a student.
 const STUDENT_ONLY_HREFS = new Set<string>(["/student"]);
 
+// A guardian-scoped user only ever reaches their own Portal + their own
+// notifications. The sidebar mirrors that minimal set — no student lists,
+// finance dashboards, reports, settings, or other portals.
+const GUARDIAN_NAV_ALLOWLIST = new Set<string>(["/guardian", "/notifications"]);
+
+// Guardian-only surfaces — shown ONLY to guardian-scoped users. ORG_ADMIN/
+// SUPER_ADMIN hold `guardianPortal.view` via their wildcard, so this set hides
+// /guardian from everyone who isn't a guardian (admins may still navigate
+// directly for preview/support).
+const GUARDIAN_ONLY_HREFS = new Set<string>(["/guardian"]);
+
 // Server component — fetches permissions server-side and passes
 // only the allowed hrefs to the client renderer.
 // requireOrganization() is React.cache()-wrapped so this adds zero
@@ -48,12 +60,15 @@ export async function NavLinks() {
     const ctx = await requireOrganization();
     const teacherScoped = isTeacherScopedRoles(ctx.roles);
     const studentScoped = isStudentScopedRoles(ctx.roles);
+    const guardianScoped = isGuardianScopedRoles(ctx.roles);
     allowedHrefs = NAVIGATION_GROUPS.flatMap((g) => g.items)
       .filter((item) => !item.requiredPermission || ctx.ability.can(item.requiredPermission as Permission))
       .filter((item) => !teacherScoped || TEACHER_NAV_ALLOWLIST.has(item.href))
       .filter((item) => teacherScoped || !TEACHER_ONLY_HREFS.has(item.href))
       .filter((item) => !studentScoped || STUDENT_NAV_ALLOWLIST.has(item.href))
       .filter((item) => studentScoped || !STUDENT_ONLY_HREFS.has(item.href))
+      .filter((item) => !guardianScoped || GUARDIAN_NAV_ALLOWLIST.has(item.href))
+      .filter((item) => guardianScoped || !GUARDIAN_ONLY_HREFS.has(item.href))
       .map((item) => item.href);
   } catch {
     allowedHrefs = [];

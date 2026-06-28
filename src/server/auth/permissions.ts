@@ -52,6 +52,8 @@ export const PERMISSIONS = {
   STUDENTS_IMPORT: "students.import",
   // Manage a student's Portal login from Student 360 (create/link, resend invite, unlink). Admin-only.
   STUDENTS_MANAGE_PORTAL_ACCOUNT: "students.managePortalAccount",
+  // Manage a student's guardian/parent links from Student 360 (add, resend invite, update visibility, remove). Admin-only.
+  GUARDIAN_LINKS_MANAGE: "guardianLinks.manage",
   IMPORT_JOBS_VIEW: "imports.jobs.view",
 
   // Teachers
@@ -355,6 +357,9 @@ export const PERMISSIONS = {
   // Secretary Portal — operational workspace for the logged-in secretary (queues for enrollments, payments, documents, attendance). Distinct from the Executive Dashboard (strategic).
   SECRETARY_PORTAL_VIEW: "secretaryPortal.view",
 
+  // Guardian Portal — responsible-party view across one or more linked students (academic, attendance, finance, documents, notifications). Self-scoped to the guardian's GuardianStudent links.
+  GUARDIAN_PORTAL_VIEW: "guardianPortal.view",
+
   // Assessment Policies
   ASSESSMENT_POLICIES_VIEW: "assessmentPolicies.view",
   ASSESSMENT_POLICIES_CREATE: "assessmentPolicies.create",
@@ -476,6 +481,7 @@ export const SYSTEM_ROLES = {
   SECRETARY: "SECRETARY",
   TEACHER: "TEACHER",
   STUDENT: "STUDENT",
+  GUARDIAN: "GUARDIAN",
 } as const;
 
 export type SystemRole = (typeof SYSTEM_ROLES)[keyof typeof SYSTEM_ROLES];
@@ -519,6 +525,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.STUDENT_DOCUMENTS_VIEW,
     PERMISSIONS.STUDENT_DOCUMENTS_UPLOAD,
     PERMISSIONS.STUDENT_DOCUMENTS_VERIFY,
+    PERMISSIONS.GUARDIAN_LINKS_MANAGE,
     PERMISSIONS.TEACHERS_CREATE,
     PERMISSIONS.TEACHERS_READ,
     PERMISSIONS.TEACHERS_UPDATE,
@@ -700,6 +707,17 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.ACADEMIC_CALENDAR_VIEW,
     PERMISSIONS.STUDENT_LEVEL_PROGRESS_VIEW,
     PERMISSIONS.STUDENT_COURSE_PROGRESS_VIEW,
+    PERMISSIONS.NOTIFICATIONS_VIEW_OWN,
+    PERMISSIONS.NOTIFICATIONS_MARK_READ,
+    PERMISSIONS.NOTIFICATIONS_ARCHIVE_OWN,
+  ],
+
+  // A guardian/parent sees ONLY their own Guardian Portal + their own
+  // notifications. All academic/attendance/finance/document data is aggregated
+  // server-side from the guardian's GuardianStudent links and gated by the
+  // per-link visibility flags — never by these coarse role permissions.
+  GUARDIAN: [
+    PERMISSIONS.GUARDIAN_PORTAL_VIEW,
     PERMISSIONS.NOTIFICATIONS_VIEW_OWN,
     PERMISSIONS.NOTIFICATIONS_MARK_READ,
     PERMISSIONS.NOTIFICATIONS_ARCHIVE_OWN,

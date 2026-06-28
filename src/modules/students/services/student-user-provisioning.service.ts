@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/server/db";
 import { NotFoundError } from "@/shared/lib/command";
+import { normalizeEmail } from "@/shared/lib/email";
 import { findSettings } from "@/modules/organizations/repositories/settings.repository";
 import { createStudentPortalInvite } from "@/modules/users/services/account-invite.service";
 import { createNotification } from "@/modules/notifications/services/notification.service";
@@ -151,7 +152,7 @@ export async function ensureStudentPortalUser(
     return { status: "already_linked", userId: student.userId, invited: false };
   }
 
-  const email = student.email?.trim();
+  const email = normalizeEmail(student.email);
   if (!email) {
     const result: StudentProvisionResult = { status: "missing_email", invited: false };
     await audit(organizationId, studentId, triggeredByUserId, result);

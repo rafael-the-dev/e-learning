@@ -114,6 +114,7 @@ model Organization {
   financialAuditLogs        FinancialAuditLog[]
   studentDocuments          StudentDocument[]
   teacherDocuments          TeacherDocument[]
+  guardianLinks             GuardianStudent[]
 
   @@map("organizations")
 }
@@ -207,6 +208,7 @@ model User {
   teacherProfile    Teacher?
   studentProfile    Student?
   importJobs        ImportJob[]
+  guardianLinks     GuardianStudent[]
 
   @@map("users")
 }
@@ -387,9 +389,54 @@ model Student {
   levelProgressionRequests LevelProgressionRequest[]
   refunds                  Refund[]
   documents                StudentDocument[]
+  guardianLinks            GuardianStudent[]
 
   @@index([organizationId, branchId])
   @@map("students")
+}
+
+// =============================================================================
+// GUARDIAN / PARENT PORTAL
+// Links a guardian/parent User (GUARDIAN role) to a Student. One guardian may
+// have many students; one student may have many guardians. Per-link visibility
+// flags govern what the guardian sees in the Guardian Portal. The guardian is a
+// plain User (never a dedicated Guardian entity) so the same person can hold
+// other roles in other orgs. The relationship is organization-scoped.
+// See docs/guardian-portal.md.
+// =============================================================================
+
+model GuardianStudent {
+  id             String    @id @default(cuid())
+  organizationId String
+  // The guardian's platform login (User with GUARDIAN role). NEVER the Student.userId.
+  guardianUserId String
+  studentId      String
+  // GuardianRelationshipType: FATHER | MOTHER | GUARDIAN | SPONSOR | OTHER
+  relationshipType String  @default("GUARDIAN")
+  isPrimary        Boolean @default(false)
+  // Per-link visibility flags — enforced server-side in every Guardian Portal read.
+  canViewAcademic         Boolean @default(true)
+  canViewAttendance       Boolean @default(true)
+  canViewFinance          Boolean @default(false)
+  canViewDocuments        Boolean @default(true)
+  canReceiveNotifications Boolean @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?
+  updatedBy      String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  guardian     User         @relation(fields: [guardianUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, guardianUserId])
+  @@index([organizationId, studentId])
+  // The unique "one active link per (org, guardian, student)" constraint is a
+  // FILTERED unique index (WHERE deletedAt IS NULL), declared in the migration —
+  // a plain @@unique would block re-linking after a soft-delete, and SQL Server
+  // treats multiple NULLs as duplicates. See the migration for the index.
+  @@map("guardian_students")
 }
 
 // =============================================================================

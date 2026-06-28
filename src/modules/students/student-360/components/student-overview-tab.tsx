@@ -18,6 +18,8 @@ import { resolveCurrentEnrollmentLevel } from "@/modules/students/student-360/se
 import type { Student360Core } from "@/modules/students/student-360/services/student-360.service";
 import { StudentPortalAccountCard } from "@/modules/students/student-360/components/student-portal-account-card";
 import type { StudentPortalAccountDto } from "@/modules/students/services/student-user-provisioning.service";
+import { StudentGuardiansCard } from "@/modules/guardian-portal/components/student-guardians-card";
+import type { StudentGuardianLinkDto } from "@/modules/guardian-portal/services/guardian-provisioning.service";
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("pt-PT", { style: "currency", currency: "MZN" });
@@ -27,10 +29,14 @@ export function StudentOverviewTab({
   core,
   portalAccount,
   canManagePortalAccount = false,
+  guardianLinks = [],
+  canManageGuardians = false,
 }: {
   core: Student360Core;
   portalAccount?: StudentPortalAccountDto;
   canManagePortalAccount?: boolean;
+  guardianLinks?: StudentGuardianLinkDto[];
+  canManageGuardians?: boolean;
 }) {
   const { student, currentEnrollment, statement, subjectProgress, levelProgress, attendanceSubjects, recentTimeline, documentCount } = core;
   const currentLevel = resolveCurrentEnrollmentLevel(currentEnrollment);
@@ -56,6 +62,12 @@ export function StudentOverviewTab({
       {portalAccount && (
         <StudentPortalAccountCard account={portalAccount} canManage={canManagePortalAccount} />
       )}
+
+      <StudentGuardiansCard
+        studentId={student.id}
+        links={guardianLinks}
+        canManage={canManageGuardians}
+      />
 
       <Card>
         <CardHeader className="pb-3">
