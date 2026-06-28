@@ -62,6 +62,15 @@ describe("getPostLoginRedirect", () => {
     expect(await getPostLoginRedirect()).toBe("/students");
   });
 
+  it("sends a GUARDIAN to /guardian — their role lacks STUDENTS_READ, so without the branch they'd fall through to /notifications", async () => {
+    mockRequireOrganization.mockResolvedValue({
+      roles: [SYSTEM_ROLES.GUARDIAN],
+      ability: abilityFor([PERMISSIONS.GUARDIAN_PORTAL_VIEW, PERMISSIONS.NOTIFICATIONS_VIEW_OWN]),
+    });
+
+    expect(await getPostLoginRedirect()).toBe("/guardian");
+  });
+
   it("falls back to /notifications for a role with none of the above (never /forbidden)", async () => {
     mockRequireOrganization.mockResolvedValue({
       roles: [SYSTEM_ROLES.STUDENT],

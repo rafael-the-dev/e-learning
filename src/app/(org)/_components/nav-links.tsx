@@ -2,7 +2,7 @@ import { requireOrganization } from "@/server/auth/context";
 import { isTeacherScopedRoles } from "@/server/auth/teacher-scope";
 import { isStudentScopedRoles } from "@/server/auth/student-scope";
 import { isGuardianScopedRoles } from "@/server/auth/guardian-scope";
-import type { Permission } from "@/server/auth/permissions";
+import { SYSTEM_ROLES, type Permission } from "@/server/auth/permissions";
 import { NAVIGATION_GROUPS } from "./nav-config";
 import { NavLinksClient } from "./nav-links-client";
 
@@ -49,6 +49,14 @@ const GUARDIAN_NAV_ALLOWLIST = new Set<string>(["/guardian", "/notifications"]);
 // directly for preview/support).
 const GUARDIAN_ONLY_HREFS = new Set<string>(["/guardian"]);
 
+// Secretary-only surfaces — shown ONLY to users holding the SECRETARY role.
+// ORG_ADMIN/SUPER_ADMIN hold `secretaryPortal.view` via their full-permission
+// wildcard, so a `requiredPermission` gate alone can't hide the Secretary Portal
+// from them; this set does. The Portal is the secretary's own operational
+// workspace and has no meaning for an admin (admins may still navigate directly
+// for preview/support).
+const SECRETARY_ONLY_HREFS = new Set<string>(["/secretary"]);
+
 // Server component — fetches permissions server-side and passes
 // only the allowed hrefs to the client renderer.
 // requireOrganization() is React.cache()-wrapped so this adds zero
@@ -61,6 +69,10 @@ export async function NavLinks() {
     const teacherScoped = isTeacherScopedRoles(ctx.roles);
     const studentScoped = isStudentScopedRoles(ctx.roles);
     const guardianScoped = isGuardianScopedRoles(ctx.roles);
+    // Unlike the scoped portals above, SECRETARY is a full operational role with
+    // a broad sidebar — so this is a plain role check (not an allowlist), used
+    // only to hide the Secretary Portal from non-secretaries (incl. admins).
+    const isSecretary = ctx.roles.includes(SYSTEM_ROLES.SECRETARY);
     allowedHrefs = NAVIGATION_GROUPS.flatMap((g) => g.items)
       .filter((item) => !item.requiredPermission || ctx.ability.can(item.requiredPermission as Permission))
       .filter((item) => !teacherScoped || TEACHER_NAV_ALLOWLIST.has(item.href))
@@ -69,6 +81,7 @@ export async function NavLinks() {
       .filter((item) => studentScoped || !STUDENT_ONLY_HREFS.has(item.href))
       .filter((item) => !guardianScoped || GUARDIAN_NAV_ALLOWLIST.has(item.href))
       .filter((item) => guardianScoped || !GUARDIAN_ONLY_HREFS.has(item.href))
+      .filter((item) => isSecretary || !SECRETARY_ONLY_HREFS.has(item.href))
       .map((item) => item.href);
   } catch {
     allowedHrefs = [];

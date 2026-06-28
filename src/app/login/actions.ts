@@ -32,6 +32,10 @@ export async function getPostLoginRedirect(): Promise<string> {
     // STUDENT lands on their own self-service Portal. Checked before
     // STUDENTS_READ (which they don't hold anyway) for symmetry with TEACHER.
     if (ability.can(PERMISSIONS.STUDENT_PORTAL_VIEW)) return "/student";
+    // GUARDIAN lands on the responsible-party Portal. Their role holds neither
+    // STUDENTS_READ nor the other portal permissions, so without this branch
+    // they'd fall through to /notifications.
+    if (ability.can(PERMISSIONS.GUARDIAN_PORTAL_VIEW)) return "/guardian";
     // SECRETARY (and any role with student access) lands on their primary
     // operational page.
     if (ability.can(PERMISSIONS.STUDENTS_READ)) return "/students";
