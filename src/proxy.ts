@@ -15,7 +15,12 @@ export default auth( async (req) => {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  if (req.auth && pathname === "/login") {
+  // Only bounce real browser navigations (GET) away from /login. Server Action
+  // POSTs also target the current URL (/login) and would otherwise be caught
+  // here — returning a plain redirect to a Server Action request breaks the
+  // RSC response contract and surfaces as "An unexpected response was received
+  // from the server." in the client.
+  if (req.auth && pathname === "/login" && req.method === "GET") {
     const destination = await getPostLoginRedirect();
     return NextResponse.redirect(new URL(destination, req.url));
   }
