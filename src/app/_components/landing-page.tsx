@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  LayoutDashboard,
   Sun,
   Moon,
   ArrowRight,
@@ -80,10 +79,15 @@ export function LandingPage() {
           }}
         >
           <a href="#topo" style={brand(15)}>
-            <span style={logoBox(34)}>
-              <LayoutDashboard width={19} height={19} />
-            </span>
-            Gestão Escolar
+            <img
+              src={
+                dark
+                  ? "/images/lectario-logo-horizontal-white-trim.png"
+                  : "/images/lectario-logo-horizontal-black-trim.png"
+              }
+              alt="Lectário — Gestão Escolar"
+              style={{ height: 30, width: "auto", display: "block" }}
+            />
           </a>
           <div
             className="gs-navlinks"
@@ -726,10 +730,15 @@ export function LandingPage() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 48, justifyContent: "space-between" }}>
             <div style={{ maxWidth: 300 }}>
               <a href="#topo" style={brand(15)}>
-                <span style={logoBox(32)}>
-                  <LayoutDashboard width={17} height={17} />
-                </span>
-                Gestão Escolar
+                <img
+                  src={
+                    dark
+                      ? "/images/lectario-logo-horizontal-white-trim.png"
+                      : "/images/lectario-logo-horizontal-black-trim.png"
+                  }
+                  alt="Lectário — Gestão Escolar"
+                  style={{ height: 28, width: "auto", display: "block" }}
+                />
               </a>
               <p
                 style={{
@@ -792,7 +801,7 @@ export function LandingPage() {
             }}
           >
             <span style={{ fontSize: 12.5, color: "var(--muted-foreground)" }}>
-              © 2026 Gestão Escolar. Todos os direitos reservados.
+              © 2026 Lectário. Todos os direitos reservados.
             </span>
             <span
               style={{ fontSize: 12.5, color: "var(--muted-foreground)", display: "flex", gap: 20 }}
@@ -1386,19 +1395,6 @@ function brand(fontSize: number): React.CSSProperties {
     fontWeight: 600,
     fontSize,
     letterSpacing: "-0.01em",
-  };
-}
-
-function logoBox(size: number): React.CSSProperties {
-  return {
-    width: size,
-    height: size,
-    borderRadius: "0.625rem",
-    background: "var(--primary)",
-    color: "var(--primary-foreground)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
   };
 }
 
