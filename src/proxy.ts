@@ -31,5 +31,12 @@ export default auth( async (req) => {
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|public/).*)"],
+  // Skip Next internals and any path with a file extension. Files in `public/`
+  // are served from the ROOT (e.g. `/images/icons/x.png`, never `/public/...`),
+  // so the old `public/` exclusion matched nothing and the auth middleware
+  // intercepted every static asset — redirecting unauthenticated requests to
+  // `/login` and serving HTML in place of the file. The `.*\..*` rule excludes
+  // anything with a dot (images, css, fonts, favicon) while keeping real routes
+  // (which have no extension) protected.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };
