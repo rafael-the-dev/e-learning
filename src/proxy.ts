@@ -9,7 +9,9 @@ const PUBLIC_PATHS = ["/login", "/register", "/api/auth", "/set-password"];
 
 export default auth( async (req) => {
   const { pathname } = req.nextUrl;
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  // The marketing landing page lives at the root and is public. Match it
+  // exactly — a prefix match on "/" would make every path public.
+  const isPublic = pathname === "/" || PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
   if (!req.auth && !isPublic) {
     return NextResponse.redirect(new URL("/login", req.url));
