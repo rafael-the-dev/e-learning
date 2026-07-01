@@ -8,24 +8,13 @@ import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { assertTeacherCanAccessEnrollment } from "@/server/auth/teacher-access";
 import type { AuthContext } from "@/server/auth/context";
-import { auditService } from "@/modules/audit-logs/services/audit.service";
-import { eventPublisher } from "@/server/events/event-publisher";
-import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { getDb } from "@/server/db";
-import { findResultsByEnrollmentAndLevelSubject } from "@/modules/grades/repositories/student-assessment-result.repository";
-import { upsertStudentSubjectProgress } from "@/modules/assessments/repositories/student-subject-progress.repository";
-import { findActivePolicyForLevelSubject } from "@/modules/assessments/repositories/assessment-policy.repository";
-import { findActiveComponentsByPolicy } from "@/modules/assessments/repositories/assessment-component.repository";
-import {
-  gradeCalculationService,
-  type GradeComponentScore,
-} from "@/modules/grades/services/grade-calculation.service";
 import {
   recalculateStudentSubjectProgressSchema,
   type RecalculateStudentSubjectProgressSchema,
 } from "@/modules/assessments/schemas/assessment.schema";
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
-import { recalculateStudentLevelProgress } from "@/modules/prerequisites/services/recalculate-level-progress.service";
+import { recalculateSubjectProgressCascade } from "@/modules/grades/services/subject-progress-cascade.service";
 
 export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
   RecalculateStudentSubjectProgressSchema,
@@ -73,126 +62,11 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
   }
 
   async execute(): Promise<StudentSubjectProgress> {
-    const { organizationId } = this.context;
-    const { studentId, enrollmentId, levelSubjectId } = this.input;
-
-    const db = await getDb();
-    const levelSubject = await db.levelSubject.findFirst({
-      where: { id: levelSubjectId, organizationId },
-      select: { minimumPassingGrade: true, minimumAttendancePercentage: true, courseLevelId: true },
+    // Single canonical recalculation path. Always cascades subject -> level -> course.
+    return recalculateSubjectProgressCascade(this.context as AuthContext, {
+      studentId: this.input.studentId,
+      enrollmentId: this.input.enrollmentId,
+      levelSubjectId: this.input.levelSubjectId,
     });
-
-    const policy = await findActivePolicyForLevelSubject(levelSubjectId, organizationId);
-    const components = policy
-      ? await findActiveComponentsByPolicy(policy.id, organizationId)
-      : [];
-
-    // Read from unified StudentAssessmentResult (single source of truth)
-    const results = await findResultsByEnrollmentAndLevelSubject(
-      enrollmentId,
-      levelSubjectId,
-      organizationId
-    );
-
-    const componentScores: GradeComponentScore[] = components.map((comp) => {
-      const matching = results.find((r) => r.assessmentComponentId === comp.id);
-      return {
-        componentId: comp.id,
-        weight: comp.weight,
-        maxGrade: comp.maxGrade,
-        grade: matching?.grade ?? null,
-        normalizedGrade: matching?.normalizedGrade ?? null,
-        isRequired: comp.isRequired,
-      };
-    });
-
-    const minPassingGrade =
-      levelSubject?.minimumPassingGrade != null
-        ? Number(levelSubject.minimumPassingGrade)
-        : policy?.minimumPassingGrade ?? 50;
-
-    const minAttendance = levelSubject?.minimumAttendancePercentage
-      ? Number(levelSubject.minimumAttendancePercentage)
-      : null;
-
-    let calculationResult;
-    if (policy && components.length > 0) {
-      calculationResult = gradeCalculationService.calculateFinalGrade({
-        calculationMethod: policy.calculationMethod,
-        roundingMethod: policy.roundingMethod,
-        minimumPassingGrade: minPassingGrade,
-        allowRecovery: policy.allowRecovery,
-        components: componentScores,
-        attendancePercentage: null,
-        minimumAttendancePercentage: minAttendance,
-      });
-    } else {
-      calculationResult = {
-        finalGrade: null,
-        status: "IN_PROGRESS" as const,
-        reason: "Sem política de avaliação configurada",
-      };
-    }
-
-    const progressStatus =
-      calculationResult.status === "PASSED" ? "PASSED" :
-      calculationResult.status === "FAILED" ? "FAILED" :
-      calculationResult.status === "RECOVERY_REQUIRED" ? "FAILED" :
-      calculationResult.status === "INCOMPLETE" ? "INCOMPLETE" :
-      calculationResult.status === "BLOCKED" ? "BLOCKED" :
-      "IN_PROGRESS";
-
-    const isTerminal = progressStatus === "PASSED" || progressStatus === "FAILED";
-
-    const progress = await upsertStudentSubjectProgress({
-      organizationId,
-      studentId,
-      enrollmentId,
-      levelSubjectId,
-      finalGrade: calculationResult.finalGrade,
-      attendancePercentage: null,
-      status: progressStatus,
-      progressReason: calculationResult.reason,
-      completedAt: isTerminal ? new Date() : null,
-    });
-
-    await auditService.log(this.context, {
-      entity: "StudentSubjectProgress",
-      entityId: progress.id,
-      action: "student_subject_progress.updated",
-      newValues: {
-        studentId,
-        levelSubjectId,
-        finalGrade: progress.finalGrade,
-        status: progress.status,
-      },
-    });
-
-    // Cascade: subject progress → level progress → course progress
-    if (levelSubject?.courseLevelId) {
-      await recalculateStudentLevelProgress(enrollmentId, levelSubject.courseLevelId, organizationId);
-    }
-
-    if (progressStatus === "PASSED") {
-      await eventPublisher.publish({
-        organizationId,
-        eventType: DomainEventType.STUDENT_SUBJECT_PASSED,
-        aggregateType: DomainAggregateType.STUDENT,
-        aggregateId: studentId,
-        actorId: this.context.userId,
-        payload: { studentId, enrollmentId, levelSubjectId, finalGrade: progress.finalGrade, progressId: progress.id },
-      });
-    } else if (progressStatus === "FAILED") {
-      await eventPublisher.publish({
-        organizationId,
-        eventType: DomainEventType.STUDENT_SUBJECT_FAILED,
-        aggregateType: DomainAggregateType.STUDENT,
-        aggregateId: studentId,
-        actorId: this.context.userId,
-        payload: { studentId, enrollmentId, levelSubjectId, finalGrade: progress.finalGrade, progressId: progress.id },
-      });
-    }
-
-    return progress;
   }
 }

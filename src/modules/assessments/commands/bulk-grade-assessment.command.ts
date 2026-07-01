@@ -18,7 +18,8 @@ import {
 } from "@/modules/grades/repositories/student-assessment-result.repository";
 import { createGradeChangeLog } from "@/modules/grades/repositories/grade-change-log.repository";
 import { gradeCalculationService } from "@/modules/grades/services/grade-calculation.service";
-import { RecalculateStudentSubjectProgressCommand } from "@/modules/assessments/commands/recalculate-student-subject-progress.command";
+import { recalculateSubjectProgressCascade } from "@/modules/grades/services/subject-progress-cascade.service";
+import { GRADE_CHANGE_SOURCE } from "@/modules/grades/types";
 import {
   bulkGradeAssessmentSchema,
   type BulkGradeAssessmentSchema,
@@ -173,8 +174,11 @@ export class BulkGradeAssessmentCommand extends BaseCommand<
               assessmentEventId: assessment!.id,
               oldGrade: Number(existing.grade),
               newGrade: grade.score,
+              oldNormalizedGrade: existing.normalizedGrade,
+              newNormalizedGrade: normalizedGrade,
               oldStatus: existing.status,
               newStatus: "GRADED",
+              source: GRADE_CHANGE_SOURCE.BULK,
               reason: this.input.editReason!,
               changedBy: this.context.userId,
             });
@@ -186,18 +190,15 @@ export class BulkGradeAssessmentCommand extends BaseCommand<
       }
     }
 
-    // Auto-recalculate StudentSubjectProgress for every student who received a grade.
+    // Auto-recalculate StudentSubjectProgress for every student who received a grade
+    // through the single canonical cascade path (subject -> level -> course).
     // Skips validate/authorize since the parent command already cleared those.
     for (const target of recalcTargets) {
-      const recalcCmd = new RecalculateStudentSubjectProgressCommand(
-        {
-          studentId: target.studentId,
-          enrollmentId: target.enrollmentId,
-          levelSubjectId: assessment!.levelSubjectId,
-        },
-        this.context
-      );
-      await recalcCmd.execute();
+      await recalculateSubjectProgressCascade(this.context as AuthContext, {
+        studentId: target.studentId,
+        enrollmentId: target.enrollmentId,
+        levelSubjectId: assessment!.levelSubjectId,
+      });
     }
 
     // Mark assessment as GRADED when every submitted entry has a terminal status.
