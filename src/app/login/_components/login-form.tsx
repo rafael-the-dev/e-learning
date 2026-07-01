@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
@@ -304,14 +305,20 @@ export function LoginForm() {
               marginBottom: 30,
             }}
           >
-            <Image
-              src={surfaceMark}
-              alt="Lectario"
-              width={64}
-              height={64}
-              priority
-              style={{ width: 64, height: 64, marginBottom: 12 }}
-            />
+            <Link
+              href="/"
+              aria-label="Lectario — ir para a página inicial"
+              style={{ display: "inline-flex", marginBottom: 12 }}
+            >
+              <Image
+                src={surfaceMark}
+                alt="Lectario"
+                width={64}
+                height={64}
+                priority
+                style={{ width: 64, height: 64 }}
+              />
+            </Link>
             <h1
               style={{
                 fontSize: 22,
