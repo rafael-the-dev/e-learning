@@ -109,11 +109,18 @@ export const updateStudentAssessmentResultSchema = z.object({
     .optional(),
   notes: z.string().optional(),
   status: z.enum(["DRAFT", "SUBMITTED", "GRADED", "CANCELLED"]).optional(),
+  // Required by the command layer when editing an already-graded result.
+  reason: z.string().max(2000).optional(),
 });
 export type UpdateStudentAssessmentResultSchema = z.infer<typeof updateStudentAssessmentResultSchema>;
 
 export const cancelStudentAssessmentResultSchema = z.object({
   resultId: z.string().min(1),
+  reason: z
+    .string()
+    .trim()
+    .min(5, "Motivo obrigatório ao cancelar (mínimo 5 caracteres)")
+    .max(2000),
 });
 export type CancelStudentAssessmentResultSchema = z.infer<typeof cancelStudentAssessmentResultSchema>;
 
@@ -132,13 +139,10 @@ export const bulkGradeSchema = z.object({
 export type BulkGradeSchema = z.infer<typeof bulkGradeSchema>;
 
 // ─── Progress Calculation ─────────────────────────────────────────────────────
-
-export const calculateStudentSubjectProgressSchema = z.object({
-  studentId: z.string().min(1),
-  enrollmentId: z.string().min(1),
-  levelSubjectId: z.string().min(1),
-});
-export type CalculateStudentSubjectProgressSchema = z.infer<typeof calculateStudentSubjectProgressSchema>;
+// NOTE: subject-progress recalculation is unified under the single cascading
+// command RecalculateStudentSubjectProgressCommand (assessments module), which
+// uses RecalculateStudentSubjectProgressSchema. There is no separate
+// non-cascading "calculate" path anymore.
 
 export const recalculateSubjectGradesSchema = z.object({
   levelSubjectId: z.string().min(1),

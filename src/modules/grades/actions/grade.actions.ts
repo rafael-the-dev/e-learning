@@ -16,7 +16,7 @@ import { DeleteAssessmentComponentCommand } from "@/modules/grades/commands/dele
 import { CreateStudentAssessmentResultCommand } from "@/modules/grades/commands/create-student-assessment-result.command";
 import { UpdateStudentAssessmentResultCommand } from "@/modules/grades/commands/update-student-assessment-result.command";
 import { CancelStudentAssessmentResultCommand } from "@/modules/grades/commands/cancel-student-assessment-result.command";
-import { CalculateStudentSubjectProgressCommand } from "@/modules/grades/commands/calculate-student-subject-progress.command";
+import { RecalculateStudentSubjectProgressCommand } from "@/modules/assessments/commands/recalculate-student-subject-progress.command";
 import { RecalculateSubjectGradesCommand } from "@/modules/grades/commands/recalculate-subject-grades.command";
 
 import type {
@@ -30,9 +30,9 @@ import type {
   CreateStudentAssessmentResultSchema,
   UpdateStudentAssessmentResultSchema,
   CancelStudentAssessmentResultSchema,
-  CalculateStudentSubjectProgressSchema,
   RecalculateSubjectGradesSchema,
 } from "@/modules/grades/schemas/grade.schema";
+import type { RecalculateStudentSubjectProgressSchema } from "@/modules/assessments/schemas/assessment.schema";
 import type { ActionResult } from "@/shared/types/common";
 import type { StudentAssessmentResult } from "@/modules/grades/types";
 import type { AssessmentPolicy, AssessmentComponent } from "@/modules/assessments/types";
@@ -156,11 +156,12 @@ export async function cancelStudentAssessmentResultAction(
 // ─── Progress Calculation ──────────────────────────────────────────────────────
 
 export async function calculateStudentSubjectProgressAction(
-  input: CalculateStudentSubjectProgressSchema
+  input: RecalculateStudentSubjectProgressSchema
 ): Promise<ActionResult<StudentSubjectProgress>> {
   return runAction(async () => {
     const context = await requireOrganization();
-    const progress = await new CalculateStudentSubjectProgressCommand(input, context).run();
+    // Unified: the single cascading recalculation command (subject -> level -> course).
+    const progress = await new RecalculateStudentSubjectProgressCommand(input, context).run();
     revalidatePath("/grades");
     revalidatePath(`/students/${input.studentId}`);
     revalidatePath(`/enrollments/${input.enrollmentId}`);

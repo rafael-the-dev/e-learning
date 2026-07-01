@@ -7,12 +7,13 @@ import {
 import { getUserPermissions, createAbility } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
+import type { AuthContext } from "@/server/auth/context";
 import { getDb } from "@/server/db";
 import {
   recalculateSubjectGradesSchema,
   type RecalculateSubjectGradesSchema,
 } from "@/modules/grades/schemas/grade.schema";
-import { CalculateStudentSubjectProgressCommand } from "@/modules/grades/commands/calculate-student-subject-progress.command";
+import { recalculateSubjectProgressCascade } from "@/modules/grades/services/subject-progress-cascade.service";
 
 export class RecalculateSubjectGradesCommand extends BaseCommand<
   RecalculateSubjectGradesSchema,
@@ -71,10 +72,12 @@ export class RecalculateSubjectGradesCommand extends BaseCommand<
     let count = 0;
     for (const row of resultRows) {
       try {
-        await new CalculateStudentSubjectProgressCommand(
-          { studentId: row.studentId, enrollmentId: row.enrollmentId, levelSubjectId },
-          this.context
-        ).execute();
+        // Same canonical cascading path used by every grade mutation.
+        await recalculateSubjectProgressCascade(this.context as AuthContext, {
+          studentId: row.studentId,
+          enrollmentId: row.enrollmentId,
+          levelSubjectId,
+        });
         count++;
       } catch {
         // Skip individual failures — continue processing remaining students

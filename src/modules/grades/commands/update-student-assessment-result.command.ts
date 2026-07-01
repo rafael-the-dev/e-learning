@@ -14,11 +14,13 @@ import {
 } from "@/modules/grades/repositories/student-assessment-result.repository";
 import { findComponentById } from "@/modules/assessments/repositories/assessment-component.repository";
 import { gradeCalculationService } from "@/modules/grades/services/grade-calculation.service";
+import { gradeMutationService } from "@/modules/grades/services/grade-mutation.service";
+import type { AuthContext } from "@/server/auth/context";
 import {
   updateStudentAssessmentResultSchema,
   type UpdateStudentAssessmentResultSchema,
 } from "@/modules/grades/schemas/grade.schema";
-import type { StudentAssessmentResult } from "@/modules/grades/types";
+import { GRADE_CHANGE_SOURCE, type StudentAssessmentResult } from "@/modules/grades/types";
 
 export class UpdateStudentAssessmentResultCommand extends BaseCommand<
   UpdateStudentAssessmentResultSchema,
@@ -40,6 +42,14 @@ export class UpdateStudentAssessmentResultCommand extends BaseCommand<
     if (!gradeResult) throw new NotFoundError("Nota", this.input.resultId);
     if (gradeResult.status === "CANCELLED") {
       throw new BusinessRuleError("Não é possível editar uma nota cancelada");
+    }
+
+    // Editing an already-graded result requires a justification.
+    const gradeChanging = this.input.grade !== undefined && this.input.grade !== gradeResult.grade;
+    if (gradeResult.status === "GRADED" && gradeChanging && !this.input.reason?.trim()) {
+      throw new ValidationError("Dados inválidos", {
+        reason: ["O motivo é obrigatório ao alterar uma nota já classificada"],
+      });
     }
 
     if (this.input.grade !== undefined) {
@@ -105,6 +115,16 @@ export class UpdateStudentAssessmentResultCommand extends BaseCommand<
         notes: gradeResult.notes,
         gradedBy: gradeResult.gradedBy,
       },
+    });
+
+    // Record the mutation (GradeChangeLog) and cascade progression.
+    await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
+      result: gradeResult,
+      previous: existing
+        ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
+        : null,
+      source: GRADE_CHANGE_SOURCE.UPDATE,
+      reason: this.input.reason?.trim() || "Atualização de nota",
     });
 
     return gradeResult;

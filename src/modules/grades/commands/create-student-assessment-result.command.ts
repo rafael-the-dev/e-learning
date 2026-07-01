@@ -11,15 +11,19 @@ import { assertTeacherCanAccessEnrollment } from "@/server/auth/teacher-access";
 import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getDb } from "@/server/db";
-import { upsertStudentAssessmentResult } from "@/modules/grades/repositories/student-assessment-result.repository";
+import {
+  upsertStudentAssessmentResult,
+  findResultByEnrollmentAndComponent,
+} from "@/modules/grades/repositories/student-assessment-result.repository";
 import { findComponentById } from "@/modules/assessments/repositories/assessment-component.repository";
 import { findAssessmentPolicyById } from "@/modules/assessments/repositories/assessment-policy.repository";
 import { gradeCalculationService } from "@/modules/grades/services/grade-calculation.service";
+import { gradeMutationService } from "@/modules/grades/services/grade-mutation.service";
 import {
   createStudentAssessmentResultSchema,
   type CreateStudentAssessmentResultSchema,
 } from "@/modules/grades/schemas/grade.schema";
-import type { StudentAssessmentResult } from "@/modules/grades/types";
+import { GRADE_CHANGE_SOURCE, type StudentAssessmentResult } from "@/modules/grades/types";
 
 export class CreateStudentAssessmentResultCommand extends BaseCommand<
   CreateStudentAssessmentResultSchema,
@@ -96,6 +100,13 @@ export class CreateStudentAssessmentResultCommand extends BaseCommand<
         })
       : null;
 
+    // Capture prior state: upsert may update an existing canonical row.
+    const existing = await findResultByEnrollmentAndComponent(
+      this.input.enrollmentId,
+      this.input.assessmentComponentId,
+      organizationId
+    );
+
     const gradeResult = await upsertStudentAssessmentResult({
       organizationId,
       enrollmentId: this.input.enrollmentId,
@@ -124,6 +135,16 @@ export class CreateStudentAssessmentResultCommand extends BaseCommand<
         componentId: gradeResult.assessmentComponentId,
         sourceType: gradeResult.sourceType,
       },
+    });
+
+    // Record the mutation and cascade subject -> level -> course progress.
+    await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
+      result: gradeResult,
+      previous: existing
+        ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
+        : null,
+      source: existing ? GRADE_CHANGE_SOURCE.UPDATE : GRADE_CHANGE_SOURCE.CREATE,
+      reason: existing ? "Atualização de nota contínua" : "Lançamento inicial de nota",
     });
 
     return gradeResult;
