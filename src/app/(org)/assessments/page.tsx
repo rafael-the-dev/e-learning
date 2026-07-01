@@ -288,7 +288,7 @@ export default async function AssessmentsPage({
             </div>
           </CardHeader>
           <CardContent>
-            <ApexLineChart data={trendLineData} height={220} smooth />
+            <ApexLineChart data={trendLineData} height={320} smooth />
           </CardContent>
         </Card>
 
