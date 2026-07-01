@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/server/auth";
 import { Toaster } from "@/shared/components/ui/toaster";
-import { Building2, LayoutDashboard, Users, LogOut } from "lucide-react";
+import { Building2, Users, LogOut } from "lucide-react";
 
 const NAV = [
   { href: "/organizations", label: "Organizações", icon: Building2 },
@@ -23,11 +23,19 @@ export default async function AdminLayout({
       {/* Sidebar */}
       <aside className="w-60 shrink-0 border-r flex flex-col">
         {/* Brand */}
-        <div className="h-14 flex items-center gap-2.5 px-5 border-b">
-          <div className="size-7 rounded-lg bg-primary flex items-center justify-center">
-            <LayoutDashboard className="size-4 text-primary-foreground" />
-          </div>
-          <span className="font-semibold text-sm tracking-tight">SchoolAdmin</span>
+        <div className="h-14 flex items-center px-5 border-b">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/lectario-logo-horizontal-black-trim.png"
+            alt="Lectário — Gestão Escolar"
+            className="h-6 w-auto dark:hidden"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/lectario-logo-horizontal-white-trim.png"
+            alt="Lectário — Gestão Escolar"
+            className="hidden h-6 w-auto dark:block"
+          />
         </div>
 
         {/* Nav */}

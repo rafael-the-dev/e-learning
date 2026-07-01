@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useSidebar } from "./sidebar-context";
 
@@ -25,18 +25,33 @@ export function SidebarShell({ orgName, userName, userEmail, children }: Props) 
       )}
     >
       {/* Brand */}
-      <div className="h-14 flex items-center gap-2.5 px-3.5 border-b shrink-0">
-        <div className="size-7 rounded-lg bg-primary flex items-center justify-center shrink-0">
-          <LayoutDashboard className="size-4 text-primary-foreground" />
-        </div>
-        <span
-          className={cn(
-            "font-semibold text-sm tracking-tight truncate flex-1 transition-opacity duration-200",
-            collapsed ? "opacity-0 pointer-events-none select-none" : "opacity-100"
-          )}
-        >
-          {orgName}
-        </span>
+      <div className="h-14 flex items-center px-3.5 border-b shrink-0">
+        {collapsed ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src="/images/lectario-mark.svg"
+            alt="Lectário"
+            title={orgName ?? "Lectário"}
+            className="size-7 rounded-lg shrink-0"
+          />
+        ) : (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/lectario-logo-horizontal-black-trim.png"
+              alt="Lectário — Gestão Escolar"
+              title={orgName ?? "Lectário"}
+              className="h-6 w-auto dark:hidden"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/lectario-logo-horizontal-white-trim.png"
+              alt="Lectário — Gestão Escolar"
+              title={orgName ?? "Lectário"}
+              className="hidden h-6 w-auto dark:block"
+            />
+          </>
+        )}
       </div>
 
       {/* Nav */}
