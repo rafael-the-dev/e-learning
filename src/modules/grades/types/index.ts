@@ -96,6 +96,16 @@ export interface StudentAssessmentResult {
 
 // ─── Grade Change Log ─────────────────────────────────────────────────────────
 
+export const GRADE_CHANGE_SOURCE = {
+  CREATE: "CREATE",
+  UPDATE: "UPDATE",
+  CANCEL: "CANCEL",
+  INVALIDATE: "INVALIDATE",
+  RECOVERY: "RECOVERY",
+  BULK: "BULK",
+} as const;
+export type GradeChangeSource = (typeof GRADE_CHANGE_SOURCE)[keyof typeof GRADE_CHANGE_SOURCE];
+
 export interface GradeChangeLog {
   id: string;
   organizationId: string;
@@ -103,8 +113,11 @@ export interface GradeChangeLog {
   assessmentEventId: string | null;
   oldGrade: number | null;
   newGrade: number;
+  oldNormalizedGrade: number | null;
+  newNormalizedGrade: number | null;
   oldStatus: string | null;
   newStatus: string;
+  source: string | null;
   reason: string;
   changedBy: string;
   changedAt: Date;

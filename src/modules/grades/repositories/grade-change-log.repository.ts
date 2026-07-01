@@ -8,8 +8,11 @@ const logSelect = {
   assessmentEventId: true,
   oldGrade: true,
   newGrade: true,
+  oldNormalizedGrade: true,
+  newNormalizedGrade: true,
   oldStatus: true,
   newStatus: true,
+  source: true,
   reason: true,
   changedBy: true,
   changedAt: true,
@@ -23,8 +26,11 @@ function mapToLog(row: any): GradeChangeLog {
     assessmentEventId: row.assessmentEventId ?? null,
     oldGrade: row.oldGrade != null ? Number(row.oldGrade) : null,
     newGrade: Number(row.newGrade),
+    oldNormalizedGrade: row.oldNormalizedGrade != null ? Number(row.oldNormalizedGrade) : null,
+    newNormalizedGrade: row.newNormalizedGrade != null ? Number(row.newNormalizedGrade) : null,
     oldStatus: row.oldStatus ?? null,
     newStatus: row.newStatus,
+    source: row.source ?? null,
     reason: row.reason,
     changedBy: row.changedBy,
     changedAt: row.changedAt,
@@ -37,8 +43,11 @@ export async function createGradeChangeLog(data: {
   assessmentEventId?: string | null;
   oldGrade: number | null;
   newGrade: number;
+  oldNormalizedGrade?: number | null;
+  newNormalizedGrade?: number | null;
   oldStatus: string | null;
   newStatus: string;
+  source?: string | null;
   reason: string;
   changedBy: string;
 }): Promise<GradeChangeLog> {
@@ -50,8 +59,11 @@ export async function createGradeChangeLog(data: {
       assessmentEventId: data.assessmentEventId ?? null,
       oldGrade: data.oldGrade,
       newGrade: data.newGrade,
+      oldNormalizedGrade: data.oldNormalizedGrade ?? null,
+      newNormalizedGrade: data.newNormalizedGrade ?? null,
       oldStatus: data.oldStatus,
       newStatus: data.newStatus,
+      source: data.source ?? null,
       reason: data.reason,
       changedBy: data.changedBy,
     },
