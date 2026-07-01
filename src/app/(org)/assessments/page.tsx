@@ -292,53 +292,9 @@ export default async function AssessmentsPage({
           </CardContent>
         </Card>
 
-        <ExecutiveMainGrid>
+        <ExecutiveMainGrid className="xl:grid-cols-1">
 
-          <ExecutiveLeftColumn>
-
-            {watchlist.length > 0 && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ShieldAlert className="size-4 text-muted-foreground" />
-                      <CardTitle className="text-sm font-medium">Watchlist de Avaliações</CardTitle>
-                    </div>
-                    <Badge variant="destructive" className="text-xs">{watchlist.length}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0 pb-2">
-                  <AssessmentWatchlist items={watchlist} />
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ClipboardList className="size-4 text-muted-foreground" />
-                    <CardTitle className="text-sm font-medium">Registo de Avaliações</CardTitle>
-                  </div>
-                  <Badge variant="secondary" className="text-xs">
-                    {assessments.total.toLocaleString("pt-PT")}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0 sm:px-4 sm:pb-4">
-                <AssessmentsDashboardTable
-                  result={assessments}
-                  defaultSearch={sp.search}
-                  defaultStatus={sp.status}
-                  canEdit={canEdit}
-                  canCancel={canCancel}
-                />
-              </CardContent>
-            </Card>
-
-          </ExecutiveLeftColumn>
-
-          <ExecutiveRightColumn>
+          <ExecutiveRightColumn className="box-border grid gap-6 space-y-0 lg:grid-cols-3!">
 
             {insights.length > 0 && (
               <DashboardSideCard
@@ -478,6 +434,50 @@ export default async function AssessmentsPage({
             </DashboardSideCard>
 
           </ExecutiveRightColumn>
+
+           <ExecutiveLeftColumn className="grid gap-6 space-y-0 lg:grid-cols-1">
+
+            {watchlist.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="size-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-medium">Watchlist de Avaliações</CardTitle>
+                    </div>
+                    <Badge variant="destructive" className="text-xs">{watchlist.length}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0 pb-2">
+                  <AssessmentWatchlist items={watchlist} />
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="size-4 text-muted-foreground" />
+                    <CardTitle className="text-sm font-medium">Registo de Avaliações</CardTitle>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    {assessments.total.toLocaleString("pt-PT")}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0 sm:px-4 sm:pb-4">
+                <AssessmentsDashboardTable
+                  result={assessments}
+                  defaultSearch={sp.search}
+                  defaultStatus={sp.status}
+                  canEdit={canEdit}
+                  canCancel={canCancel}
+                />
+              </CardContent>
+            </Card>
+
+          </ExecutiveLeftColumn>
 
         </ExecutiveMainGrid>
       </div>

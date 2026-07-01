@@ -128,7 +128,8 @@
       "Bash(agent-browser --session smoke wait --load networkidle)",
       "PowerShell(npx vitest run src/modules/guardian-portal src/server/auth/__tests__/guardian-scope.test.ts src/server/auth/__tests__/guardian-portal-permission.test.ts src/modules/students/__tests__/student-user-provisioning.service.test.ts 2>&1)",
       "Bash(git add *)",
-      "Bash(git commit -m '@ *)"
+      "Bash(git commit -m '@ *)",
+      "Bash(echo \"---exit $?---\")"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\settings\\roles\\[roleId]",
