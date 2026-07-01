@@ -64,5 +64,8 @@ export const reviewProgressionRequestSchema = z.object({
   requestId: z.string().min(1),
   decision: z.enum(["APPROVED", "REJECTED"]),
   reviewNotes: z.string().max(2000).nullable().optional(),
-});
+}).refine(
+  (d) => d.decision !== "REJECTED" || (d.reviewNotes != null && d.reviewNotes.trim().length >= 5),
+  { message: "Motivo obrigatório ao rejeitar (mínimo 5 caracteres)", path: ["reviewNotes"] }
+);
 export type ReviewProgressionRequestSchema = z.infer<typeof reviewProgressionRequestSchema>;

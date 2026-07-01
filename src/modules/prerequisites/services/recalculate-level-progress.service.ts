@@ -1,6 +1,6 @@
 import { getDb } from "@/server/db";
 import { upsertStudentLevelProgress } from "@/modules/prerequisites/repositories/student-level-progress.repository";
-import { evaluateLevelProgression } from "@/modules/prerequisites/engines/level-progression.engine";
+import { evaluateLevelProgression, computeWeightedLevelGrade } from "@/modules/prerequisites/engines/level-progression.engine";
 import { evaluateCourseCompletion } from "@/modules/prerequisites/engines/course-completion.engine";
 import { PROGRESSION_OUTCOME } from "@/modules/prerequisites/types";
 
@@ -20,7 +20,7 @@ export async function recalculateStudentLevelProgress(
   // Aggregate subject progress for this level
   const levelSubjects = await db.levelSubject.findMany({
     where: { courseLevelId, organizationId, deletedAt: null, status: "ACTIVE" },
-    select: { id: true, isRequired: true, credits: true },
+    select: { id: true, isRequired: true, credits: true, workloadHours: true },
   });
 
   const subjectProgress = await db.studentSubjectProgress.findMany({
@@ -33,8 +33,6 @@ export async function recalculateStudentLevelProgress(
   });
   const progressMap = new Map(subjectProgress.map((p) => [p.levelSubjectId, p]));
 
-  let totalGrade = 0;
-  let gradedCount = 0;
   let earnedCredits = 0;
   let failedRequired = 0;
   let pendingSubjects = 0;
@@ -46,10 +44,6 @@ export async function recalculateStudentLevelProgress(
 
     if (status === "PASSED") {
       earnedCredits += ls.credits ?? 0;
-      if (p?.finalGrade != null) {
-        totalGrade += parseFloat(String(p.finalGrade));
-        gradedCount++;
-      }
     } else if (status === "FAILED") {
       if (ls.isRequired) failedRequired++;
     } else if (status === "IN_PROGRESS") {
@@ -60,7 +54,17 @@ export async function recalculateStudentLevelProgress(
     }
   }
 
-  const finalGrade = gradedCount > 0 ? Math.round((totalGrade / gradedCount) * 10) / 10 : null;
+  // Weighted level grade (credits, else workloadHours) over passed subjects,
+  // shared with the progression engine. Rounded to 1 decimal for storage.
+  const weightedGrade = computeWeightedLevelGrade(
+    levelSubjects,
+    subjectProgress.map((p) => ({
+      levelSubjectId: p.levelSubjectId,
+      status: p.status,
+      finalGrade: p.finalGrade != null ? parseFloat(String(p.finalGrade)) : null,
+    }))
+  );
+  const finalGrade = weightedGrade != null ? Math.round(weightedGrade * 10) / 10 : null;
 
   let levelStatus: string;
   let progressReason: string | null = null;

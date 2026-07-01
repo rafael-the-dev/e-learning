@@ -264,18 +264,41 @@ export async function evaluateLevelProgressionAction(input: unknown): Promise<Ac
         select: { studentId: true, courseId: true },
       });
       if (enrollment) {
-        await db.levelProgressionRequest.create({
-          data: {
+        // Guard against duplicate pending requests for the same transition.
+        const existingPending = await db.levelProgressionRequest.findFirst({
+          where: {
             organizationId: context.organizationId,
             enrollmentId: data.enrollmentId,
-            studentId: enrollment.studentId,
-            courseId: enrollment.courseId,
             fromLevelId: data.courseLevelId,
             toLevelId: result.toLevelId,
             decision: "PENDING",
-            reason: result.reason,
           },
+          select: { id: true },
         });
+        if (!existingPending) {
+          const created = await db.levelProgressionRequest.create({
+            data: {
+              organizationId: context.organizationId,
+              enrollmentId: data.enrollmentId,
+              studentId: enrollment.studentId,
+              courseId: enrollment.courseId,
+              fromLevelId: data.courseLevelId,
+              toLevelId: result.toLevelId,
+              decision: "PENDING",
+              reason: result.reason,
+            },
+          });
+          await auditService.log(context, {
+            entity: "LevelProgressionRequest",
+            entityId: created.id,
+            action: "level_progression.evaluated",
+            newValues: {
+              fromLevelId: data.courseLevelId,
+              toLevelId: result.toLevelId,
+              outcome: result.outcome,
+            },
+          });
+        }
       }
     }
 
@@ -311,8 +334,16 @@ export async function reviewProgressionRequestAction(input: unknown): Promise<Ac
       await auditService.log(context, {
         entity: "LevelProgressionRequest",
         entityId: data.requestId,
-        action: "level_progression.manual_override",
+        action: "level_progression.approved",
         newValues: { decision: data.decision, toLevelId: request.toLevelId },
+      });
+    } else {
+      // Rejection must also be audited, with the reviewer's reason.
+      await auditService.log(context, {
+        entity: "LevelProgressionRequest",
+        entityId: data.requestId,
+        action: "level_progression.blocked",
+        newValues: { decision: data.decision, reason: data.reviewNotes },
       });
     }
 
