@@ -10,6 +10,16 @@ humana.
 > nível) **não** são alteradas por este fluxo — ver
 > [`grade-engine.md`](./grade-engine.md) e o módulo `src/modules/prerequisites`.
 
+> **Derivação da progressão (fonte única).** Toda a progressão académica deriva
+> da fonte única de verdade das notas — `StudentAssessmentResult` — através de um
+> único caminho de recálculo com cascata:
+> `StudentAssessmentResult → StudentSubjectProgress → StudentLevelProgress →
+> StudentCourseProgress` (`recalculateSubjectProgressCascade`). Qualquer mutação de
+> nota (lançamento, edição, cancelamento, invalidação, recuperação, lançamento em
+> massa) passa pelo `GradeMutationService`, que regista o `GradeChangeLog` e dispara
+> a cascata. Detalhes em
+> [`grade-engine.md`](./grade-engine.md) → *Single Source of Truth & Grade Mutation Flow*.
+
 ---
 
 ## 1. Quando surge `MANUAL_APPROVAL`

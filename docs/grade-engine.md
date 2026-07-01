@@ -171,8 +171,12 @@ If no `LevelSubject` record exists for the enrollment's course level + subject c
 | `CreateStudentAssessmentResultCommand` | `grades.create` |
 | `UpdateStudentAssessmentResultCommand` | `grades.update` |
 | `CancelStudentAssessmentResultCommand` | `grades.cancel` |
-| `CalculateStudentSubjectProgressCommand` | `grades.calculate` |
-| `RecalculateSubjectGradesCommand` | `grades.calculate` |
+| `RecalculateStudentSubjectProgressCommand` | `assessmentResults.grade` |
+| `RecalculateSubjectGradesCommand` | `studentProgress.calculate` |
+
+> The former `CalculateStudentSubjectProgressCommand` (non-cascading) was **removed**.
+> Subject-progress recalculation is now unified under the single cascading path —
+> see *Single Source of Truth & Grade Mutation Flow* below.
 
 ---
 
@@ -202,7 +206,7 @@ All mutation commands emit an audit event via `AuditService`:
 
 ## Domain Events
 
-`CalculateStudentSubjectProgressCommand` emits:
+The subject-progress cascade (`recalculateSubjectProgressCascade`) emits:
 
 - `STUDENT_SUBJECT_PASSED` — when final status is `PASSED`
 - `STUDENT_SUBJECT_FAILED` — when final status is `FAILED` or `RECOVERY_REQUIRED`
@@ -226,3 +230,83 @@ These events are consumed by the Student Timeline module to create timeline entr
 ## Tenant Isolation
 
 Every database query includes `organizationId` in the `where` clause. Commands validate that all referenced entities (subject, enrollment, component) belong to the same organization before executing.
+
+---
+
+## Single Source of Truth & Grade Mutation Flow
+
+As of the Grade Engine Final Sprint (2026-07-01) the engine is single-sourced,
+auditable and cascade-safe.
+
+### Source of truth
+
+**`StudentAssessmentResult` is the only canonical grade record.** It owns
+`grade`, `maxGrade`, `normalizedGrade`, `sourceType`, `status`,
+`assessmentComponentId`, `enrollmentId`, `studentId`, `levelSubjectId`,
+`subjectId` and the optional `assessmentEventId`.
+
+- Continuous grading writes it with `sourceType = CONTINUOUS`.
+- Scheduled-exam grading (Assessment Engine, `bulk-grade`) writes it with
+  `sourceType = SCHEDULED_EVENT` and `assessmentEventId`.
+- Recovery/retake write-back writes it with `sourceType = RECOVERY`.
+
+**`AssessmentResult` is a participation/event sidecar only** (status +
+feedback for a scheduled event). Its `score` / `normalizedScore` columns are
+**deprecated** — always written `null`, never read by the grade engine. Do not
+treat `AssessmentResult` as a grade source.
+
+### Mutation flow (every write path)
+
+```
+GradeMutated (create | update | cancel | invalidate | recovery | bulk)
+   └─ GradeMutationService.handleGradeMutation
+        ├─ createGradeChangeLog        (immutable audit of value/status change)
+        └─ recalculateSubjectProgressCascade
+             └─ StudentSubjectProgress
+                  └─ recalculateStudentLevelProgress → StudentLevelProgress
+                       └─ evaluateCourseCompletion   → StudentCourseProgress
+```
+
+`recalculateSubjectProgressCascade` (`services/subject-progress-cascade.service.ts`)
+is the **single, always-cascading** recalculation path. It reads only the
+canonical `StudentAssessmentResult` rows (`CANCELLED` results are excluded, so an
+invalidated/cancelled grade correctly drops out of the calculation). Batch
+recalculation (`RecalculateSubjectGradesCommand`) and scheduled-exam grading
+(`bulk-grade`) use this same path — there is no non-cascading variant.
+
+### GradeChangeLog
+
+Every mutation records a `GradeChangeLog` row: `oldGrade` / `newGrade`,
+`oldNormalizedGrade` / `newNormalizedGrade`, `oldStatus` / `newStatus`,
+`source` (`CREATE | UPDATE | CANCEL | INVALIDATE | RECOVERY | BULK`), `reason`
+and `changedBy`. A reason is **required** for post-submission edits
+(update-after-graded, cancellation, invalidation, recovery override, regrade).
+
+### Invalidation
+
+Invalidating a scheduled-exam result marks the `AssessmentResult` sidecar
+`INVALIDATED` **and** cancels the canonical `StudentAssessmentResult`
+(`status = CANCELLED`; there is no `INVALIDATED` value in `StudentResultStatus`),
+writes a `GradeChangeLog` (`source = INVALIDATE`) and cascades. Invalidation
+therefore changes the subject, level and course outcome.
+
+### Recovery / retake
+
+A graded `AssessmentRetake` writes back into the canonical
+`StudentAssessmentResult` (`sourceType = RECOVERY`). The effective grade is
+decided by the pure **`GradeResolutionEngine`** with strategies `BEST_SCORE`
+(safe default), `LAST_SCORE`, `REPLACE` and `AVERAGE`. Recovery is never a
+dead-end: after write-back the full cascade runs.
+
+### Publication vs calculation
+
+Publication (`AssessmentPublication`) controls **student visibility of
+scheduled-exam results only**; it never blocks calculation. Progression always
+derives from the canonical grades regardless of publication state. Continuous
+grades have no publication gate.
+
+### Normalization
+
+All normalization and final-grade calculation go through the single
+`GradeCalculationService`. The legacy `assessments/services/grade-calculator.service.ts`
+was **removed**.

@@ -13,8 +13,6 @@ src/modules/assessments/
   types/index.ts              — domain types, status constants, display labels
   schemas/assessment.schema.ts — Zod validation for all 20 commands
   repositories/               — DB access (8 files, one per aggregate)
-  services/
-    grade-calculator.service.ts — GradeCalculatorService singleton
   commands/                   — 20 BaseCommand implementations
   actions/assessment.actions.ts — "use server" wrappers
   components/                 — React client components (tables, drawers, forms)
@@ -87,7 +85,16 @@ Flow: `REQUESTED → APPROVED → GRADED` or `REJECTED`.
 
 ## Grade Calculation
 
-`GradeCalculatorService` (singleton at `gradeCalculatorService`) computes `StudentSubjectProgress.finalGrade`.
+`GradeCalculationService` (`@/modules/grades/services/grade-calculation.service`,
+singleton `gradeCalculationService`) computes `StudentSubjectProgress.finalGrade`
+from the canonical `StudentAssessmentResult` rows. It is the **single** calculator;
+the former `assessments/services/grade-calculator.service.ts` was removed.
+
+> Grades are single-sourced in `StudentAssessmentResult`. `AssessmentResult` is a
+> participation/event sidecar only (its `score`/`normalizedScore` are deprecated and
+> unused). Grading, invalidation and retakes all funnel through
+> `GradeMutationService` → `recalculateSubjectProgressCascade`. See
+> [grade-engine.md](./grade-engine.md) → *Single Source of Truth & Grade Mutation Flow*.
 
 ### Normalized Score
 ```
@@ -195,5 +202,9 @@ Every repository query and command filters by `organizationId` from `requireOrga
 - WEIGHTED_AVERAGE component weights must sum ≤ 100
 - An Assessment cannot be cancelled once it has status `GRADED`
 - Retakes require `policy.allowRetake = true` and `attemptNumber <= maxRetakes`
-- `RecalculateStudentSubjectProgress` is the single source of truth for `StudentSubjectProgress.status`
+- A graded retake writes back a `RECOVERY` `StudentAssessmentResult` (effective grade
+  chosen by `GradeResolutionEngine`, default `BEST_SCORE`) and cascades — never a dead-end
+- Invalidating a result cancels the canonical `StudentAssessmentResult` and cascades
+- `StudentAssessmentResult` is the single source of truth for grades; all progression
+  derives from it through the one cascading path (`recalculateSubjectProgressCascade`)
 - Grade calculation is deterministic and side-effect free (pure service)
