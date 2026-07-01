@@ -2333,6 +2333,11 @@ model AssessmentResult {
   assessmentId    String
   studentId       String
   enrollmentId    String?
+  // DEPRECATED (2026-07-01): grade values are NOT stored here anymore.
+  // StudentAssessmentResult is the single source of truth for grades.
+  // AssessmentResult is a participation/event sidecar (status + feedback) only.
+  // These columns are always written null and never read by the grade engine.
+  // Kept for backward compatibility; do not populate or read for calculations.
   score           Decimal?  @db.Decimal(5, 2)
   normalizedScore Decimal?  @db.Decimal(5, 2)
   feedback        String?   @db.NVarChar(Max)
@@ -2486,8 +2491,12 @@ model GradeChangeLog {
   assessmentEventId         String?
   oldGrade                  Decimal? @db.Decimal(5, 2)
   newGrade                  Decimal  @db.Decimal(5, 2)
+  oldNormalizedGrade        Decimal? @db.Decimal(5, 2)
+  newNormalizedGrade        Decimal? @db.Decimal(5, 2)
   oldStatus                 String?
   newStatus                 String
+  // Origin of the mutation: CREATE | UPDATE | CANCEL | INVALIDATE | RECOVERY | BULK
+  source                    String?
   // Reason is required for all post-submission edits
   reason                    String   @db.NVarChar(Max)
   changedBy                 String
