@@ -69,3 +69,17 @@ export const reviewProgressionRequestSchema = z.object({
   { message: "Motivo obrigatório ao rejeitar (mínimo 5 caracteres)", path: ["reviewNotes"] }
 );
 export type ReviewProgressionRequestSchema = z.infer<typeof reviewProgressionRequestSchema>;
+
+// Approval: notes are optional.
+export const approveProgressionRequestSchema = z.object({
+  requestId: z.string().min(1),
+  reviewNotes: z.string().max(2000).nullable().optional(),
+});
+export type ApproveProgressionRequestSchema = z.infer<typeof approveProgressionRequestSchema>;
+
+// Rejection: a reason is REQUIRED (minimum 5 characters).
+export const rejectProgressionRequestSchema = z.object({
+  requestId: z.string().min(1),
+  reason: z.string().trim().min(5, "Motivo obrigatório ao rejeitar (mínimo 5 caracteres)").max(2000),
+});
+export type RejectProgressionRequestSchema = z.infer<typeof rejectProgressionRequestSchema>;

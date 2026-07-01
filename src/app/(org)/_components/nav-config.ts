@@ -36,7 +36,8 @@ export type NavIconName =
   | "Upload"
   | "History"
   | "Bell"
-  | "LayoutGrid";
+  | "LayoutGrid"
+  | "GitBranchPlus";
 
 export interface NavigationItem {
   href: string;
@@ -165,6 +166,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         label: "Progressão por Nível",
         iconName: "BarChart3",
         requiredPermission: "levelProgression.view",
+      },
+      {
+        href: "/academic/progression-requests",
+        label: "Pedidos de Progressão",
+        iconName: "GitBranchPlus",
+        requiredPermission: "levelProgressionRequests.view",
       },
       {
         href: "/teachers",

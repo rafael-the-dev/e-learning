@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
@@ -10,7 +11,16 @@ import {
   createProgressionPolicySchema,
   evaluateProgressionSchema,
   reviewProgressionRequestSchema,
+  approveProgressionRequestSchema,
+  rejectProgressionRequestSchema,
 } from "@/modules/prerequisites/schemas/prerequisite.schema";
+import {
+  ensurePendingProgressionRequest,
+} from "@/modules/prerequisites/repositories/level-progression-request.repository";
+import {
+  approveProgressionRequest,
+  rejectProgressionRequest,
+} from "@/modules/prerequisites/services/review-progression-request.service";
 import {
   createPrerequisiteGroup,
   updatePrerequisiteGroup,
@@ -28,6 +38,7 @@ import {
 import {
   createProgressionPolicy,
   updateProgressionPolicy,
+  findPolicyByTransition,
 } from "@/modules/prerequisites/repositories/level-progression-policy.repository";
 import { evaluateLevelProgression, promoteStudentToNextLevel } from "@/modules/prerequisites/engines/level-progression.engine";
 import { getDb } from "@/server/db";
@@ -264,38 +275,37 @@ export async function evaluateLevelProgressionAction(input: unknown): Promise<Ac
         select: { studentId: true, courseId: true },
       });
       if (enrollment) {
-        // Guard against duplicate pending requests for the same transition.
-        const existingPending = await db.levelProgressionRequest.findFirst({
-          where: {
-            organizationId: context.organizationId,
-            enrollmentId: data.enrollmentId,
-            fromLevelId: data.courseLevelId,
-            toLevelId: result.toLevelId,
-            decision: "PENDING",
-          },
-          select: { id: true },
+        // Resolve the governing policy (for audit + request linkage).
+        const policy = await findPolicyByTransition(
+          enrollment.courseId,
+          data.courseLevelId,
+          result.toLevelId,
+          context.organizationId
+        );
+        // Idempotent: reuses an open PENDING request for the same transition.
+        const { id, created } = await ensurePendingProgressionRequest({
+          organizationId: context.organizationId,
+          enrollmentId: data.enrollmentId,
+          studentId: enrollment.studentId,
+          courseId: enrollment.courseId,
+          policyId: policy?.id ?? null,
+          fromLevelId: data.courseLevelId,
+          toLevelId: result.toLevelId,
+          reason: result.reason,
         });
-        if (!existingPending) {
-          const created = await db.levelProgressionRequest.create({
-            data: {
-              organizationId: context.organizationId,
-              enrollmentId: data.enrollmentId,
-              studentId: enrollment.studentId,
-              courseId: enrollment.courseId,
-              fromLevelId: data.courseLevelId,
-              toLevelId: result.toLevelId,
-              decision: "PENDING",
-              reason: result.reason,
-            },
-          });
+        if (created) {
           await auditService.log(context, {
             entity: "LevelProgressionRequest",
-            entityId: created.id,
-            action: "level_progression.evaluated",
+            entityId: id,
+            action: "level_progression_request.created",
             newValues: {
+              enrollmentId: data.enrollmentId,
+              studentId: enrollment.studentId,
               fromLevelId: data.courseLevelId,
               toLevelId: result.toLevelId,
-              outcome: result.outcome,
+              policyId: policy?.id ?? null,
+              decision: "PENDING",
+              reason: result.reason,
             },
           });
         }
@@ -308,45 +318,169 @@ export async function evaluateLevelProgressionAction(input: unknown): Promise<Ac
   }
 }
 
+// ─── Manual approval workflow ─────────────────────────────────────────────────
+
+const QUEUE_PATH = "/academic/progression-requests";
+
+export async function approveProgressionRequestAction(input: unknown): Promise<ActionResult> {
+  try {
+    const context = await requirePermission(PERMISSIONS.LEVEL_PROGRESSION_REQUESTS_APPROVE);
+    const data = approveProgressionRequestSchema.parse(input);
+
+    const result = await approveProgressionRequest({
+      requestId: data.requestId,
+      organizationId: context.organizationId,
+      actorId: context.userId,
+      reviewNotes: data.reviewNotes ?? null,
+    });
+
+    // Request-level audit: the review decision.
+    await auditService.log(context, {
+      entity: "LevelProgressionRequest",
+      entityId: data.requestId,
+      action: "level_progression_request.approved",
+      newValues: {
+        enrollmentId: result.enrollmentId,
+        studentId: result.studentId,
+        fromLevelId: result.fromLevelId,
+        toLevelId: result.toLevelId,
+        policyId: result.policyId,
+        decision: "APPROVED",
+        reason: data.reviewNotes ?? null,
+      },
+    });
+    // Domain-level audit: the academic promotion that took effect.
+    await auditService.log(context, {
+      entity: "Enrollment",
+      entityId: result.enrollmentId,
+      action: "level_progression.approved",
+      newValues: {
+        enrollmentId: result.enrollmentId,
+        studentId: result.studentId,
+        fromLevelId: result.fromLevelId,
+        toLevelId: result.toLevelId,
+        policyId: result.policyId,
+        decision: "APPROVED",
+        fromLevelStatus: result.fromLevelStatus,
+      },
+    });
+
+    revalidatePath(QUEUE_PATH);
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : "Erro desconhecido" };
+  }
+}
+
+export async function rejectProgressionRequestAction(input: unknown): Promise<ActionResult> {
+  try {
+    const context = await requirePermission(PERMISSIONS.LEVEL_PROGRESSION_REQUESTS_REJECT);
+    const data = rejectProgressionRequestSchema.parse(input);
+
+    const result = await rejectProgressionRequest({
+      requestId: data.requestId,
+      organizationId: context.organizationId,
+      actorId: context.userId,
+      reason: data.reason,
+    });
+
+    // Request-level audit: the review decision + reason.
+    await auditService.log(context, {
+      entity: "LevelProgressionRequest",
+      entityId: data.requestId,
+      action: "level_progression_request.rejected",
+      newValues: {
+        enrollmentId: result.enrollmentId,
+        studentId: result.studentId,
+        fromLevelId: result.fromLevelId,
+        toLevelId: result.toLevelId,
+        policyId: result.policyId,
+        decision: "REJECTED",
+        reason: data.reason,
+      },
+    });
+    // Domain-level audit: progression blocked (enrollment level unchanged).
+    await auditService.log(context, {
+      entity: "Enrollment",
+      entityId: result.enrollmentId,
+      action: "level_progression.blocked",
+      newValues: {
+        enrollmentId: result.enrollmentId,
+        studentId: result.studentId,
+        fromLevelId: result.fromLevelId,
+        toLevelId: result.toLevelId,
+        policyId: result.policyId,
+        decision: "REJECTED",
+        reason: data.reason,
+      },
+    });
+
+    revalidatePath(QUEUE_PATH);
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : "Erro desconhecido" };
+  }
+}
+
+/**
+ * Backwards-compatible single entrypoint used by older callers. Delegates to the
+ * transactional approve/reject services above (gated by the manage permission).
+ */
 export async function reviewProgressionRequestAction(input: unknown): Promise<ActionResult> {
   try {
     const context = await requirePermission(PERMISSIONS.LEVEL_PROGRESSION_MANAGE);
     const data = reviewProgressionRequestSchema.parse(input);
-    const db = await getDb();
-
-    const request = await db.levelProgressionRequest.findFirst({
-      where: { id: data.requestId, organizationId: context.organizationId, decision: "PENDING" },
-    });
-    if (!request) return { success: false, error: "Pedido não encontrado ou já processado" };
-
-    await db.levelProgressionRequest.update({
-      where: { id: data.requestId },
-      data: {
-        decision: data.decision,
-        reviewNotes: data.reviewNotes ?? null,
-        reviewedAt: new Date(),
-        reviewedBy: context.userId,
-      },
-    });
 
     if (data.decision === "APPROVED") {
-      await promoteStudentToNextLevel(request.enrollmentId, request.toLevelId, context.organizationId);
+      const result = await approveProgressionRequest({
+        requestId: data.requestId,
+        organizationId: context.organizationId,
+        actorId: context.userId,
+        reviewNotes: data.reviewNotes ?? null,
+      });
       await auditService.log(context, {
         entity: "LevelProgressionRequest",
         entityId: data.requestId,
+        action: "level_progression_request.approved",
+        newValues: {
+          enrollmentId: result.enrollmentId,
+          studentId: result.studentId,
+          fromLevelId: result.fromLevelId,
+          toLevelId: result.toLevelId,
+          policyId: result.policyId,
+          decision: "APPROVED",
+        },
+      });
+      await auditService.log(context, {
+        entity: "Enrollment",
+        entityId: result.enrollmentId,
         action: "level_progression.approved",
-        newValues: { decision: data.decision, toLevelId: request.toLevelId },
+        newValues: { toLevelId: result.toLevelId, fromLevelStatus: result.fromLevelStatus },
       });
     } else {
-      // Rejection must also be audited, with the reviewer's reason.
+      const result = await rejectProgressionRequest({
+        requestId: data.requestId,
+        organizationId: context.organizationId,
+        actorId: context.userId,
+        reason: data.reviewNotes ?? "",
+      });
       await auditService.log(context, {
         entity: "LevelProgressionRequest",
         entityId: data.requestId,
-        action: "level_progression.blocked",
-        newValues: { decision: data.decision, reason: data.reviewNotes },
+        action: "level_progression_request.rejected",
+        newValues: {
+          enrollmentId: result.enrollmentId,
+          studentId: result.studentId,
+          fromLevelId: result.fromLevelId,
+          toLevelId: result.toLevelId,
+          policyId: result.policyId,
+          decision: "REJECTED",
+          reason: data.reviewNotes,
+        },
       });
     }
 
+    revalidatePath(QUEUE_PATH);
     return { success: true };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : "Erro desconhecido" };

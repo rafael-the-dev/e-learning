@@ -429,6 +429,11 @@ export const PERMISSIONS = {
   LEVEL_PROGRESSION_MANAGE: "levelProgression.manage",
   LEVEL_PROGRESSION_VIEW: "levelProgression.view",
 
+  // Level Progression Requests — manual approval workflow queue
+  LEVEL_PROGRESSION_REQUESTS_VIEW: "levelProgressionRequests.view",
+  LEVEL_PROGRESSION_REQUESTS_APPROVE: "levelProgressionRequests.approve",
+  LEVEL_PROGRESSION_REQUESTS_REJECT: "levelProgressionRequests.reject",
+
   // Student Progress (level & course)
   STUDENT_LEVEL_PROGRESS_VIEW: "studentLevelProgress.view",
   STUDENT_COURSE_PROGRESS_VIEW: "studentCourseProgress.view",
@@ -612,6 +617,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.PREREQUISITES_WAIVERS_MANAGE,
     PERMISSIONS.LEVEL_PROGRESSION_MANAGE,
     PERMISSIONS.LEVEL_PROGRESSION_VIEW,
+    // Secretary sees the manual-approval queue read-only. Approve/reject are
+    // NOT granted — those stay with ORG_ADMIN unless a policy elevates the role.
+    PERMISSIONS.LEVEL_PROGRESSION_REQUESTS_VIEW,
     PERMISSIONS.STUDENT_LEVEL_PROGRESS_VIEW,
     PERMISSIONS.STUDENT_COURSE_PROGRESS_VIEW,
     PERMISSIONS.NOTIFICATIONS_VIEW_OWN,
@@ -673,6 +681,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.ACADEMIC_CALENDAR_VIEW,
     PERMISSIONS.PREREQUISITES_VIEW,
     PERMISSIONS.LEVEL_PROGRESSION_VIEW,
+    // Teacher may see the manual-approval queue read-only; the page still applies
+    // the global teacher-scope redirect, and approve/reject are not granted.
+    PERMISSIONS.LEVEL_PROGRESSION_REQUESTS_VIEW,
     PERMISSIONS.STUDENT_LEVEL_PROGRESS_VIEW,
     PERMISSIONS.STUDENT_COURSE_PROGRESS_VIEW,
     PERMISSIONS.NOTIFICATIONS_VIEW_OWN,
