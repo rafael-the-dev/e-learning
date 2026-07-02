@@ -102,7 +102,12 @@ export class GradeCalculationService {
 
     finalGrade = this.applyRounding(finalGrade, roundingMethod);
 
-    // Attendance check
+    // Attendance check.
+    // NOTE (Grade Engine Final Sprint): this gate is currently dormant in
+    // production. The Attendance Engine is out of scope, so callers pass
+    // attendancePercentage: null and this branch is never taken. The logic is
+    // retained (and unit-tested) so the gate activates automatically once a real
+    // attendance percentage is supplied. See subject-progress-cascade.service.ts.
     if (
       input.minimumAttendancePercentage != null &&
       input.attendancePercentage != null &&

@@ -89,6 +89,14 @@ export async function recalculateSubjectProgressCascade(
     ? Number(levelSubject.minimumAttendancePercentage)
     : null;
 
+  // ATTENDANCE GATING IS INTENTIONALLY INACTIVE (Grade Engine Final Sprint).
+  // The Attendance Engine is out of scope for this sprint, so there is no
+  // canonical per-enrollment attendance percentage to feed in yet. We pass
+  // attendancePercentage: null so the INCOMPLETE (frequência abaixo do mínimo)
+  // branch in GradeCalculationService stays dormant — a subject can pass on
+  // grade alone. minimumAttendancePercentage is still read and forwarded so the
+  // gate activates automatically once the Attendance Engine supplies a real
+  // percentage here. Do NOT fabricate an attendance value to force the branch.
   let calculationResult;
   if (policy && components.length > 0) {
     calculationResult = gradeCalculationService.calculateFinalGrade({
@@ -97,7 +105,7 @@ export async function recalculateSubjectProgressCascade(
       minimumPassingGrade: minPassingGrade,
       allowRecovery: policy.allowRecovery,
       components: componentScores,
-      attendancePercentage: null,
+      attendancePercentage: null, // inactive until Attendance Engine — see note above
       minimumAttendancePercentage: minAttendance,
     });
   } else {
@@ -124,7 +132,7 @@ export async function recalculateSubjectProgressCascade(
     enrollmentId,
     levelSubjectId,
     finalGrade: calculationResult.finalGrade,
-    attendancePercentage: null,
+    attendancePercentage: null, // inactive until the Attendance Engine lands (see note above)
     status: progressStatus,
     progressReason: calculationResult.reason,
     completedAt: isTerminal ? new Date() : null,
