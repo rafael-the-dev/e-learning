@@ -21,6 +21,14 @@ vi.mock("@/server/auth/rbac", () => ({
 vi.mock("@/server/auth/teacher-access", () => ({
   assertTeacherCanAccessAssessment: vi.fn(),
 }));
+vi.mock("@/server/db", () => {
+  // $transaction (called with an options arg for bulk) runs its callback with a
+  // tx client; the same mock stands in for the tx (repos are mocked separately).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db: any = {};
+  db.$transaction = (fn: (tx: unknown) => unknown) => fn(db);
+  return { getDb: vi.fn(async () => db) };
+});
 vi.mock("@/modules/assessments/repositories/assessment.repository", () => ({
   findAssessmentById: mocks.findAssessmentById,
   updateAssessment: mocks.updateAssessment,
@@ -94,7 +102,8 @@ describe("BulkGradeAssessmentCommand.execute — canonical grade write + audit",
         sourceType: "SCHEDULED_EVENT",
         grade: 80,
         status: "GRADED",
-      })
+      }),
+      expect.anything()
     );
   });
 

@@ -14,6 +14,9 @@ import {
   updateStudentAssessmentResult,
 } from "@/modules/grades/repositories/student-assessment-result.repository";
 import { gradeMutationService } from "@/modules/grades/services/grade-mutation.service";
+import { getDb } from "@/server/db";
+import { eventPublisher } from "@/server/events/event-publisher";
+import type { DomainEvent } from "@/server/events/domain-event";
 import {
   cancelStudentAssessmentResultSchema,
   type CancelStudentAssessmentResultSchema,
@@ -45,27 +48,38 @@ export class CancelStudentAssessmentResultCommand extends BaseCommand<
   async execute(): Promise<void> {
     const existing = await findResultById(this.input.resultId, this.context.organizationId);
 
-    const gradeResult = await updateStudentAssessmentResult(
-      this.input.resultId,
-      this.context.organizationId,
-      { status: "CANCELLED" }
-    );
+    // Atomic boundary: cancellation + GradeChangeLog + derived cascade commit
+    // together. Events are published only after commit.
+    const db = await getDb();
+    const events: DomainEvent[] = [];
+    await db.$transaction(async (tx) => {
+      const gradeResult = await updateStudentAssessmentResult(
+        this.input.resultId,
+        this.context.organizationId,
+        { status: "CANCELLED" },
+        tx
+      );
 
-    await auditService.log(this.context, {
-      entity: "StudentAssessmentResult",
-      entityId: this.input.resultId,
-      action: "grade.cancelled",
+      await auditService.log(this.context, {
+        entity: "StudentAssessmentResult",
+        entityId: this.input.resultId,
+        action: "grade.cancelled",
+      }, tx);
+
+      // Record the mutation and cascade. A CANCELLED result is excluded from the
+      // calculation, so progression recomputes as if the grade was removed.
+      await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
+        result: gradeResult,
+        previous: existing
+          ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
+          : null,
+        source: GRADE_CHANGE_SOURCE.CANCEL,
+        reason: this.input.reason,
+        client: tx,
+        events,
+      });
     });
 
-    // Record the mutation and cascade. A CANCELLED result is excluded from the
-    // calculation, so progression recomputes as if the grade was removed.
-    await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
-      result: gradeResult,
-      previous: existing
-        ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
-        : null,
-      source: GRADE_CHANGE_SOURCE.CANCEL,
-      reason: this.input.reason,
-    });
+    for (const event of events) await eventPublisher.publish(event);
   }
 }

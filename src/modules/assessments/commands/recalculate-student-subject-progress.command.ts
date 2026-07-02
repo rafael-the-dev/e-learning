@@ -15,6 +15,8 @@ import {
 } from "@/modules/assessments/schemas/assessment.schema";
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
 import { recalculateSubjectProgressCascade } from "@/modules/grades/services/subject-progress-cascade.service";
+import { eventPublisher } from "@/server/events/event-publisher";
+import type { DomainEvent } from "@/server/events/domain-event";
 
 export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
   RecalculateStudentSubjectProgressSchema,
@@ -62,11 +64,25 @@ export class RecalculateStudentSubjectProgressCommand extends BaseCommand<
   }
 
   async execute(): Promise<StudentSubjectProgress> {
-    // Single canonical recalculation path. Always cascades subject -> level -> course.
-    return recalculateSubjectProgressCascade(this.context as AuthContext, {
-      studentId: this.input.studentId,
-      enrollmentId: this.input.enrollmentId,
-      levelSubjectId: this.input.levelSubjectId,
-    });
+    // Single canonical recalculation path. Always cascades subject -> level ->
+    // course, atomically: subject/level/course progress commit together or not
+    // at all. Events publish only after commit.
+    const db = await getDb();
+    const events: DomainEvent[] = [];
+    const progress = await db.$transaction((tx) =>
+      recalculateSubjectProgressCascade(
+        this.context as AuthContext,
+        {
+          studentId: this.input.studentId,
+          enrollmentId: this.input.enrollmentId,
+          levelSubjectId: this.input.levelSubjectId,
+        },
+        { client: tx, events }
+      )
+    );
+
+    for (const event of events) await eventPublisher.publish(event);
+
+    return progress;
   }
 }

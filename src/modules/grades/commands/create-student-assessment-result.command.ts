@@ -19,6 +19,8 @@ import { findComponentById } from "@/modules/assessments/repositories/assessment
 import { findAssessmentPolicyById } from "@/modules/assessments/repositories/assessment-policy.repository";
 import { gradeCalculationService } from "@/modules/grades/services/grade-calculation.service";
 import { gradeMutationService } from "@/modules/grades/services/grade-mutation.service";
+import { eventPublisher } from "@/server/events/event-publisher";
+import type { DomainEvent } from "@/server/events/domain-event";
 import {
   createStudentAssessmentResultSchema,
   type CreateStudentAssessmentResultSchema,
@@ -100,52 +102,66 @@ export class CreateStudentAssessmentResultCommand extends BaseCommand<
         })
       : null;
 
-    // Capture prior state: upsert may update an existing canonical row.
-    const existing = await findResultByEnrollmentAndComponent(
-      this.input.enrollmentId,
-      this.input.assessmentComponentId,
-      organizationId
-    );
+    // Atomic boundary: canonical grade write + GradeChangeLog + subject/level/
+    // course cascade all commit together, or nothing does. Events are collected
+    // and published only after the transaction commits.
+    const events: DomainEvent[] = [];
+    const gradeResult = await db.$transaction(async (tx) => {
+      // Capture prior state: upsert may update an existing canonical row.
+      const existing = await findResultByEnrollmentAndComponent(
+        this.input.enrollmentId,
+        this.input.assessmentComponentId,
+        organizationId,
+        tx
+      );
 
-    const gradeResult = await upsertStudentAssessmentResult({
-      organizationId,
-      enrollmentId: this.input.enrollmentId,
-      studentId: this.input.studentId,
-      levelSubjectId,
-      subjectId: levelSubject?.subjectId ?? "",
-      assessmentComponentId: this.input.assessmentComponentId,
-      sourceType: "CONTINUOUS",
-      grade: this.input.grade,
-      maxGrade,
-      normalizedGrade,
-      notes: this.input.notes ?? null,
-      status: "GRADED",
-      gradedBy: this.context.userId,
-      gradedAt: new Date(),
+      const result = await upsertStudentAssessmentResult({
+        organizationId,
+        enrollmentId: this.input.enrollmentId,
+        studentId: this.input.studentId,
+        levelSubjectId,
+        subjectId: levelSubject?.subjectId ?? "",
+        assessmentComponentId: this.input.assessmentComponentId,
+        sourceType: "CONTINUOUS",
+        grade: this.input.grade,
+        maxGrade,
+        normalizedGrade,
+        notes: this.input.notes ?? null,
+        status: "GRADED",
+        gradedBy: this.context.userId,
+        gradedAt: new Date(),
+      }, tx);
+
+      await auditService.log(this.context, {
+        entity: "StudentAssessmentResult",
+        entityId: result.id,
+        action: "grade.created",
+        newValues: {
+          studentId: result.studentId,
+          grade: result.grade,
+          normalizedGrade: result.normalizedGrade,
+          componentId: result.assessmentComponentId,
+          sourceType: result.sourceType,
+        },
+      }, tx);
+
+      // Record the mutation and cascade subject -> level -> course progress.
+      await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
+        result,
+        previous: existing
+          ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
+          : null,
+        source: existing ? GRADE_CHANGE_SOURCE.UPDATE : GRADE_CHANGE_SOURCE.CREATE,
+        reason: existing ? "Atualização de nota contínua" : "Lançamento inicial de nota",
+        client: tx,
+        events,
+      });
+
+      return result;
     });
 
-    await auditService.log(this.context, {
-      entity: "StudentAssessmentResult",
-      entityId: gradeResult.id,
-      action: "grade.created",
-      newValues: {
-        studentId: gradeResult.studentId,
-        grade: gradeResult.grade,
-        normalizedGrade: gradeResult.normalizedGrade,
-        componentId: gradeResult.assessmentComponentId,
-        sourceType: gradeResult.sourceType,
-      },
-    });
-
-    // Record the mutation and cascade subject -> level -> course progress.
-    await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
-      result: gradeResult,
-      previous: existing
-        ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
-        : null,
-      source: existing ? GRADE_CHANGE_SOURCE.UPDATE : GRADE_CHANGE_SOURCE.CREATE,
-      reason: existing ? "Atualização de nota contínua" : "Lançamento inicial de nota",
-    });
+    // Publish AFTER commit — never for a rolled-back change.
+    for (const event of events) await eventPublisher.publish(event);
 
     return gradeResult;
   }

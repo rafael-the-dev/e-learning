@@ -19,6 +19,9 @@ import {
 } from "@/modules/grades/repositories/student-assessment-result.repository";
 import { gradeMutationService } from "@/modules/grades/services/grade-mutation.service";
 import { GRADE_CHANGE_SOURCE } from "@/modules/grades/types";
+import { getDb } from "@/server/db";
+import { eventPublisher } from "@/server/events/event-publisher";
+import type { DomainEvent } from "@/server/events/domain-event";
 import {
   invalidateAssessmentResultSchema,
   type InvalidateAssessmentResultSchema,
@@ -59,50 +62,65 @@ export class InvalidateAssessmentResultCommand extends BaseCommand<
   async execute(): Promise<void> {
     const { organizationId } = this.context;
 
-    // 1) Mark the participation sidecar as invalidated (event-level record).
+    // Read the participation sidecar + its assessment config up front (config
+    // reads, not mutated here).
     const assessmentResult = await findResultById(this.input.resultId, organizationId);
-    await updateAssessmentResult(this.input.resultId, organizationId, {
-      status: "INVALIDATED",
-      feedback: this.input.reason,
+    const assessment = assessmentResult
+      ? await findAssessmentById(assessmentResult.assessmentId, organizationId)
+      : null;
+
+    // Atomic boundary: the sidecar invalidation, the canonical grade cancellation,
+    // its GradeChangeLog and the subject/level/course cascade all commit together
+    // (or none do). Events are published only after commit.
+    const db = await getDb();
+    const events: DomainEvent[] = [];
+    await db.$transaction(async (tx) => {
+      // 1) Mark the participation sidecar as invalidated (event-level record).
+      await updateAssessmentResult(this.input.resultId, organizationId, {
+        status: "INVALIDATED",
+        feedback: this.input.reason,
+      }, tx);
+
+      await auditService.log(this.context, {
+        entity: "AssessmentResult",
+        entityId: this.input.resultId,
+        action: "assessment_result.invalidated",
+        newValues: { reason: this.input.reason },
+      }, tx);
+
+      // 2) Invalidation must also affect the canonical grade. Locate the
+      // StudentAssessmentResult for this event's component and CANCEL it so it
+      // drops out of the calculation, then log the change and cascade.
+      // (StudentResultStatus has no INVALIDATED value; CANCELLED is the terminal
+      // "not counted" state and is excluded from progress reads.)
+      if (!assessmentResult?.enrollmentId || !assessment?.assessmentComponentId) return;
+
+      const canonical = await findResultByEnrollmentAndComponent(
+        assessmentResult.enrollmentId,
+        assessment.assessmentComponentId,
+        organizationId,
+        tx
+      );
+      if (!canonical || canonical.status === "CANCELLED") return;
+
+      const cancelled = await updateStudentAssessmentResult(canonical.id, organizationId, {
+        status: "CANCELLED",
+      }, tx);
+
+      await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
+        result: cancelled,
+        previous: {
+          grade: canonical.grade,
+          normalizedGrade: canonical.normalizedGrade,
+          status: canonical.status,
+        },
+        source: GRADE_CHANGE_SOURCE.INVALIDATE,
+        reason: this.input.reason,
+        client: tx,
+        events,
+      });
     });
 
-    await auditService.log(this.context, {
-      entity: "AssessmentResult",
-      entityId: this.input.resultId,
-      action: "assessment_result.invalidated",
-      newValues: { reason: this.input.reason },
-    });
-
-    // 2) Invalidation must also affect the canonical grade. Locate the
-    // StudentAssessmentResult for this event's component and CANCEL it so it
-    // drops out of the calculation, then log the change and cascade.
-    // (StudentResultStatus has no INVALIDATED value; CANCELLED is the terminal
-    // "not counted" state and is excluded from progress reads.)
-    if (!assessmentResult?.enrollmentId) return;
-
-    const assessment = await findAssessmentById(assessmentResult.assessmentId, organizationId);
-    if (!assessment?.assessmentComponentId) return;
-
-    const canonical = await findResultByEnrollmentAndComponent(
-      assessmentResult.enrollmentId,
-      assessment.assessmentComponentId,
-      organizationId
-    );
-    if (!canonical || canonical.status === "CANCELLED") return;
-
-    const cancelled = await updateStudentAssessmentResult(canonical.id, organizationId, {
-      status: "CANCELLED",
-    });
-
-    await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
-      result: cancelled,
-      previous: {
-        grade: canonical.grade,
-        normalizedGrade: canonical.normalizedGrade,
-        status: canonical.status,
-      },
-      source: GRADE_CHANGE_SOURCE.INVALIDATE,
-      reason: this.input.reason,
-    });
+    for (const event of events) await eventPublisher.publish(event);
   }
 }

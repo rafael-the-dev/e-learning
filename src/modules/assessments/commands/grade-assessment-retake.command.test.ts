@@ -22,6 +22,14 @@ vi.mock("@/server/auth/rbac", () => ({
 vi.mock("@/server/auth/teacher-access", () => ({
   assertTeacherCanAccessAssessment: vi.fn(),
 }));
+vi.mock("@/server/db", () => {
+  // $transaction runs its callback with a tx client; the same mock stands in for
+  // the tx (repositories are mocked and ignore the client arg).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db: any = {};
+  db.$transaction = (fn: (tx: unknown) => unknown) => fn(db);
+  return { getDb: vi.fn(async () => db) };
+});
 vi.mock("@/modules/assessments/repositories/assessment-retake.repository", () => ({
   findRetakeById: mocks.findRetakeById,
   updateAssessmentRetake: mocks.updateAssessmentRetake,
@@ -101,7 +109,8 @@ describe("GradeAssessmentRetakeCommand.execute", () => {
         studentId: "s1",
         enrollmentId: "e1",
         grade: 80, // BEST_SCORE: recovery 80 beats original 40
-      })
+      }),
+      expect.anything()
     );
   });
 

@@ -19,6 +19,9 @@ import {
 import { gradeCalculationService } from "@/modules/grades/services/grade-calculation.service";
 import { gradeMutationService } from "@/modules/grades/services/grade-mutation.service";
 import { GRADE_CHANGE_SOURCE } from "@/modules/grades/types";
+import { getDb } from "@/server/db";
+import { eventPublisher } from "@/server/events/event-publisher";
+import type { DomainEvent } from "@/server/events/domain-event";
 import {
   bulkGradeAssessmentSchema,
   type BulkGradeAssessmentSchema,
@@ -92,120 +95,141 @@ export class BulkGradeAssessmentCommand extends BaseCommand<
 
   async execute(): Promise<AssessmentResult[]> {
     const assessment = await findAssessmentById(this.input.assessmentId, this.context.organizationId)!;
-    const results: AssessmentResult[] = [];
     const now = new Date();
     const isRegrading = assessment!.status === "GRADED";
-    let gradedCount = 0;
 
     // Reason recorded on every bulk GradeChangeLog. editReason is required by
     // validate() when regrading; first-time grading falls back to a default.
     const bulkReason = this.input.editReason?.trim() || "Classificação em lote";
 
-    for (const grade of this.input.grades) {
-      const resultStatus =
-        grade.status === "MISSING" ? "MISSING" :
-        grade.status === "EXCUSED" ? "EXCUSED" :
-        "GRADED";
+    const db = await getDb();
+    const events: DomainEvent[] = [];
 
-      // AssessmentResult tracks event participation (status, feedback) only.
-      // Grade values are not stored here — StudentAssessmentResult is the canonical source.
-      const result = await upsertAssessmentResult({
-        organizationId: this.context.organizationId,
-        assessmentId: this.input.assessmentId,
-        studentId: grade.studentId,
-        enrollmentId: grade.enrollmentId ?? null,
-        score: null,
-        normalizedScore: null,
-        feedback: grade.feedback ?? null,
-        status: resultStatus,
-        gradedByUserId: this.context.userId,
-        gradedAt: now,
-      });
+    // ALL-OR-NOTHING bulk transaction (chosen over per-row atomicity for academic
+    // consistency): every row's participation sidecar, canonical grade,
+    // GradeChangeLog and subject/level/course cascade commit together, or the
+    // whole batch rolls back — a partially graded assessment is never persisted.
+    // Each row targets a distinct enrollment, so there is no redundant re-cascade.
+    // Timeout is raised because a large class runs many per-student cascades
+    // inside the single transaction.
+    const results = await db.$transaction(async (tx) => {
+      const rows: AssessmentResult[] = [];
+      let gradedCount = 0;
 
-      results.push(result);
+      for (const grade of this.input.grades) {
+        const resultStatus =
+          grade.status === "MISSING" ? "MISSING" :
+          grade.status === "EXCUSED" ? "EXCUSED" :
+          "GRADED";
 
-      // Write canonical grade to StudentAssessmentResult (single source of truth).
-      if (
-        grade.enrollmentId &&
-        grade.score !== null &&
-        resultStatus === "GRADED" &&
-        assessment!.levelSubjectId &&
-        assessment!.subjectId
-      ) {
-        // Capture prior state before upserting so the mutation is logged with an
-        // accurate previous snapshot (first-time -> null) and no-op edits skip the log.
-        const existing = await findResultByEnrollmentAndComponent(
-          grade.enrollmentId,
-          assessment!.assessmentComponentId,
-          this.context.organizationId
-        );
-
-        const normalizedGrade = gradeCalculationService.normalizeGrade(
-          grade.score,
-          assessment!.maxScore
-        );
-
-        const canonical = await upsertStudentAssessmentResult({
+        // AssessmentResult tracks event participation (status, feedback) only.
+        // Grade values are not stored here — StudentAssessmentResult is the canonical source.
+        const result = await upsertAssessmentResult({
           organizationId: this.context.organizationId,
-          enrollmentId: grade.enrollmentId,
+          assessmentId: this.input.assessmentId,
           studentId: grade.studentId,
-          levelSubjectId: assessment!.levelSubjectId,
-          subjectId: assessment!.subjectId,
-          assessmentComponentId: assessment!.assessmentComponentId,
-          assessmentEventId: assessment!.id,
-          sourceType: "SCHEDULED_EVENT",
-          grade: grade.score,
-          maxGrade: assessment!.maxScore,
-          normalizedGrade,
-          status: "GRADED",
-          gradedBy: this.context.userId,
+          enrollmentId: grade.enrollmentId ?? null,
+          score: null,
+          normalizedScore: null,
+          feedback: grade.feedback ?? null,
+          status: resultStatus,
+          gradedByUserId: this.context.userId,
           gradedAt: now,
-        });
+        }, tx);
 
-        // Only skip the audit entry when a regrade changed nothing at all.
-        const changed =
-          !existing ||
-          canonical.grade !== existing.grade ||
-          canonical.normalizedGrade !== existing.normalizedGrade ||
-          existing.status !== "GRADED";
+        rows.push(result);
 
-        // Route through the single canonical mutation path: writes the
-        // GradeChangeLog (source = BULK, previous = existing snapshot or null for
-        // first-time grading) and cascades subject -> level -> course.
-        await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
-          result: canonical,
-          previous: existing
-            ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
-            : null,
-          source: GRADE_CHANGE_SOURCE.BULK,
-          reason: bulkReason,
-          logChange: changed,
-        });
+        // Write canonical grade to StudentAssessmentResult (single source of truth).
+        if (
+          grade.enrollmentId &&
+          grade.score !== null &&
+          resultStatus === "GRADED" &&
+          assessment!.levelSubjectId &&
+          assessment!.subjectId
+        ) {
+          // Capture prior state before upserting so the mutation is logged with an
+          // accurate previous snapshot (first-time -> null) and no-op edits skip the log.
+          const existing = await findResultByEnrollmentAndComponent(
+            grade.enrollmentId,
+            assessment!.assessmentComponentId,
+            this.context.organizationId,
+            tx
+          );
 
-        gradedCount++;
+          const normalizedGrade = gradeCalculationService.normalizeGrade(
+            grade.score,
+            assessment!.maxScore
+          );
+
+          const canonical = await upsertStudentAssessmentResult({
+            organizationId: this.context.organizationId,
+            enrollmentId: grade.enrollmentId,
+            studentId: grade.studentId,
+            levelSubjectId: assessment!.levelSubjectId,
+            subjectId: assessment!.subjectId,
+            assessmentComponentId: assessment!.assessmentComponentId,
+            assessmentEventId: assessment!.id,
+            sourceType: "SCHEDULED_EVENT",
+            grade: grade.score,
+            maxGrade: assessment!.maxScore,
+            normalizedGrade,
+            status: "GRADED",
+            gradedBy: this.context.userId,
+            gradedAt: now,
+          }, tx);
+
+          // Only skip the change log when a regrade changed nothing at all.
+          const changed =
+            !existing ||
+            canonical.grade !== existing.grade ||
+            canonical.normalizedGrade !== existing.normalizedGrade ||
+            existing.status !== "GRADED";
+
+          // Route through the single canonical mutation path: writes the
+          // GradeChangeLog (source = BULK, previous = existing snapshot or null for
+          // first-time grading) and cascades subject -> level -> course.
+          await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
+            result: canonical,
+            previous: existing
+              ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
+              : null,
+            source: GRADE_CHANGE_SOURCE.BULK,
+            reason: bulkReason,
+            logChange: changed,
+            client: tx,
+            events,
+          });
+
+          gradedCount++;
+        }
       }
-    }
 
-    // Mark assessment as GRADED when every submitted entry has a terminal status.
-    const gradedStatuses = ["GRADED", "MISSING", "EXCUSED", "INVALIDATED"];
-    const allGraded = this.input.grades.every((g) => gradedStatuses.includes(g.status));
-    if (allGraded && assessment!.status !== "GRADED") {
-      await updateAssessment(this.input.assessmentId, this.context.organizationId, {
-        status: "GRADED",
-      });
-    }
+      // Mark assessment as GRADED when every submitted entry has a terminal status.
+      const gradedStatuses = ["GRADED", "MISSING", "EXCUSED", "INVALIDATED"];
+      const allGraded = this.input.grades.every((g) => gradedStatuses.includes(g.status));
+      if (allGraded && assessment!.status !== "GRADED") {
+        await updateAssessment(this.input.assessmentId, this.context.organizationId, {
+          status: "GRADED",
+        }, tx);
+      }
 
-    await auditService.log(this.context, {
-      entity: "Assessment",
-      entityId: this.input.assessmentId,
-      action: isRegrading ? "assessment_result.regraded" : "assessment_result.graded",
-      newValues: {
-        assessmentId: this.input.assessmentId,
-        totalSubmitted: results.length,
-        gradedCount,
-        ...(isRegrading && { editReason: this.input.editReason }),
-      },
-    });
+      await auditService.log(this.context, {
+        entity: "Assessment",
+        entityId: this.input.assessmentId,
+        action: isRegrading ? "assessment_result.regraded" : "assessment_result.graded",
+        newValues: {
+          assessmentId: this.input.assessmentId,
+          totalSubmitted: rows.length,
+          gradedCount,
+          ...(isRegrading && { editReason: this.input.editReason }),
+        },
+      }, tx);
+
+      return rows;
+    }, { timeout: 120_000, maxWait: 15_000 });
+
+    // Publish AFTER commit — never for a rolled-back batch.
+    for (const event of events) await eventPublisher.publish(event);
 
     return results;
   }

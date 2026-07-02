@@ -9,6 +9,8 @@ import { PERMISSIONS } from "@/server/auth/permissions";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import type { AuthContext } from "@/server/auth/context";
 import { getDb } from "@/server/db";
+import { eventPublisher } from "@/server/events/event-publisher";
+import type { DomainEvent } from "@/server/events/domain-event";
 import {
   recalculateSubjectGradesSchema,
   type RecalculateSubjectGradesSchema,
@@ -72,12 +74,22 @@ export class RecalculateSubjectGradesCommand extends BaseCommand<
     let count = 0;
     for (const row of resultRows) {
       try {
-        // Same canonical cascading path used by every grade mutation.
-        await recalculateSubjectProgressCascade(this.context as AuthContext, {
-          studentId: row.studentId,
-          enrollmentId: row.enrollmentId,
-          levelSubjectId,
-        });
+        // Per-enrollment atomic recompute: subject/level/course commit together
+        // for this student, or this student is skipped — a repair sweep never
+        // half-updates one enrollment, and one failure doesn't roll back others.
+        const events: DomainEvent[] = [];
+        await db.$transaction((tx) =>
+          recalculateSubjectProgressCascade(
+            this.context as AuthContext,
+            {
+              studentId: row.studentId,
+              enrollmentId: row.enrollmentId,
+              levelSubjectId,
+            },
+            { client: tx, events }
+          )
+        );
+        for (const event of events) await eventPublisher.publish(event);
         count++;
       } catch {
         // Skip individual failures — continue processing remaining students

@@ -23,9 +23,14 @@ vi.mock("@/server/auth/rbac", () => ({
 vi.mock("@/server/auth/teacher-access", () => ({
   assertTeacherCanAccessEnrollment: vi.fn(),
 }));
-vi.mock("@/server/db", () => ({
-  getDb: vi.fn(async () => ({ levelSubject: { findFirst: mocks.levelSubjectFindFirst } })),
-}));
+vi.mock("@/server/db", () => {
+  // $transaction runs the callback with a tx client; the same mock object stands
+  // in for the tx (repositories are mocked separately and ignore the client arg).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db: any = { levelSubject: { findFirst: mocks.levelSubjectFindFirst } };
+  db.$transaction = (fn: (tx: unknown) => unknown) => fn(db);
+  return { getDb: vi.fn(async () => db) };
+});
 vi.mock("@/modules/grades/repositories/student-assessment-result.repository", () => ({
   findResultByEnrollmentAndComponent: mocks.findResultByEnrollmentAndComponent,
   findResultById: mocks.findResultById,
@@ -160,7 +165,9 @@ describe("CancelStudentAssessmentResultCommand.execute", () => {
       ctx
     ).execute();
 
-    expect(mocks.updateStudentAssessmentResult).toHaveBeenCalledWith("sar-1", "org-1", { status: "CANCELLED" });
+    expect(mocks.updateStudentAssessmentResult).toHaveBeenCalledWith(
+      "sar-1", "org-1", { status: "CANCELLED" }, expect.anything()
+    );
     expect(mocks.handleGradeMutation).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({

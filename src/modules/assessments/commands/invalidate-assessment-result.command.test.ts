@@ -19,6 +19,14 @@ vi.mock("@/server/auth/rbac", () => ({
   getUserPermissions: vi.fn().mockResolvedValue([]),
   createAbility: () => ({ can: () => true }),
 }));
+vi.mock("@/server/db", () => {
+  // $transaction runs its callback with a tx client; the same mock stands in for
+  // the tx (repositories are mocked and ignore the client arg).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db: any = {};
+  db.$transaction = (fn: (tx: unknown) => unknown) => fn(db);
+  return { getDb: vi.fn(async () => db) };
+});
 vi.mock("@/modules/assessments/repositories/assessment-result.repository", () => ({
   findResultById: mocks.findAssessmentResultById,
   updateAssessmentResult: mocks.updateAssessmentResult,
@@ -84,7 +92,8 @@ describe("InvalidateAssessmentResultCommand.execute", () => {
     expect(mocks.updateStudentAssessmentResult).toHaveBeenCalledWith(
       "sar-1",
       "org-1",
-      { status: "CANCELLED" }
+      { status: "CANCELLED" },
+      expect.anything()
     );
   });
 

@@ -15,6 +15,9 @@ import {
 import { findComponentById } from "@/modules/assessments/repositories/assessment-component.repository";
 import { gradeCalculationService } from "@/modules/grades/services/grade-calculation.service";
 import { gradeMutationService } from "@/modules/grades/services/grade-mutation.service";
+import { getDb } from "@/server/db";
+import { eventPublisher } from "@/server/events/event-publisher";
+import type { DomainEvent } from "@/server/events/domain-event";
 import type { AuthContext } from "@/server/auth/context";
 import {
   updateStudentAssessmentResultSchema,
@@ -85,56 +88,69 @@ export class UpdateStudentAssessmentResultCommand extends BaseCommand<
       normalizedGrade = gradeCalculationService.normalizeGrade(grade, component?.maxGrade ?? existing.maxGrade);
     }
 
-    const gradeResult = await updateStudentAssessmentResult(
-      resultId,
-      this.context.organizationId,
-      {
-        ...(grade !== undefined ? { grade, normalizedGrade } : {}),
-        ...(rest.notes !== undefined ? { notes: rest.notes } : {}),
-        ...(rest.status !== undefined ? { status: rest.status } : {}),
-        gradedBy: this.context.userId,
-        gradedAt: new Date(),
-      }
-    );
+    // Atomic boundary: canonical update + GradeChangeLog + derived cascade commit
+    // together. Events are collected and published only after commit.
+    const db = await getDb();
+    const events: DomainEvent[] = [];
+    const gradeResult = await db.$transaction(async (tx) => {
+      const result = await updateStudentAssessmentResult(
+        resultId,
+        this.context.organizationId,
+        {
+          ...(grade !== undefined ? { grade, normalizedGrade } : {}),
+          ...(rest.notes !== undefined ? { notes: rest.notes } : {}),
+          ...(rest.status !== undefined ? { status: rest.status } : {}),
+          gradedBy: this.context.userId,
+          gradedAt: new Date(),
+        },
+        tx
+      );
 
-    await auditService.log(this.context, {
-      entity: "StudentAssessmentResult",
-      entityId: gradeResult.id,
-      action: "grade.updated",
-      oldValues: {
-        grade: existing?.grade ?? null,
-        normalizedGrade: existing?.normalizedGrade ?? null,
-        status: existing?.status ?? null,
-        notes: existing?.notes ?? null,
-        gradedBy: existing?.gradedBy ?? null,
-      },
-      newValues: {
-        grade: gradeResult.grade,
-        normalizedGrade: gradeResult.normalizedGrade,
-        status: gradeResult.status,
-        notes: gradeResult.notes,
-        gradedBy: gradeResult.gradedBy,
-      },
+      await auditService.log(this.context, {
+        entity: "StudentAssessmentResult",
+        entityId: result.id,
+        action: "grade.updated",
+        oldValues: {
+          grade: existing?.grade ?? null,
+          normalizedGrade: existing?.normalizedGrade ?? null,
+          status: existing?.status ?? null,
+          notes: existing?.notes ?? null,
+          gradedBy: existing?.gradedBy ?? null,
+        },
+        newValues: {
+          grade: result.grade,
+          normalizedGrade: result.normalizedGrade,
+          status: result.status,
+          notes: result.notes,
+          gradedBy: result.gradedBy,
+        },
+      }, tx);
+
+      // Skip the change log when nothing actually changed (avoid GradeChangeLog
+      // noise), but still cascade so derived progress stays consistent.
+      const changed =
+        !existing ||
+        result.grade !== existing.grade ||
+        result.normalizedGrade !== existing.normalizedGrade ||
+        result.status !== existing.status;
+
+      // Record the mutation (GradeChangeLog) and cascade progression.
+      await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
+        result,
+        previous: existing
+          ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
+          : null,
+        source: GRADE_CHANGE_SOURCE.UPDATE,
+        reason: this.input.reason?.trim() || "Atualização de nota",
+        logChange: changed,
+        client: tx,
+        events,
+      });
+
+      return result;
     });
 
-    // Skip the audit entry when nothing actually changed (avoid GradeChangeLog noise),
-    // but still cascade so derived progress stays consistent.
-    const changed =
-      !existing ||
-      gradeResult.grade !== existing.grade ||
-      gradeResult.normalizedGrade !== existing.normalizedGrade ||
-      gradeResult.status !== existing.status;
-
-    // Record the mutation (GradeChangeLog) and cascade progression.
-    await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
-      result: gradeResult,
-      previous: existing
-        ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
-        : null,
-      source: GRADE_CHANGE_SOURCE.UPDATE,
-      reason: this.input.reason?.trim() || "Atualização de nota",
-      logChange: changed,
-    });
+    for (const event of events) await eventPublisher.publish(event);
 
     return gradeResult;
   }

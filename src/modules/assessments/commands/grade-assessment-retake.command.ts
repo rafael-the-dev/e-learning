@@ -24,6 +24,9 @@ import { gradeCalculationService } from "@/modules/grades/services/grade-calcula
 import { gradeMutationService } from "@/modules/grades/services/grade-mutation.service";
 import { gradeResolutionEngine } from "@/modules/grades/engines/grade-resolution.engine";
 import { GRADE_CHANGE_SOURCE, SOURCE_TYPE } from "@/modules/grades/types";
+import { getDb } from "@/server/db";
+import { eventPublisher } from "@/server/events/event-publisher";
+import type { DomainEvent } from "@/server/events/domain-event";
 import {
   gradeAssessmentRetakeSchema,
   type GradeAssessmentRetakeSchema,
@@ -86,28 +89,6 @@ export class GradeAssessmentRetakeCommand extends BaseCommand<
       ? gradeCalculationService.normalizeGrade(this.input.score, assessment.maxScore)
       : null;
 
-    const updated = await updateAssessmentRetake(this.input.retakeId, organizationId, {
-      score: this.input.score,
-      normalizedScore,
-      status: "GRADED",
-      gradedAt: now,
-    });
-
-    await auditService.log(this.context, {
-      entity: "AssessmentRetake",
-      entityId: retake.id,
-      action: "assessment_retake.graded",
-      newValues: { score: this.input.score, normalizedScore },
-    });
-
-    // ── Recovery write-back ─────────────────────────────────────────────────
-    // A graded retake must update the canonical grade so the academic outcome
-    // reflects the recovery. Resolve the effective grade, write it as a
-    // RECOVERY-sourced StudentAssessmentResult, then cascade progression.
-    if (!assessment?.levelSubjectId || !assessment.subjectId || !assessment.assessmentComponentId) {
-      return updated;
-    }
-
     // Enrollment: prefer the retake's own link, fall back to the original result.
     let enrollmentId = retake.enrollmentId ?? null;
     if (!enrollmentId) {
@@ -117,51 +98,91 @@ export class GradeAssessmentRetakeCommand extends BaseCommand<
       );
       enrollmentId = originalResult?.enrollmentId ?? null;
     }
-    if (!enrollmentId) return updated;
 
-    const existing = await findResultByEnrollmentAndComponent(
-      enrollmentId,
-      assessment.assessmentComponentId,
-      organizationId
-    );
+    // Atomic boundary: the retake grade, the RECOVERY-sourced canonical grade,
+    // its GradeChangeLog and the derived cascade all commit together (or none).
+    // Events are published only after commit.
+    const db = await getDb();
+    const events: DomainEvent[] = [];
+    const updated = await db.$transaction(async (tx) => {
+      const upd = await updateAssessmentRetake(this.input.retakeId, organizationId, {
+        score: this.input.score,
+        normalizedScore,
+        status: "GRADED",
+        gradedAt: now,
+      }, tx);
 
-    // Decide how the recovery grade combines with the original (default BEST_SCORE).
-    const resolution = gradeResolutionEngine.resolve({
-      originalGrade: existing ? existing.grade : null,
-      recoveryGrade: this.input.score,
+      await auditService.log(this.context, {
+        entity: "AssessmentRetake",
+        entityId: retake.id,
+        action: "assessment_retake.graded",
+        newValues: { score: this.input.score, normalizedScore },
+      }, tx);
+
+      // ── Recovery write-back ───────────────────────────────────────────────
+      // A graded retake must update the canonical grade so the academic outcome
+      // reflects the recovery. Resolve the effective grade, write it as a
+      // RECOVERY-sourced StudentAssessmentResult, then cascade progression.
+      if (
+        !assessment?.levelSubjectId ||
+        !assessment.subjectId ||
+        !assessment.assessmentComponentId ||
+        !enrollmentId
+      ) {
+        return upd;
+      }
+
+      const existing = await findResultByEnrollmentAndComponent(
+        enrollmentId,
+        assessment.assessmentComponentId,
+        organizationId,
+        tx
+      );
+
+      // Decide how the recovery grade combines with the original (default BEST_SCORE).
+      const resolution = gradeResolutionEngine.resolve({
+        originalGrade: existing ? existing.grade : null,
+        recoveryGrade: this.input.score,
+      });
+
+      const effectiveGrade = resolution.effectiveGrade;
+      const normalizedEffective = gradeCalculationService.normalizeGrade(
+        effectiveGrade,
+        assessment.maxScore
+      );
+
+      const canonical = await upsertStudentAssessmentResult({
+        organizationId,
+        enrollmentId,
+        studentId: retake.studentId,
+        levelSubjectId: assessment.levelSubjectId,
+        subjectId: assessment.subjectId,
+        assessmentComponentId: assessment.assessmentComponentId,
+        assessmentEventId: assessment.id,
+        sourceType: SOURCE_TYPE.RECOVERY,
+        grade: effectiveGrade,
+        maxGrade: assessment.maxScore,
+        normalizedGrade: normalizedEffective,
+        status: "GRADED",
+        gradedBy: this.context.userId,
+        gradedAt: now,
+      }, tx);
+
+      await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
+        result: canonical,
+        previous: existing
+          ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
+          : null,
+        source: GRADE_CHANGE_SOURCE.RECOVERY,
+        reason: `Recuperação classificada (${resolution.reason})`,
+        client: tx,
+        events,
+      });
+
+      return upd;
     });
 
-    const effectiveGrade = resolution.effectiveGrade;
-    const normalizedEffective = gradeCalculationService.normalizeGrade(
-      effectiveGrade,
-      assessment.maxScore
-    );
-
-    const canonical = await upsertStudentAssessmentResult({
-      organizationId,
-      enrollmentId,
-      studentId: retake.studentId,
-      levelSubjectId: assessment.levelSubjectId,
-      subjectId: assessment.subjectId,
-      assessmentComponentId: assessment.assessmentComponentId,
-      assessmentEventId: assessment.id,
-      sourceType: SOURCE_TYPE.RECOVERY,
-      grade: effectiveGrade,
-      maxGrade: assessment.maxScore,
-      normalizedGrade: normalizedEffective,
-      status: "GRADED",
-      gradedBy: this.context.userId,
-      gradedAt: now,
-    });
-
-    await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
-      result: canonical,
-      previous: existing
-        ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
-        : null,
-      source: GRADE_CHANGE_SOURCE.RECOVERY,
-      reason: `Recuperação classificada (${resolution.reason})`,
-    });
+    for (const event of events) await eventPublisher.publish(event);
 
     return updated;
   }
