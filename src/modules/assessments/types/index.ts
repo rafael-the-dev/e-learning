@@ -227,6 +227,10 @@ export const STUDENT_SUBJECT_PROGRESS_STATUS = {
   IN_PROGRESS: "IN_PROGRESS",
   PASSED: "PASSED",
   FAILED: "FAILED",
+  // Failed the normal evaluation but recovery is allowed and not yet resolved.
+  // NON-TERMINAL: no completedAt, keeps level/course unresolved. See the Recovery
+  // Lifecycle in docs/grade-engine.md.
+  RECOVERY_REQUIRED: "RECOVERY_REQUIRED",
   INCOMPLETE: "INCOMPLETE",
   BLOCKED: "BLOCKED",
 } as const;
@@ -402,6 +406,7 @@ export const STUDENT_SUBJECT_PROGRESS_STATUS_LABELS: Record<string, string> = {
   IN_PROGRESS: "Em Progresso",
   PASSED: "Aprovado",
   FAILED: "Reprovado",
+  RECOVERY_REQUIRED: "Recuperação",
   INCOMPLETE: "Incompleto",
   BLOCKED: "Bloqueado",
 };

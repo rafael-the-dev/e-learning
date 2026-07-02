@@ -2388,7 +2388,8 @@ model StudentSubjectProgress {
   levelSubjectId       String
   finalGrade           Decimal?  @db.Decimal(5, 2)
   attendancePercentage Decimal?  @db.Decimal(5, 2)
-  // StudentSubjectProgressStatus: NOT_STARTED | IN_PROGRESS | PASSED | FAILED | INCOMPLETE | BLOCKED
+  // StudentSubjectProgressStatus: NOT_STARTED | IN_PROGRESS | PASSED | FAILED | RECOVERY_REQUIRED | INCOMPLETE | BLOCKED
+  // (String column — RECOVERY_REQUIRED added by the Recovery Lifecycle needs no migration.)
   status               String    @default("NOT_STARTED")
   progressReason       String?   @db.NVarChar(Max)
   completedAt          DateTime?
