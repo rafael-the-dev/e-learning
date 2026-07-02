@@ -1,5 +1,11 @@
 import { PrismaMssql } from "@prisma/adapter-mssql";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Prisma } from "@prisma/client";
+
+// A Prisma client OR an interactive-transaction client. Repository and cascade
+// helpers accept this so the same code path runs standalone (global client) or
+// atomically inside a `db.$transaction(async (tx) => ...)` block. When omitted,
+// callers fall back to the global client via `getDb()`.
+export type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
 // =============================================================================
 // PRISMA CLIENT — Prisma 7 with @prisma/adapter-mssql
