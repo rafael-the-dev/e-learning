@@ -1,4 +1,4 @@
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import { findPolicyByTransition } from "@/modules/prerequisites/repositories/level-progression-policy.repository";
 import type { LevelProgressionEvaluationResult, LevelProgressionPolicy } from "@/modules/prerequisites/types";
 import { PROGRESSION_OUTCOME } from "@/modules/prerequisites/types";
@@ -240,9 +240,12 @@ export function decideLevelProgression(
 export async function evaluateLevelProgression(
   enrollmentId: string,
   courseLevelId: string,
-  organizationId: string
+  organizationId: string,
+  // When invoked inside the grade cascade transaction, pass the tx client so the
+  // reads see the subject-progress rows just written in the same transaction.
+  client?: PrismaClientOrTx
 ): Promise<LevelProgressionEvaluationResult> {
-  const db = await getDb();
+  const db = client ?? await getDb();
 
   const enrollment = await db.enrollment.findFirst({
     where: { id: enrollmentId, organizationId, deletedAt: null },
@@ -317,7 +320,7 @@ export async function evaluateLevelProgression(
 
   // Find progression policy (only relevant when there is a next level)
   const policy = toLevelId
-    ? await findPolicyByTransition(enrollment.courseId, courseLevelId, toLevelId, organizationId)
+    ? await findPolicyByTransition(enrollment.courseId, courseLevelId, toLevelId, organizationId, db)
     : null;
 
   return decideLevelProgression({

@@ -21,6 +21,9 @@ import {
 } from "@/modules/grades/services/subject-progress-cascade.service";
 import type { StudentAssessmentResult, GradeChangeSource } from "@/modules/grades/types";
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
+import type { PrismaClientOrTx } from "@/server/db";
+import type { DomainEvent } from "@/server/events/domain-event";
+import { eventPublisher } from "@/server/events/event-publisher";
 
 export interface GradeSnapshot {
   grade: number;
@@ -44,19 +47,43 @@ export interface HandleGradeMutationParams {
    * Defaults to true.
    */
   logChange?: boolean;
+  /**
+   * Transaction client. When provided, the GradeChangeLog write and the whole
+   * derived cascade run on it, committing atomically with the canonical grade.
+   */
+  client?: PrismaClientOrTx;
+  /**
+   * Domain-event collector. When provided, the cascade PUSHES events into it and
+   * the caller (transaction owner) publishes them AFTER commit — so no event is
+   * emitted for a rolled-back change. When omitted, events are published here.
+   */
+  events?: DomainEvent[];
+}
+
+export interface GradeMutationResult {
+  progress: StudentSubjectProgress;
+  /** Events produced by the cascade (already published unless a collector was passed in). */
+  events: DomainEvent[];
 }
 
 export class GradeMutationService {
   /**
-   * Record the change and cascade progression. Returns the recalculated
-   * subject progress so callers can surface it if needed.
+   * Record the change (GradeChangeLog) and cascade progression. All writes use
+   * `params.client` when supplied so they commit atomically with the caller's
+   * transaction. Domain events are collected and returned; if the caller did not
+   * supply its own `events` collector, they are published here (legacy path).
    */
   async handleGradeMutation(
     context: AuthContext,
     params: HandleGradeMutationParams
-  ): Promise<StudentSubjectProgress> {
-    const { result, previous, source, reason } = params;
+  ): Promise<GradeMutationResult> {
+    const { result, previous, source, reason, client } = params;
     const shouldLog = params.logChange ?? true;
+
+    // If the caller owns the event lifecycle (passed a collector) it publishes
+    // after commit; otherwise we publish here once the cascade returns.
+    const callerOwnsEvents = params.events != null;
+    const events: DomainEvent[] = params.events ?? [];
 
     if (shouldLog) {
       await createGradeChangeLog({
@@ -72,7 +99,7 @@ export class GradeMutationService {
         source,
         reason,
         changedBy: context.userId,
-      });
+      }, client);
     }
 
     const cascadeParams: RecalculateSubjectProgressParams = {
@@ -82,7 +109,19 @@ export class GradeMutationService {
       auditAction: params.auditAction,
     };
 
-    return recalculateSubjectProgressCascade(context, cascadeParams);
+    const progress = await recalculateSubjectProgressCascade(context, cascadeParams, {
+      client,
+      events,
+    });
+
+    // Legacy standalone path (no external transaction/collector): publish now.
+    if (!callerOwnsEvents) {
+      for (const event of events) {
+        await eventPublisher.publish(event);
+      }
+    }
+
+    return { progress, events };
   }
 }
 

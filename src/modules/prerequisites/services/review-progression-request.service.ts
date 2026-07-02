@@ -8,6 +8,11 @@ import {
   type PersistCourseCompletionResult,
 } from "@/modules/prerequisites/engines/course-completion.engine";
 import { STUDENT_LEVEL_PROGRESS_STATUS } from "@/modules/prerequisites/types";
+import { resolveStableCompletedAt } from "@/shared/lib/completed-at";
+import {
+  LEVEL_TERMINAL_STATUSES,
+  LEVEL_COMPLETION_STATUSES,
+} from "@/modules/prerequisites/services/recalculate-level-progress.service";
 
 // =============================================================================
 // REVIEW PROGRESSION REQUEST — TRANSACTIONAL APPROVAL / REJECTION
@@ -206,7 +211,18 @@ export async function approveProgressionRequest(params: {
           courseLevelId: request.fromLevelId,
         },
       },
-      select: { finalGrade: true, earnedCredits: true },
+      select: { finalGrade: true, earnedCredits: true, status: true, completedAt: true },
+    });
+    // Same stable-completedAt rule as the recalculation path: PROMOTED is a
+    // positive completion (stamp now / preserve), but PROMOTED_WITH_PENDING_SUBJECTS
+    // is NOT academically complete and carries no completedAt.
+    const completedAt = resolveStableCompletedAt({
+      previousStatus: existing?.status ?? null,
+      previousCompletedAt: existing?.completedAt ?? null,
+      nextStatus: fromLevelStatus,
+      terminalStatuses: LEVEL_TERMINAL_STATUSES,
+      completionStatuses: LEVEL_COMPLETION_STATUSES,
+      now,
     });
     await tx.studentLevelProgress.upsert({
       where: {
@@ -225,7 +241,7 @@ export async function approveProgressionRequest(params: {
         earnedCredits,
         status: fromLevelStatus,
         progressReason: "Progressão aprovada manualmente",
-        completedAt: now,
+        completedAt,
         calculatedAt: now,
       },
       update: {
@@ -233,7 +249,7 @@ export async function approveProgressionRequest(params: {
         // Preserve any grade/credits already computed by the grade engine.
         earnedCredits: existing?.earnedCredits ?? earnedCredits,
         progressReason: "Progressão aprovada manualmente",
-        completedAt: now,
+        completedAt,
         calculatedAt: now,
       },
     });

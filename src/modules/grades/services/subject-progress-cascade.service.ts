@@ -15,9 +15,20 @@
 
 import type { AuthContext } from "@/server/auth/context";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
-import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
+import { emitOrCollect, type CascadeContext } from "@/shared/lib/cascade";
+import { resolveStableCompletedAt } from "@/shared/lib/completed-at";
 import { getDb } from "@/server/db";
+
+// completedAt semantics for StudentSubjectProgress.
+//   terminal   — statuses that carry a completedAt (PASSED, FAILED).
+//   completion — the subset that means positive completion (PASSED). FAILED is
+//                terminal but not a positive completion, so PASSED → FAILED
+//                clears the date while FAILED → PASSED stamps a new one.
+//   (INCOMPLETE / BLOCKED / IN_PROGRESS / NOT_STARTED are non-terminal. If a
+//    real RECOVERY_REQUIRED status is added later it must stay non-terminal.)
+export const SUBJECT_TERMINAL_STATUSES: ReadonlySet<string> = new Set(["PASSED", "FAILED"]);
+export const SUBJECT_COMPLETION_STATUSES: ReadonlySet<string> = new Set(["PASSED"]);
 import { findResultsByEnrollmentAndLevelSubject } from "@/modules/grades/repositories/student-assessment-result.repository";
 import { upsertStudentSubjectProgress } from "@/modules/assessments/repositories/student-subject-progress.repository";
 import { findActivePolicyForLevelSubject } from "@/modules/assessments/repositories/assessment-policy.repository";
@@ -43,20 +54,23 @@ export interface RecalculateSubjectProgressParams {
  */
 export async function recalculateSubjectProgressCascade(
   context: AuthContext,
-  params: RecalculateSubjectProgressParams
+  params: RecalculateSubjectProgressParams,
+  // Optional cascade context: when present, every read/write uses its tx client
+  // and domain events are buffered for post-commit publication (atomic cascade).
+  ctx?: CascadeContext
 ): Promise<StudentSubjectProgress> {
   const { organizationId } = context;
   const { studentId, enrollmentId, levelSubjectId } = params;
 
-  const db = await getDb();
+  const db = ctx?.client ?? await getDb();
   const levelSubject = await db.levelSubject.findFirst({
     where: { id: levelSubjectId, organizationId },
     select: { minimumPassingGrade: true, minimumAttendancePercentage: true, courseLevelId: true },
   });
 
-  const policy = await findActivePolicyForLevelSubject(levelSubjectId, organizationId);
+  const policy = await findActivePolicyForLevelSubject(levelSubjectId, organizationId, db);
   const components = policy
-    ? await findActiveComponentsByPolicy(policy.id, organizationId)
+    ? await findActiveComponentsByPolicy(policy.id, organizationId, db)
     : [];
 
   // Read from unified StudentAssessmentResult (single source of truth).
@@ -65,7 +79,8 @@ export async function recalculateSubjectProgressCascade(
   const results = await findResultsByEnrollmentAndLevelSubject(
     enrollmentId,
     levelSubjectId,
-    organizationId
+    organizationId,
+    db
   );
 
   const componentScores: GradeComponentScore[] = components.map((comp) => {
@@ -124,7 +139,22 @@ export async function recalculateSubjectProgressCascade(
     calculationResult.status === "BLOCKED" ? "BLOCKED" :
     "IN_PROGRESS";
 
-  const isTerminal = progressStatus === "PASSED" || progressStatus === "FAILED";
+  // Stable completedAt: load the prior row (in the same tx) and preserve the
+  // original completion date across recalculations. Re-running the cascade on an
+  // already-PASSED/FAILED subject must not move the date forward.
+  const existingProgress = await db.studentSubjectProgress.findFirst({
+    where: { enrollmentId, levelSubjectId, organizationId },
+    select: { status: true, completedAt: true },
+  });
+
+  const completedAt = resolveStableCompletedAt({
+    previousStatus: existingProgress?.status ?? null,
+    previousCompletedAt: existingProgress?.completedAt ?? null,
+    nextStatus: progressStatus,
+    terminalStatuses: SUBJECT_TERMINAL_STATUSES,
+    completionStatuses: SUBJECT_COMPLETION_STATUSES,
+    now: new Date(),
+  });
 
   const progress = await upsertStudentSubjectProgress({
     organizationId,
@@ -135,8 +165,8 @@ export async function recalculateSubjectProgressCascade(
     attendancePercentage: null, // inactive until the Attendance Engine lands (see note above)
     status: progressStatus,
     progressReason: calculationResult.reason,
-    completedAt: isTerminal ? new Date() : null,
-  });
+    completedAt,
+  }, db);
 
   await auditService.log(context, {
     entity: "StudentSubjectProgress",
@@ -148,15 +178,15 @@ export async function recalculateSubjectProgressCascade(
       finalGrade: progress.finalGrade,
       status: progress.status,
     },
-  });
+  }, db);
 
-  // Cascade: subject progress -> level progress -> course progress
+  // Cascade: subject progress -> level progress -> course progress (same tx + collector)
   if (levelSubject?.courseLevelId) {
-    await recalculateStudentLevelProgress(enrollmentId, levelSubject.courseLevelId, organizationId);
+    await recalculateStudentLevelProgress(enrollmentId, levelSubject.courseLevelId, organizationId, ctx);
   }
 
   if (progressStatus === "PASSED") {
-    await eventPublisher.publish({
+    await emitOrCollect(ctx, {
       organizationId,
       eventType: DomainEventType.STUDENT_SUBJECT_PASSED,
       aggregateType: DomainAggregateType.STUDENT,
@@ -165,7 +195,7 @@ export async function recalculateSubjectProgressCascade(
       payload: { studentId, enrollmentId, levelSubjectId, finalGrade: progress.finalGrade, progressId: progress.id },
     });
   } else if (progressStatus === "FAILED") {
-    await eventPublisher.publish({
+    await emitOrCollect(ctx, {
       organizationId,
       eventType: DomainEventType.STUDENT_SUBJECT_FAILED,
       aggregateType: DomainAggregateType.STUDENT,

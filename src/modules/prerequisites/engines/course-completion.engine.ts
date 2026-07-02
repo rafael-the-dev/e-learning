@@ -1,7 +1,7 @@
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import { findLevelProgressByEnrollment } from "@/modules/prerequisites/repositories/student-level-progress.repository";
-import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
+import { emitOrCollect, type CascadeContext } from "@/shared/lib/cascade";
 import type { StudentCourseProgress } from "@/modules/prerequisites/types";
 import {
   getCourseCompletionStrategy,
@@ -196,17 +196,34 @@ export function logCourseCompletionEvaluation(entry: {
 
 // ─── Side effects (audit + domain event) ───────────────────────────────────────
 // Emitted ONLY on a status boundary crossing (COMPLETED entered / left), so
-// passive recalculations don't spam the audit log. MUST be called AFTER the
-// owning DB transaction commits (the event bus contract requires it).
+// passive recalculations don't spam the audit log.
+//
+// Transaction contract:
+//   * The AUDIT row is written through the provided `client`, so it commits (or
+//     rolls back) atomically with the StudentCourseProgress change.
+//   * The DOMAIN EVENT is published only AFTER the owning transaction commits
+//     (event-bus contract). When a CascadeContext with an `events` collector is
+//     supplied, the event is buffered for the transaction owner to publish after
+//     commit; otherwise it is published immediately (legacy standalone path).
 
-export async function emitCourseCompletionSideEffects(params: {
+export interface CourseCompletionSideEffectParams {
   organizationId: string;
   actorId?: string | null;
   progress: StudentCourseProgress;
   previousStatus: string | null;
   transition: CourseCompletionTransition;
   completionReason: CourseCompletionReason;
-}): Promise<void> {
+}
+
+/**
+ * Write the completion audit row through `client` and dispatch the lifecycle
+ * event via the cascade context (buffer when transactional, publish otherwise).
+ */
+export async function applyCourseCompletionSideEffects(
+  client: PrismaClientOrTx,
+  ctx: CascadeContext | undefined,
+  params: CourseCompletionSideEffectParams
+): Promise<void> {
   const { organizationId, actorId, progress, previousStatus, transition, completionReason } = params;
 
   const isCompleted = transition === "COMPLETED";
@@ -226,10 +243,9 @@ export async function emitCourseCompletionSideEffects(params: {
     completedAt: progress.completedAt,
   };
 
-  const db = await getDb();
   // Written directly (not via auditService.log) so a system-driven cascade with
   // no acting user records actorId = null instead of a bogus user id.
-  await db.auditLog.create({
+  await client.auditLog.create({
     data: {
       organizationId,
       actorId: actorId ?? null,
@@ -240,7 +256,7 @@ export async function emitCourseCompletionSideEffects(params: {
     },
   });
 
-  await eventPublisher.publish({
+  await emitOrCollect(ctx, {
     organizationId,
     eventType,
     aggregateType: DomainAggregateType.STUDENT,
@@ -250,6 +266,18 @@ export async function emitCourseCompletionSideEffects(params: {
   });
 }
 
+/**
+ * Post-commit convenience wrapper: writes the audit row on the global client and
+ * publishes the event immediately. Used by callers (e.g. the manual-approval
+ * service) that emit side effects AFTER their own transaction has committed.
+ */
+export async function emitCourseCompletionSideEffects(
+  params: CourseCompletionSideEffectParams
+): Promise<void> {
+  const db = await getDb();
+  await applyCourseCompletionSideEffects(db, undefined, params);
+}
+
 // ─── IO wrapper ───────────────────────────────────────────────────────────────
 
 export async function evaluateCourseCompletion(
@@ -257,10 +285,13 @@ export async function evaluateCourseCompletion(
   organizationId: string,
   // Optional: the acting user when known (e.g. a manual recalculation). System
   // cascades (grade engine → level → course) leave this null.
-  actorId?: string | null
+  actorId?: string | null,
+  // Optional cascade context: when present, all reads/writes use its tx client
+  // and the lifecycle event is buffered for post-commit publication.
+  ctx?: CascadeContext
 ): Promise<StudentCourseProgress> {
   const startedAt = Date.now();
-  const db = await getDb();
+  const db = ctx?.client ?? await getDb();
 
   const enrollment = await db.enrollment.findFirst({
     where: { id: enrollmentId, organizationId, deletedAt: null },
@@ -275,7 +306,7 @@ export async function evaluateCourseCompletion(
     orderBy: { order: "asc" },
   });
 
-  const levelProgress = await findLevelProgressByEnrollment(enrollmentId, organizationId);
+  const levelProgress = await findLevelProgressByEnrollment(enrollmentId, organizationId, db);
 
   const decision = decideCourseCompletion(
     courseLevels.map((l) => ({ id: l.id, order: l.order, weight: l.totalHours ?? null })),
@@ -308,7 +339,9 @@ export async function evaluateCourseCompletion(
   });
 
   if (result.transition) {
-    await emitCourseCompletionSideEffects({
+    // Audit row joins this cascade's transaction (via db, which is the tx client
+    // when ctx.client is set); the event is buffered/published per ctx.
+    await applyCourseCompletionSideEffects(db, ctx, {
       organizationId,
       actorId,
       progress: result.progress,

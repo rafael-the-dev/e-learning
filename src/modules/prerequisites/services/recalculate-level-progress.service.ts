@@ -3,13 +3,31 @@ import { upsertStudentLevelProgress } from "@/modules/prerequisites/repositories
 import { evaluateLevelProgression, computeWeightedLevelGrade } from "@/modules/prerequisites/engines/level-progression.engine";
 import { evaluateCourseCompletion } from "@/modules/prerequisites/engines/course-completion.engine";
 import { PROGRESSION_OUTCOME } from "@/modules/prerequisites/types";
+import type { CascadeContext } from "@/shared/lib/cascade";
+import { resolveStableCompletedAt } from "@/shared/lib/completed-at";
+
+// completedAt semantics for StudentLevelProgress.
+//   terminal   — statuses that carry a completedAt (PASSED, FAILED, PROMOTED, COMPLETED).
+//   completion — the subset that means positive completion (PASSED, PROMOTED, COMPLETED).
+//   PROMOTED_WITH_PENDING_SUBJECTS / ELIGIBLE_TO_PROGRESS / RECOVERY_REQUIRED /
+//   BLOCKED / IN_PROGRESS / NOT_STARTED are NON-terminal — a level advanced with
+//   pending subjects is not academically complete, so it carries no completedAt.
+export const LEVEL_TERMINAL_STATUSES: ReadonlySet<string> = new Set([
+  "PASSED", "FAILED", "PROMOTED", "COMPLETED",
+]);
+export const LEVEL_COMPLETION_STATUSES: ReadonlySet<string> = new Set([
+  "PASSED", "PROMOTED", "COMPLETED",
+]);
 
 export async function recalculateStudentLevelProgress(
   enrollmentId: string,
   courseLevelId: string,
-  organizationId: string
+  organizationId: string,
+  // Optional cascade context: threads the tx client + event collector so the
+  // level and course recalculation commit atomically with the grade mutation.
+  ctx?: CascadeContext
 ): Promise<void> {
-  const db = await getDb();
+  const db = ctx?.client ?? await getDb();
 
   const enrollment = await db.enrollment.findFirst({
     where: { id: enrollmentId, organizationId, deletedAt: null },
@@ -68,7 +86,6 @@ export async function recalculateStudentLevelProgress(
 
   let levelStatus: string;
   let progressReason: string | null = null;
-  let completedAt: Date | null = null;
 
   const totalSubjects = levelSubjects.length;
   const passedCount = subjectProgress.filter((p) => p.status === "PASSED").length;
@@ -78,18 +95,16 @@ export async function recalculateStudentLevelProgress(
   } else if (passedCount === totalSubjects) {
     levelStatus = "PASSED";
     progressReason = "Todas as disciplinas aprovadas";
-    completedAt = new Date();
   } else if (failedRequired > 0 && !anyInProgress) {
     levelStatus = "FAILED";
     progressReason = `${failedRequired} disciplina(s) obrigatória(s) reprovada(s)`;
-    completedAt = new Date();
   } else {
     levelStatus = "IN_PROGRESS";
   }
 
   // Check if level is eligible for progression
   if (levelStatus === "PASSED" || levelStatus === "IN_PROGRESS" || levelStatus === "FAILED") {
-    const progressionResult = await evaluateLevelProgression(enrollmentId, courseLevelId, organizationId);
+    const progressionResult = await evaluateLevelProgression(enrollmentId, courseLevelId, organizationId, db);
     if (progressionResult.outcome === PROGRESSION_OUTCOME.PROMOTED && levelStatus === "PASSED") {
       levelStatus = "PROMOTED";
     } else if (progressionResult.outcome === PROGRESSION_OUTCOME.PROMOTED_WITH_PENDING_SUBJECTS) {
@@ -99,6 +114,24 @@ export async function recalculateStudentLevelProgress(
       levelStatus = "ELIGIBLE_TO_PROGRESS";
     }
   }
+
+  // Stable completedAt: resolved from the FINAL level status (after the
+  // progression block) against the prior row read in the same tx. Re-running the
+  // cascade on an already-completed level must not move the date; a level that
+  // advanced carrying pending subjects (PROMOTED_WITH_PENDING_SUBJECTS) is not
+  // academically complete and carries no completedAt.
+  const existingLevel = await db.studentLevelProgress.findFirst({
+    where: { enrollmentId, courseLevelId, organizationId },
+    select: { status: true, completedAt: true },
+  });
+  const completedAt = resolveStableCompletedAt({
+    previousStatus: existingLevel?.status ?? null,
+    previousCompletedAt: existingLevel?.completedAt ?? null,
+    nextStatus: levelStatus,
+    terminalStatuses: LEVEL_TERMINAL_STATUSES,
+    completionStatuses: LEVEL_COMPLETION_STATUSES,
+    now: new Date(),
+  });
 
   await upsertStudentLevelProgress({
     organizationId,
@@ -111,8 +144,8 @@ export async function recalculateStudentLevelProgress(
     status: levelStatus,
     progressReason,
     completedAt,
-  });
+  }, db);
 
-  // Cascade to course progress
-  await evaluateCourseCompletion(enrollmentId, organizationId);
+  // Cascade to course progress (same tx client + event collector).
+  await evaluateCourseCompletion(enrollmentId, organizationId, null, ctx);
 }

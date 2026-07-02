@@ -68,12 +68,16 @@ describe("GradeMutationService.handleGradeMutation", () => {
         source: "UPDATE",
         reason: "correção de erro de lançamento",
         changedBy: "u1",
-      })
+      }),
+      // client arg (undefined here — no transaction supplied by this test)
+      undefined
     );
 
+    // Cascade receives context, params, and the cascade context (client + events collector).
     expect(cascadeMock).toHaveBeenCalledWith(
       context,
-      expect.objectContaining({ studentId: "s1", enrollmentId: "e1", levelSubjectId: "ls1" })
+      expect.objectContaining({ studentId: "s1", enrollmentId: "e1", levelSubjectId: "ls1" }),
+      expect.objectContaining({ events: expect.any(Array) })
     );
   });
 
@@ -88,7 +92,8 @@ describe("GradeMutationService.handleGradeMutation", () => {
     });
 
     expect(createGradeChangeLogMock).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "INVALIDATE", newStatus: "CANCELLED" })
+      expect.objectContaining({ source: "INVALIDATE", newStatus: "CANCELLED" }),
+      undefined
     );
     expect(cascadeMock).toHaveBeenCalledTimes(1);
   });
@@ -104,7 +109,8 @@ describe("GradeMutationService.handleGradeMutation", () => {
     });
 
     expect(createGradeChangeLogMock).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "RECOVERY", oldGrade: 40, newGrade: 65 })
+      expect.objectContaining({ source: "RECOVERY", oldGrade: 40, newGrade: 65 }),
+      undefined
     );
     expect(cascadeMock).toHaveBeenCalledTimes(1);
   });
@@ -120,7 +126,8 @@ describe("GradeMutationService.handleGradeMutation", () => {
     });
 
     expect(createGradeChangeLogMock).toHaveBeenCalledWith(
-      expect.objectContaining({ oldGrade: null, oldNormalizedGrade: null, oldStatus: null, source: "CREATE" })
+      expect.objectContaining({ oldGrade: null, oldNormalizedGrade: null, oldStatus: null, source: "CREATE" }),
+      undefined
     );
   });
 
