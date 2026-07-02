@@ -80,10 +80,15 @@ or `COMPLETED`. Otherwise:
 | No levels / no progress                               | `NOT_STARTED` | `NOT_STARTED` |
 | All levels done                                       | `COMPLETED`   | `ALL_LEVELS_COMPLETED` |
 | A `FAILED` level and nothing in progress              | `FAILED`      | `FAILED_REQUIRED_LEVEL` |
-| Any `RECOVERY_REQUIRED` level                         | `IN_PROGRESS` | `PENDING_RECOVERY` |
+| Any `RECOVERY_REQUIRED` level (unresolved)            | `RECOVERY_REQUIRED` | `PENDING_RECOVERY` |
 | Any `ELIGIBLE_TO_PROGRESS` / `PROMOTED_WITH_PENDING_SUBJECTS` | `IN_PROGRESS` | `PENDING_MANUAL_APPROVAL` |
 | Otherwise in progress / not started levels            | `IN_PROGRESS` | `LEVEL_IN_PROGRESS` |
 | Unknown/unmapped level status                         | `IN_PROGRESS` | `LEVEL_IN_PROGRESS` (fail-safe: never auto-completes) |
+
+A pending recovery **dominates**: `RECOVERY_REQUIRED` is evaluated before the
+`FAILED` rule, so a course with both a recovering level and a failed level stays
+`RECOVERY_REQUIRED` (never definitively `FAILED`) until recovery is resolved or
+exhausted. See the *Recovery Lifecycle* in [`grade-engine.md`](./grade-engine.md).
 
 `completionReason` is **derived, not persisted** (current scope). It is surfaced on
 the in-memory decision, structured logs, and domain-event payloads for dashboards

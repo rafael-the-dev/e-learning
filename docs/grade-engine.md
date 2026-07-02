@@ -137,7 +137,8 @@ The `LevelSubject` setting always takes precedence, allowing different passing t
 | `FAILED` | Failed and `allowRecovery = false` |
 | `BLOCKED` | Policy or components missing |
 
-`RECOVERY_REQUIRED` is mapped to `FAILED` when writing to `StudentSubjectProgress`.
+`RECOVERY_REQUIRED` is **preserved** as a real, non-terminal `StudentSubjectProgress`
+status — it is **not** mapped to `FAILED` (see *Recovery Lifecycle* below).
 
 ---
 
@@ -388,6 +389,51 @@ A graded `AssessmentRetake` writes back into the canonical
 decided by the pure **`GradeResolutionEngine`** with strategies `BEST_SCORE`
 (safe default), `LAST_SCORE`, `REPLACE` and `AVERAGE`. Recovery is never a
 dead-end: after write-back the full cascade runs.
+
+### Recovery Lifecycle
+
+`RECOVERY_REQUIRED` is a **real, non-terminal academic state**, not a synonym for
+failure. When the normal evaluation fails (`finalGrade < minimum`) and the policy
+allows recovery, the subject is **unresolved**, not failed:
+
+- **Subject** — `StudentSubjectProgress.status = RECOVERY_REQUIRED` (no
+  `completedAt`; it is not in the terminal set). It must **not** collapse to
+  `FAILED`.
+- **Level** — a required subject in `RECOVERY_REQUIRED` makes
+  `StudentLevelProgress.status = RECOVERY_REQUIRED` (unresolved, no `completedAt`,
+  not eligible for progression). It is **not** counted as a failed subject.
+- **Course** — a level in `RECOVERY_REQUIRED` makes
+  `StudentCourseProgress.status = RECOVERY_REQUIRED` with
+  `completionReason = PENDING_RECOVERY`. The course is **never** `COMPLETED` and
+  **never** `FAILED` while recovery is pending.
+
+**Resolution & no double-counting.** There is exactly **one** canonical
+`StudentAssessmentResult` per `(enrollmentId, assessmentComponentId)` (DB unique
+constraint). The recovery write-back **upserts that same row**, replacing its
+grade with the effective grade already resolved by `GradeResolutionEngine`
+(original vs recovery) at write time. The cascade reads one row per component, so
+original and recovery grades are **never summed** — each component contributes its
+single resolved grade. (The prior grade is retained in `GradeChangeLog`
+`old→new`, for the transcript.)
+
+**Attempt limits.** Default is **one recovery attempt**: the subject stays
+`RECOVERY_REQUIRED` until a `RECOVERY`-sourced result exists; if that result still
+fails, the subject becomes terminal `FAILED` (`completedAt` stamped). If it
+passes, the subject becomes `PASSED` (`completedAt` stamped). Multi-round recovery
+(`policy.maxRetakes > 1`) is a documented future extension — it needs an attempt
+count (`AssessmentRetake` / `RECOVERY` change-log rows), which the single canonical
+row per component does not track.
+
+**Audit.** Recovery transitions emit dedicated audit actions on
+`StudentSubjectProgress`: `student_subject_progress.recovery_required` (entry),
+`student_subject_progress.recovered` (→ PASSED),
+`student_subject_progress.failed_after_recovery` (→ FAILED). The recovery grade
+itself is audited via `assessment_retake.graded` and a `GradeChangeLog` with
+`source = RECOVERY`.
+
+**Transcript.** The original grade (from `GradeChangeLog`), the recovery grade
+(`sourceType = RECOVERY`), the effective grade and the strategy are all available;
+the original failing grade is not hidden.
 
 ### Publication vs calculation
 

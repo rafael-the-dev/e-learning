@@ -49,6 +49,19 @@ humana.
 > para o nível de origem. Detalhes em
 > [`grade-engine.md`](./grade-engine.md) → *Stable `completedAt`*.
 
+> **Recuperação (`RECOVERY_REQUIRED`) é um estado real, não terminal.** Reprovar a
+> avaliação normal com recuperação permitida deixa a disciplina **por resolver**, não
+> reprovada: `StudentSubjectProgress` fica `RECOVERY_REQUIRED` (sem `completedAt`), o
+> nível fica `RECOVERY_REQUIRED` (não conta como reprovado, não progride) e o curso
+> fica `RECOVERY_REQUIRED` com `completionReason = PENDING_RECOVERY`. Enquanto a
+> recuperação está pendente, nível e curso **não** podem ficar definitivamente
+> reprovados nem concluídos. A nota de recuperação é uma linha canónica
+> `StudentAssessmentResult` com `sourceType = RECOVERY`; existe uma única linha por
+> componente (o `GradeResolutionEngine` resolve a nota efetiva na escrita), pelo que
+> original e recuperação nunca são somados. Por omissão há **uma** tentativa de
+> recuperação; falhando-a, a disciplina passa a `FAILED`. Detalhes em
+> [`grade-engine.md`](./grade-engine.md) → *Recovery Lifecycle*.
+
 ---
 
 ## 1. Quando surge `MANUAL_APPROVAL`
