@@ -243,17 +243,22 @@ export class StandardCourseCompletionStrategy implements CourseCompletionStrateg
       progressReason = "Todos os níveis concluídos";
       completed = true;
       completionReason = COURSE_COMPLETION_REASON.ALL_LEVELS_COMPLETED;
+    } else if (anyRecovery) {
+      // Recovery pending on a level: the course is UNRESOLVED. It must not fail
+      // definitively (recovery may still pass) nor complete. Distinct status so
+      // it is explicit on transcripts/dashboards, never COMPLETED, never FAILED.
+      status = "RECOVERY_REQUIRED";
+      progressReason = "Recuperação pendente";
+      completionReason = COURSE_COMPLETION_REASON.PENDING_RECOVERY;
     } else if (anyFailed && !anyInProgress) {
       status = "FAILED";
       progressReason = "Reprovação em disciplinas obrigatórias";
       completionReason = COURSE_COMPLETION_REASON.FAILED_REQUIRED_LEVEL;
     } else {
       status = "IN_PROGRESS";
-      completionReason = anyRecovery
-        ? COURSE_COMPLETION_REASON.PENDING_RECOVERY
-        : anyManualPending
-          ? COURSE_COMPLETION_REASON.PENDING_MANUAL_APPROVAL
-          : COURSE_COMPLETION_REASON.LEVEL_IN_PROGRESS;
+      completionReason = anyManualPending
+        ? COURSE_COMPLETION_REASON.PENDING_MANUAL_APPROVAL
+        : COURSE_COMPLETION_REASON.LEVEL_IN_PROGRESS;
     }
 
     return { status, finalGrade, earnedCredits: totalEarnedCredits, progressReason, completed, completionReason };

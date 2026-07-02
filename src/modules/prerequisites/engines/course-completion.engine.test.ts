@@ -86,7 +86,6 @@ describe("decideCourseCompletion — ambiguous level statuses", () => {
 
   for (const status of [
     "ELIGIBLE_TO_PROGRESS",
-    "RECOVERY_REQUIRED",
     "BLOCKED",
     "PROMOTED_WITH_PENDING_SUBJECTS",
   ]) {
@@ -99,6 +98,17 @@ describe("decideCourseCompletion — ambiguous level statuses", () => {
       expect(decision.completed).toBe(false);
     });
   }
+
+  // RECOVERY_REQUIRED is now surfaced as its own course status (unresolved), not
+  // COMPLETED and not FAILED — see the recovery-lifecycle tests in the strategy.
+  it("RECOVERY_REQUIRED on a level → RECOVERY_REQUIRED, not COMPLETED", () => {
+    const decision = decideCourseCompletion(levels, [
+      lp("l1", "RECOVERY_REQUIRED", 40, 0),
+      lp("l2", "PASSED", 80, 10),
+    ]);
+    expect(decision.status).toBe("RECOVERY_REQUIRED");
+    expect(decision.completed).toBe(false);
+  });
 
   it("FAILED + IN_PROGRESS together → IN_PROGRESS, not FAILED", () => {
     const decision = decideCourseCompletion(levels, [

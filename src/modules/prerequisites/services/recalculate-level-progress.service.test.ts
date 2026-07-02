@@ -117,3 +117,43 @@ describe("recalculateStudentLevelProgress — stable completedAt", () => {
     expect(completedAtArg()).toBeNull();
   });
 });
+
+describe("recalculateStudentLevelProgress — recovery lifecycle", () => {
+  function setRecovery() {
+    mocks.levelSubjectFindMany.mockResolvedValue([{ id: "ls1", isRequired: true, credits: 1, workloadHours: 10 }]);
+    mocks.subjectProgressFindMany.mockResolvedValue([
+      { levelSubjectId: "ls1", status: "RECOVERY_REQUIRED", finalGrade: 45 },
+    ]);
+  }
+
+  it("a required subject in RECOVERY_REQUIRED makes the level RECOVERY_REQUIRED (not FAILED)", async () => {
+    setRecovery();
+    mocks.levelProgressFindFirst.mockResolvedValue(null);
+
+    await recalculateStudentLevelProgress(ENR, LVL, ORG);
+
+    expect(statusArg()).toBe("RECOVERY_REQUIRED");
+    expect(statusArg()).not.toBe("FAILED");
+  });
+
+  it("a RECOVERY_REQUIRED level has completedAt = null and does not evaluate progression", async () => {
+    setRecovery();
+    mocks.levelProgressFindFirst.mockResolvedValue(null);
+
+    await recalculateStudentLevelProgress(ENR, LVL, ORG);
+
+    expect(completedAtArg()).toBeNull();
+    // Recovery pending → the level is not eligible for progression.
+    expect(mocks.evaluateLevelProgression).not.toHaveBeenCalled();
+  });
+
+  it("after recovery passes, the level recalculates to PASSED", async () => {
+    setSubjects(true); // all subjects PASSED
+    mocks.levelProgressFindFirst.mockResolvedValue({ status: "RECOVERY_REQUIRED", completedAt: null });
+
+    await recalculateStudentLevelProgress(ENR, LVL, ORG);
+
+    expect(statusArg()).toBe("PASSED");
+    expect(completedAtArg()).toBeInstanceOf(Date);
+  });
+});

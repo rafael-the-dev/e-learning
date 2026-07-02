@@ -53,8 +53,10 @@ export async function recalculateStudentLevelProgress(
 
   let earnedCredits = 0;
   let failedRequired = 0;
-  let pendingSubjects = 0;
   let anyInProgress = false;
+  // Required subjects still in the (non-terminal) RECOVERY_REQUIRED state. While
+  // any exist the level is UNRESOLVED — it must not finalise as FAILED.
+  let recoveryRequiredRequired = 0;
 
   for (const ls of levelSubjects) {
     const p = progressMap.get(ls.id);
@@ -64,11 +66,10 @@ export async function recalculateStudentLevelProgress(
       earnedCredits += ls.credits ?? 0;
     } else if (status === "FAILED") {
       if (ls.isRequired) failedRequired++;
+    } else if (status === "RECOVERY_REQUIRED") {
+      if (ls.isRequired) recoveryRequiredRequired++;
     } else if (status === "IN_PROGRESS") {
       anyInProgress = true;
-      pendingSubjects++;
-    } else {
-      pendingSubjects++;
     }
   }
 
@@ -95,6 +96,11 @@ export async function recalculateStudentLevelProgress(
   } else if (passedCount === totalSubjects) {
     levelStatus = "PASSED";
     progressReason = "Todas as disciplinas aprovadas";
+  } else if (recoveryRequiredRequired > 0) {
+    // Recovery pending on a required subject: the level is unresolved and must
+    // NOT finalise as FAILED (or advance) until recovery is completed/exhausted.
+    levelStatus = "RECOVERY_REQUIRED";
+    progressReason = `${recoveryRequiredRequired} disciplina(s) obrigatória(s) em recuperação`;
   } else if (failedRequired > 0 && !anyInProgress) {
     levelStatus = "FAILED";
     progressReason = `${failedRequired} disciplina(s) obrigatória(s) reprovada(s)`;

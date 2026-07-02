@@ -63,7 +63,7 @@ beforeEach(() => {
   mocks.findActiveComponentsByPolicy.mockResolvedValue([
     { id: "c1", weight: 1, maxGrade: 100, isRequired: true },
   ]);
-  mocks.upsertStudentSubjectProgress.mockImplementation(async (data: any) => ({
+  mocks.upsertStudentSubjectProgress.mockImplementation(async (data: Record<string, unknown>) => ({
     id: "prog-1",
     ...data,
   }));
@@ -157,6 +157,122 @@ describe("recalculateSubjectProgressCascade", () => {
       await recalculateSubjectProgressCascade(context, params);
 
       expect(completedAtArg()).toBeNull();
+    });
+  });
+
+  // Recovery lifecycle: a failing grade with allowRecovery is RECOVERY_REQUIRED,
+  // a real non-terminal state — it must NOT collapse to FAILED.
+  describe("recovery lifecycle", () => {
+    const statusArg = () => mocks.upsertStudentSubjectProgress.mock.calls[0][0].status as string;
+    const completedAtArg = () => mocks.upsertStudentSubjectProgress.mock.calls[0][0].completedAt as Date | null;
+    const auditActions = () =>
+      mocks.auditLog.mock.calls.map((c: unknown[]) => (c[1] as { action: string }).action);
+
+    const allowRecovery = (allow: boolean) =>
+      mocks.findActivePolicyForLevelSubject.mockResolvedValue({
+        id: "p1", calculationMethod: "SIMPLE_AVERAGE", roundingMethod: "NONE",
+        minimumPassingGrade: 50, allowRecovery: allow,
+      });
+
+    it("failing grade + allowRecovery=true (no recovery yet) → RECOVERY_REQUIRED, not FAILED", async () => {
+      allowRecovery(true);
+      mocks.subjectProgressFindFirst.mockResolvedValue(null);
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue([
+        { assessmentComponentId: "c1", grade: 45, normalizedGrade: 45, sourceType: "CONTINUOUS" },
+      ]);
+
+      const progress = await recalculateSubjectProgressCascade(context, params);
+
+      expect(progress.status).toBe("RECOVERY_REQUIRED");
+      expect(statusArg()).not.toBe("FAILED");
+    });
+
+    it("RECOVERY_REQUIRED does not set completedAt (non-terminal)", async () => {
+      allowRecovery(true);
+      mocks.subjectProgressFindFirst.mockResolvedValue(null);
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue([
+        { assessmentComponentId: "c1", grade: 45, normalizedGrade: 45, sourceType: "CONTINUOUS" },
+      ]);
+
+      await recalculateSubjectProgressCascade(context, params);
+
+      expect(completedAtArg()).toBeNull();
+    });
+
+    it("emits a student_subject_progress.recovery_required audit on entry", async () => {
+      allowRecovery(true);
+      mocks.subjectProgressFindFirst.mockResolvedValue({ status: "IN_PROGRESS", completedAt: null });
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue([
+        { assessmentComponentId: "c1", grade: 45, normalizedGrade: 45, sourceType: "CONTINUOUS" },
+      ]);
+
+      await recalculateSubjectProgressCascade(context, params);
+
+      expect(auditActions()).toContain("student_subject_progress.recovery_required");
+    });
+
+    it("failing grade + allowRecovery=false → FAILED (terminal, completedAt stamped)", async () => {
+      allowRecovery(false);
+      mocks.subjectProgressFindFirst.mockResolvedValue(null);
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue([
+        { assessmentComponentId: "c1", grade: 45, normalizedGrade: 45, sourceType: "CONTINUOUS" },
+      ]);
+
+      const progress = await recalculateSubjectProgressCascade(context, params);
+
+      expect(progress.status).toBe("FAILED");
+      expect(completedAtArg()).toBeInstanceOf(Date);
+    });
+
+    it("RECOVERY_REQUIRED → PASSED after a successful recovery stamps completedAt + audits 'recovered'", async () => {
+      allowRecovery(true);
+      mocks.subjectProgressFindFirst.mockResolvedValue({ status: "RECOVERY_REQUIRED", completedAt: null });
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue([
+        { assessmentComponentId: "c1", grade: 65, normalizedGrade: 65, sourceType: "RECOVERY" },
+      ]);
+
+      const progress = await recalculateSubjectProgressCascade(context, params);
+
+      expect(progress.status).toBe("PASSED");
+      expect(completedAtArg()).toBeInstanceOf(Date);
+      expect(auditActions()).toContain("student_subject_progress.recovered");
+    });
+
+    it("RECOVERY_REQUIRED → FAILED once the recovery attempt is used and still failing (exhausted)", async () => {
+      allowRecovery(true);
+      mocks.subjectProgressFindFirst.mockResolvedValue({ status: "RECOVERY_REQUIRED", completedAt: null });
+      // A RECOVERY-sourced canonical row exists but still below the minimum.
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue([
+        { assessmentComponentId: "c1", grade: 45, normalizedGrade: 45, sourceType: "RECOVERY" },
+      ]);
+
+      const progress = await recalculateSubjectProgressCascade(context, params);
+
+      expect(progress.status).toBe("FAILED");
+      expect(completedAtArg()).toBeInstanceOf(Date);
+      expect(auditActions()).toContain("student_subject_progress.failed_after_recovery");
+    });
+
+    it("resolves each component independently from its single canonical row (no double-count)", async () => {
+      // Two components, each with exactly one (recovery-resolved) row: the final
+      // grade must average the two once — never sum an original + recovery.
+      mocks.findActivePolicyForLevelSubject.mockResolvedValue({
+        id: "p1", calculationMethod: "SIMPLE_AVERAGE", roundingMethod: "NONE",
+        minimumPassingGrade: 50, allowRecovery: true,
+      });
+      mocks.findActiveComponentsByPolicy.mockResolvedValue([
+        { id: "c1", weight: 1, maxGrade: 100, isRequired: true },
+        { id: "c2", weight: 1, maxGrade: 100, isRequired: true },
+      ]);
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue([
+        { assessmentComponentId: "c1", grade: 60, normalizedGrade: 60, sourceType: "RECOVERY" },
+        { assessmentComponentId: "c2", grade: 80, normalizedGrade: 80, sourceType: "CONTINUOUS" },
+      ]);
+
+      const progress = await recalculateSubjectProgressCascade(context, params);
+
+      expect(progress.finalGrade).toBe(70); // (60 + 80) / 2 — each component counted once
+      expect(progress.status).toBe("PASSED");
     });
   });
 });

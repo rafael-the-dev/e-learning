@@ -131,11 +131,26 @@ export async function recalculateSubjectProgressCascade(
     };
   }
 
+  // Recovery lifecycle: a failing grade with allowRecovery yields RECOVERY_REQUIRED
+  // from the calculation service. RECOVERY_REQUIRED is a REAL, non-terminal state —
+  // it must NOT collapse to FAILED, otherwise the level/course fail prematurely
+  // before the student has taken (or exhausted) recovery.
+  //
+  // Attempt limit (one recovery attempt by default): recovery is only "exhausted"
+  // once a RECOVERY-sourced result has already been written and the subject still
+  // fails. We detect that via the canonical row's sourceType (the retake write-back
+  // sets sourceType = RECOVERY). Until then the subject stays RECOVERY_REQUIRED.
+  // NOTE: multi-round recovery (policy.maxRetakes > 1) is a documented future
+  // extension — it needs an attempt COUNT (AssessmentRetake / RECOVERY change logs),
+  // which the single canonical row per component does not track. See grade-engine.md.
+  const hasRecoveryResult = results.some((r) => r.sourceType === "RECOVERY");
+
   const progressStatus =
     calculationResult.status === "PASSED" ? "PASSED" :
     calculationResult.status === "FAILED" ? "FAILED" :
-    calculationResult.status === "RECOVERY_REQUIRED" ? "FAILED" :
-    calculationResult.status === "INCOMPLETE" ? "INCOMPLETE" :
+    calculationResult.status === "RECOVERY_REQUIRED"
+      ? (hasRecoveryResult ? "FAILED" : "RECOVERY_REQUIRED")
+      : calculationResult.status === "INCOMPLETE" ? "INCOMPLETE" :
     calculationResult.status === "BLOCKED" ? "BLOCKED" :
     "IN_PROGRESS";
 
@@ -179,6 +194,27 @@ export async function recalculateSubjectProgressCascade(
       status: progress.status,
     },
   }, db);
+
+  // Recovery-lifecycle audit: emit a precise action on the recovery transitions so
+  // every recovery decision is traceable (required / recovered / failed-after-recovery).
+  const prevStatus = existingProgress?.status ?? null;
+  const recoveryAction =
+    progressStatus === "RECOVERY_REQUIRED" && prevStatus !== "RECOVERY_REQUIRED"
+      ? "student_subject_progress.recovery_required"
+      : prevStatus === "RECOVERY_REQUIRED" && progressStatus === "PASSED"
+        ? "student_subject_progress.recovered"
+        : prevStatus === "RECOVERY_REQUIRED" && progressStatus === "FAILED"
+          ? "student_subject_progress.failed_after_recovery"
+          : null;
+  if (recoveryAction) {
+    await auditService.log(context, {
+      entity: "StudentSubjectProgress",
+      entityId: progress.id,
+      action: recoveryAction,
+      oldValues: { status: prevStatus },
+      newValues: { studentId, levelSubjectId, finalGrade: progress.finalGrade, status: progress.status },
+    }, db);
+  }
 
   // Cascade: subject progress -> level progress -> course progress (same tx + collector)
   if (levelSubject?.courseLevelId) {

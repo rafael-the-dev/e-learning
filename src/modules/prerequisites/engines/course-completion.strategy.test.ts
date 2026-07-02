@@ -72,10 +72,35 @@ describe("StandardCourseCompletionStrategy — status + completionReason", () =>
     expect(d.completionReason).toBe(COURSE_COMPLETION_REASON.FAILED_REQUIRED_LEVEL);
   });
 
-  it("a RECOVERY_REQUIRED level → IN_PROGRESS / PENDING_RECOVERY", () => {
+  it("a RECOVERY_REQUIRED level → RECOVERY_REQUIRED / PENDING_RECOVERY (unresolved, never COMPLETED/FAILED)", () => {
     const d = decide(levels, [P("l1", "RECOVERY_REQUIRED", 40, 0), P("l2", "PASSED", 80, 10)]);
-    expect(d.status).toBe("IN_PROGRESS");
+    expect(d.status).toBe("RECOVERY_REQUIRED");
+    expect(d.completed).toBe(false);
     expect(d.completionReason).toBe(COURSE_COMPLETION_REASON.PENDING_RECOVERY);
+  });
+
+  it("recovery pending is NOT FAILED even alongside a failed level (recovery may still pass)", () => {
+    const d = decide(levels, [P("l1", "RECOVERY_REQUIRED", 40, 0), P("l2", "FAILED", 30, 0)]);
+    expect(d.status).toBe("RECOVERY_REQUIRED");
+    expect(d.completionReason).toBe(COURSE_COMPLETION_REASON.PENDING_RECOVERY);
+  });
+
+  it("recovery pending is NOT COMPLETED even when every other level is done", () => {
+    const d = decide(levels, [P("l1", "RECOVERY_REQUIRED", 40, 0), P("l2", "PROMOTED", 80, 10)]);
+    expect(d.status).toBe("RECOVERY_REQUIRED");
+    expect(d.completed).toBe(false);
+  });
+
+  it("after recovery passes, the course recalculates to COMPLETED", () => {
+    const d = decide(levels, [P("l1", "PASSED", 60, 10), P("l2", "PROMOTED", 80, 10)]);
+    expect(d.status).toBe("COMPLETED");
+    expect(d.completed).toBe(true);
+  });
+
+  it("after recovery is exhausted (level FAILED, nothing pending), the course may become FAILED", () => {
+    const d = decide(levels, [P("l1", "FAILED", 45, 0), P("l2", "PASSED", 80, 10)]);
+    expect(d.status).toBe("FAILED");
+    expect(d.completionReason).toBe(COURSE_COMPLETION_REASON.FAILED_REQUIRED_LEVEL);
   });
 
   it("an ELIGIBLE_TO_PROGRESS level → IN_PROGRESS / PENDING_MANUAL_APPROVAL", () => {
