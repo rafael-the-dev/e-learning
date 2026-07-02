@@ -1,7 +1,12 @@
 "use server";
 
 import { getDb } from "@/server/db";
-import { decideCourseCompletion } from "@/modules/prerequisites/engines/course-completion.engine";
+import {
+  decideCourseCompletion,
+  persistCourseCompletion,
+  emitCourseCompletionSideEffects,
+  type PersistCourseCompletionResult,
+} from "@/modules/prerequisites/engines/course-completion.engine";
 import { STUDENT_LEVEL_PROGRESS_STATUS } from "@/modules/prerequisites/types";
 
 // =============================================================================
@@ -84,18 +89,21 @@ async function computeFromLevelPromotion(
 }
 
 // ─── Course progress recompute, tx-scoped ─────────────────────────────────────
-// Mirrors evaluateCourseCompletion but runs on the transaction client so the
-// StudentCourseProgress row is committed atomically with the promotion.
+// Runs on the transaction client so the StudentCourseProgress row is committed
+// atomically with the promotion. Uses the SAME decision + persistence helpers as
+// evaluateCourseCompletion (single writer) so completedAt semantics and the
+// completion signal never diverge. Returns the persistence result so the caller
+// can emit audit/event side effects AFTER the transaction commits.
 async function recalculateCourseProgressTx(
   tx: Tx,
   organizationId: string,
   enrollmentId: string,
   studentId: string,
   courseId: string
-): Promise<void> {
+): Promise<PersistCourseCompletionResult> {
   const courseLevels = await tx.courseLevel.findMany({
     where: { courseId, status: "ACTIVE" },
-    select: { id: true, order: true },
+    select: { id: true, order: true, totalHours: true },
     orderBy: { order: "asc" },
   });
   const levelProgress = await tx.studentLevelProgress.findMany({
@@ -104,7 +112,7 @@ async function recalculateCourseProgressTx(
   });
 
   const decision = decideCourseCompletion(
-    courseLevels,
+    courseLevels.map((l) => ({ id: l.id, order: l.order, weight: l.totalHours ?? null })),
     levelProgress.map((p) => ({
       courseLevelId: p.courseLevelId,
       finalGrade: p.finalGrade != null ? parseFloat(String(p.finalGrade)) : null,
@@ -113,29 +121,13 @@ async function recalculateCourseProgressTx(
     }))
   );
 
-  const now = new Date();
-  await tx.studentCourseProgress.upsert({
-    where: { enrollmentId },
-    create: {
-      organizationId,
-      enrollmentId,
-      studentId,
-      courseId,
-      finalGrade: decision.finalGrade,
-      earnedCredits: decision.earnedCredits,
-      status: decision.status,
-      progressReason: decision.progressReason,
-      completedAt: decision.completed ? now : null,
-      calculatedAt: now,
-    },
-    update: {
-      finalGrade: decision.finalGrade,
-      earnedCredits: decision.earnedCredits,
-      status: decision.status,
-      progressReason: decision.progressReason,
-      completedAt: decision.completed ? now : null,
-      calculatedAt: now,
-    },
+  return persistCourseCompletion(tx, {
+    organizationId,
+    enrollmentId,
+    studentId,
+    courseId,
+    decision,
+    now: new Date(),
   });
 }
 
@@ -150,7 +142,7 @@ export async function approveProgressionRequest(params: {
   const { requestId, organizationId, actorId, reviewNotes } = params;
   const db = await getDb();
 
-  return db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     const request = await tx.levelProgressionRequest.findFirst({
       where: { id: requestId, organizationId, decision: "PENDING" },
       select: {
@@ -247,7 +239,7 @@ export async function approveProgressionRequest(params: {
     });
 
     // 4. Cascade to course progress (atomic with the promotion).
-    await recalculateCourseProgressTx(
+    const courseCompletion = await recalculateCourseProgressTx(
       tx,
       organizationId,
       request.enrollmentId,
@@ -263,8 +255,25 @@ export async function approveProgressionRequest(params: {
       fromLevelId: request.fromLevelId,
       toLevelId: request.toLevelId,
       fromLevelStatus,
+      courseCompletion,
     };
   });
+
+  // Emit completion side effects AFTER the transaction commits (event-bus
+  // contract). Fires on either boundary crossing (COMPLETED entered / left).
+  const { courseCompletion, ...approval } = result;
+  if (courseCompletion.transition) {
+    await emitCourseCompletionSideEffects({
+      organizationId,
+      actorId,
+      progress: courseCompletion.progress,
+      previousStatus: courseCompletion.previousStatus,
+      transition: courseCompletion.transition,
+      completionReason: courseCompletion.completionReason,
+    });
+  }
+
+  return approval;
 }
 
 // ─── Reject ─────────────────────────────────────────────────────────────────

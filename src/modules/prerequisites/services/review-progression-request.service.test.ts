@@ -4,7 +4,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // The service runs everything inside db.$transaction(fn). We stub $transaction
 // to invoke the callback with a fake tx client whose model methods we control.
 
-const { tx, getDbMock } = vi.hoisted(() => {
+const { tx, getDbMock, auditCreate, publish } = vi.hoisted(() => {
+  const auditCreate = vi.fn();
   const tx = {
     levelProgressionRequest: { findFirst: vi.fn(), update: vi.fn() },
     enrollment: { findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
@@ -12,15 +13,18 @@ const { tx, getDbMock } = vi.hoisted(() => {
     studentSubjectProgress: { findMany: vi.fn() },
     studentLevelProgress: { findUnique: vi.fn(), upsert: vi.fn(), findMany: vi.fn() },
     courseLevel: { findMany: vi.fn() },
-    studentCourseProgress: { upsert: vi.fn() },
+    studentCourseProgress: { findFirst: vi.fn(), upsert: vi.fn() },
   };
   const db = {
     $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
+    // Post-commit side effects (auditService bypass) use getDb().auditLog.create.
+    auditLog: { create: auditCreate },
   };
-  return { tx, getDbMock: vi.fn(async () => db) };
+  return { tx, getDbMock: vi.fn(async () => db), auditCreate, publish: vi.fn() };
 });
 
 vi.mock("@/server/db", () => ({ getDb: getDbMock }));
+vi.mock("@/server/events/event-publisher", () => ({ eventPublisher: { publish } }));
 
 import {
   approveProgressionRequest,
@@ -49,7 +53,8 @@ function primeApproveHappyPath() {
   tx.studentLevelProgress.upsert.mockResolvedValue({});
   tx.courseLevel.findMany.mockResolvedValue([]);
   tx.studentLevelProgress.findMany.mockResolvedValue([]);
-  tx.studentCourseProgress.upsert.mockResolvedValue({});
+  tx.studentCourseProgress.findFirst.mockResolvedValue(null);
+  tx.studentCourseProgress.upsert.mockResolvedValue({ id: "scp-1", finalGrade: null, completedAt: null });
 }
 
 describe("approveProgressionRequest", () => {
@@ -109,6 +114,57 @@ describe("approveProgressionRequest", () => {
     });
 
     expect(result.fromLevelStatus).toBe("PROMOTED_WITH_PENDING_SUBJECTS");
+  });
+
+  it("emits course-completion audit + event when the approval completes the course", async () => {
+    primeApproveHappyPath();
+    // Both levels passed → course COMPLETED; not previously completed → transition.
+    tx.courseLevel.findMany.mockResolvedValue([
+      { id: "L1", order: 1, totalHours: 100 },
+      { id: "L2", order: 2, totalHours: 100 },
+    ]);
+    tx.studentLevelProgress.findMany.mockResolvedValue([
+      { courseLevelId: "L1", finalGrade: 80, earnedCredits: 10, status: "PASSED" },
+      { courseLevelId: "L2", finalGrade: 70, earnedCredits: 10, status: "PROMOTED" },
+    ]);
+    tx.studentCourseProgress.findFirst.mockResolvedValue(null);
+    tx.studentCourseProgress.upsert.mockImplementation(
+      async (args: { create: Record<string, unknown> }) => ({
+        id: "scp-1",
+        ...args.create,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        course: null,
+      })
+    );
+
+    await approveProgressionRequest({
+      requestId: "req-1",
+      organizationId: "org-1",
+      actorId: "admin-1",
+    });
+
+    expect(auditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "course_completion.completed", actorId: "admin-1" }),
+      })
+    );
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "student_course.completed", aggregateId: "s1" })
+    );
+  });
+
+  it("does NOT emit completion side effects when the course is not completed", async () => {
+    primeApproveHappyPath(); // courseLevel.findMany = [] → NOT_STARTED
+
+    await approveProgressionRequest({
+      requestId: "req-1",
+      organizationId: "org-1",
+      actorId: "admin-1",
+    });
+
+    expect(auditCreate).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it("throws when the request is not PENDING (already processed)", async () => {
