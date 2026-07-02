@@ -259,12 +259,16 @@ treat `AssessmentResult` as a grade source.
 
 ```
 GradeMutated (create | update | cancel | invalidate | recovery | bulk)
-   └─ GradeMutationService.handleGradeMutation
-        ├─ createGradeChangeLog        (immutable audit of value/status change)
-        └─ recalculateSubjectProgressCascade
-             └─ StudentSubjectProgress
-                  └─ recalculateStudentLevelProgress → StudentLevelProgress
-                       └─ evaluateCourseCompletion   → StudentCourseProgress
+   └─ db.$transaction  ── one atomic boundary ──────────────────────────┐
+        ├─ canonical StudentAssessmentResult write                      │
+        └─ GradeMutationService.handleGradeMutation(client = tx)        │
+             ├─ createGradeChangeLog   (immutable audit of the change)  │
+             └─ recalculateSubjectProgressCascade                       │
+                  └─ StudentSubjectProgress                             │
+                       └─ recalculateStudentLevelProgress → StudentLevelProgress
+                            └─ evaluateCourseCompletion   → StudentCourseProgress
+   ┘  (commit)
+   → publish collected domain events   (only AFTER the commit)
 ```
 
 `recalculateSubjectProgressCascade` (`services/subject-progress-cascade.service.ts`)
@@ -273,6 +277,93 @@ canonical `StudentAssessmentResult` rows (`CANCELLED` results are excluded, so a
 invalidated/cancelled grade correctly drops out of the calculation). Batch
 recalculation (`RecalculateSubjectGradesCommand`) and scheduled-exam grading
 (`bulk-grade`) use this same path — there is no non-cascading variant.
+
+### Transactional cascade (atomicity)
+
+**Every grade mutation is atomic.** The command opens a single interactive
+transaction (`db.$transaction`) and threads its client through the canonical
+write, the `GradeChangeLog` and the *entire* derived cascade
+(`StudentSubjectProgress → StudentLevelProgress → StudentCourseProgress`), so:
+
+- Either **everything commits** — the canonical grade, its change log and all
+  derived progress — **or nothing does**. A failure mid-cascade rolls the
+  canonical grade back to its previous value; no partial derived progress and no
+  orphan `GradeChangeLog` can remain.
+- **Domain events are published only after the transaction commits.** The cascade
+  *collects* event payloads (via the `CascadeContext.events` buffer in
+  `src/shared/lib/cascade.ts`) instead of publishing them inline; the command
+  publishes them once the transaction has committed. No event is ever emitted for
+  a rolled-back change.
+- The course-completion **audit** row joins the same transaction (written through
+  the tx client); the course-completion **event** is buffered and published after
+  commit, like every other cascade event.
+
+Mechanism: repository, service and engine helpers accept an optional
+`PrismaClientOrTx` (`src/server/db`). When present they use it; when absent they
+fall back to the global client, so read-only/standalone callers are unchanged.
+
+- **Recovery** (`GradeAssessmentRetakeCommand`) and **invalidation**
+  (`InvalidateAssessmentResultCommand`) follow the same boundary: the retake grade
+  / sidecar invalidation, the canonical write and the cascade commit together.
+- **Bulk grading** (`BulkGradeAssessmentCommand`) uses one **all-or-nothing**
+  transaction for the whole batch (chosen over per-row atomicity for academic
+  consistency — a partially graded assessment is never persisted). Each row
+  targets a distinct enrollment, so there is no redundant re-cascade; the
+  transaction timeout is raised because a large class runs many per-student
+  cascades inside the single transaction.
+- The two repair commands (`RecalculateSubjectGradesCommand`,
+  `RecalculateStudentSubjectProgressCommand`) recompute derived progress inside a
+  transaction too. The single-enrollment recompute is one transaction; the
+  batch repair sweep uses **one transaction per enrollment** (atomic per student)
+  so a single failing student is skipped without rolling back the others.
+
+Covered by `grade-cascade-transaction.test.ts` (mid-cascade failure → rollback +
+no events, for create / update / invalidate / retake / bulk, plus the
+all-or-nothing bulk contract).
+
+### Stable `completedAt`
+
+`completedAt` on `StudentSubjectProgress`, `StudentLevelProgress` and
+`StudentCourseProgress` means **the first time the unit reached its current
+completion state**, and it is **stable across recalculations** — re-running the
+cascade on an already-completed unit never moves the date forward.
+
+A single pure helper, `resolveStableCompletedAt` (`src/shared/lib/completed-at.ts`),
+decides the value for all three layers, so the rule can never diverge. It takes
+two status sets:
+
+- **terminal** — statuses that carry a `completedAt` at all;
+- **completion** — the subset that means *positive* completion.
+
+| Transition | `completedAt` |
+|------------|---------------|
+| non-terminal → terminal completion | `now` |
+| status unchanged (terminal) | **preserved** (idempotent recalc) |
+| terminal → non-terminal | `null` |
+| non-terminal → non-terminal | `null` |
+| between different terminals, into a positive completion (e.g. FAILED → PASSED) | `now` |
+| positive completion → terminal non-completion (e.g. PASSED → FAILED) | `null` |
+
+Per layer:
+
+- **Subject** — terminal `{PASSED, FAILED}`, completion `{PASSED}`. A subject that
+  goes `FAILED → PASSED` (e.g. after recovery) is stamped `now`; `PASSED → FAILED`
+  clears the date; `PASSED → PASSED` / `FAILED → FAILED` preserve it.
+- **Level** — terminal `{PASSED, FAILED, PROMOTED, COMPLETED}`, completion
+  `{PASSED, PROMOTED, COMPLETED}`. **`PROMOTED_WITH_PENDING_SUBJECTS` is NOT a
+  completion** (a level advanced carrying pending subjects is not academically
+  complete) and carries no `completedAt`; `ELIGIBLE_TO_PROGRESS`, `BLOCKED`,
+  `IN_PROGRESS`, `RECOVERY_REQUIRED` are non-terminal.
+- **Course** — `StudentCourseProgress` already followed this principle
+  (`persistCourseCompletion`); the helper generalises that logic.
+
+The prior row is read **inside the same cascade transaction** (the tx client), so
+the resolution is transactional and deterministic. The manual-approval path
+(`review-progression-request.service.ts`) uses the same helper for the origin
+level, so it never stamps a completion date on `PROMOTED_WITH_PENDING_SUBJECTS`.
+
+Covered by `shared/lib/completed-at.test.ts` (full transition matrix) and the
+subject/level service tests.
 
 ### GradeChangeLog
 

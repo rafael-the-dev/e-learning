@@ -20,6 +20,35 @@ humana.
 > a cascata. Detalhes em
 > [`grade-engine.md`](./grade-engine.md) → *Single Source of Truth & Grade Mutation Flow*.
 
+> **Atomicidade (transação única).** Cada mutação de nota é atómica: a escrita
+> canónica, o `GradeChangeLog` e toda a cascata derivada
+> (`StudentSubjectProgress → StudentLevelProgress → StudentCourseProgress`)
+> executam dentro de **uma única transação** (`db.$transaction`). Ou tudo
+> confirma, ou nada confirma — nunca fica estado derivado parcial. Os **eventos de
+> domínio são publicados apenas após o commit** (nunca para uma alteração revertida).
+> Recuperação, invalidação e lançamento em massa (all-or-nothing) seguem a mesma
+> fronteira transacional. Detalhes e testes de rollback em
+> [`grade-engine.md`](./grade-engine.md) → *Transactional cascade (atomicity)*.
+>
+> A aprovação manual de progressão (abaixo) já era transacional e mantém-se: a
+> promoção da matrícula, o `StudentLevelProgress` e o `StudentCourseProgress`
+> confirmam atomicamente, e os efeitos secundários (auditoria/eventos de conclusão
+> de curso) são emitidos após o commit.
+
+> **`completedAt` estável.** O `completedAt` de disciplina, nível e curso significa
+> **a primeira vez que a unidade atingiu o seu estado de conclusão atual** e é
+> **estável entre recálculos** — voltar a correr a cascata numa unidade já concluída
+> nunca avança a data. Um único helper puro (`resolveStableCompletedAt`,
+> `src/shared/lib/completed-at.ts`) decide o valor nas três camadas a partir de dois
+> conjuntos de estados: *terminais* (têm `completedAt`) e *de conclusão* (conclusão
+> positiva). Quando o estado muda para conclusão positiva → `now`; quando se mantém
+> no mesmo estado terminal → preserva; quando deixa de ser terminal → `null`.
+> Importante: **`PROMOTED_WITH_PENDING_SUBJECTS` não é conclusão terminal** (o nível
+> avançou com pendências) e não recebe `completedAt`. A leitura da linha anterior
+> ocorre dentro da mesma transação da cascata. A aprovação manual usa o mesmo helper
+> para o nível de origem. Detalhes em
+> [`grade-engine.md`](./grade-engine.md) → *Stable `completedAt`*.
+
 ---
 
 ## 1. Quando surge `MANUAL_APPROVAL`
