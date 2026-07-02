@@ -62,6 +62,15 @@ export const DomainEventType = {
   STUDENT_SUBJECT_PASSED: "student_subject.passed",
   STUDENT_SUBJECT_FAILED: "student_subject.failed",
 
+  // Progression — course completion lifecycle. Future modules (certificates,
+  // alumni, CRM, analytics) subscribe to these. `invalidated` / `restored` are
+  // reserved for flows that explicitly annul or reinstate a completion; they are
+  // not emitted by the passive recompute path yet.
+  STUDENT_COURSE_COMPLETED: "student_course.completed",
+  STUDENT_COURSE_REOPENED: "student_course.reopened",
+  STUDENT_COURSE_INVALIDATED: "student_course.invalidated",
+  STUDENT_COURSE_RESTORED: "student_course.restored",
+
   // Refunds
   REFUND_REQUESTED: "refund.requested",
   REFUND_APPROVED: "refund.approved",
