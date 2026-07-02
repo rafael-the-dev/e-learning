@@ -19,7 +19,8 @@ export interface AssessmentKPIs {
   pendingRetakesCount: number;
   // GRADED assessments whose publication.publicationStatus = READY
   readyToPublishCount: number;
-  // Average of AssessmentResult.normalizedScore where status=GRADED and score is not null
+  // Average of StudentAssessmentResult.normalizedGrade (the canonical grade store)
+  // for scheduled-event results (assessmentEventId set), status = GRADED.
   avgNormalizedScore: number | null;
 }
 
@@ -106,16 +107,17 @@ export async function getAssessmentKPIs(organizationId: string): Promise<Assessm
           publication: { publicationStatus: "READY" },
         },
       }),
-      // General average: only GRADED, non-null scores, non-deleted
-      db.assessmentResult.aggregate({
+      // General average from the canonical grade store (StudentAssessmentResult),
+      // NOT the deprecated AssessmentResult.normalizedScore. Scoped to scheduled-event
+      // grades (assessmentEventId set) with status GRADED, excluding CANCELLED.
+      db.studentAssessmentResult.aggregate({
         where: {
           organizationId,
           status: "GRADED",
-          normalizedScore: { not: null },
-          deletedAt: null,
-          assessment: { deletedAt: null },
+          assessmentEventId: { not: null },
+          assessmentEvent: { deletedAt: null },
         },
-        _avg: { normalizedScore: true },
+        _avg: { normalizedGrade: true },
       }),
     ]);
 
@@ -130,8 +132,8 @@ export async function getAssessmentKPIs(organizationId: string): Promise<Assessm
     pendingRetakesCount: pendingRetakes,
     readyToPublishCount: readyToPublish,
     avgNormalizedScore:
-      avgScore._avg.normalizedScore != null
-        ? Math.round(Number(avgScore._avg.normalizedScore) * 10) / 10
+      avgScore._avg.normalizedGrade != null
+        ? Math.round(Number(avgScore._avg.normalizedGrade) * 10) / 10
         : null,
   };
 }
