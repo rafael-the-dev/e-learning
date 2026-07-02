@@ -117,6 +117,14 @@ export class UpdateStudentAssessmentResultCommand extends BaseCommand<
       },
     });
 
+    // Skip the audit entry when nothing actually changed (avoid GradeChangeLog noise),
+    // but still cascade so derived progress stays consistent.
+    const changed =
+      !existing ||
+      gradeResult.grade !== existing.grade ||
+      gradeResult.normalizedGrade !== existing.normalizedGrade ||
+      gradeResult.status !== existing.status;
+
     // Record the mutation (GradeChangeLog) and cascade progression.
     await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
       result: gradeResult,
@@ -125,6 +133,7 @@ export class UpdateStudentAssessmentResultCommand extends BaseCommand<
         : null,
       source: GRADE_CHANGE_SOURCE.UPDATE,
       reason: this.input.reason?.trim() || "Atualização de nota",
+      logChange: changed,
     });
 
     return gradeResult;

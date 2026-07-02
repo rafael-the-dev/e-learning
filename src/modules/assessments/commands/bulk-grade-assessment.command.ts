@@ -16,9 +16,8 @@ import {
   upsertStudentAssessmentResult,
   findResultByEnrollmentAndComponent,
 } from "@/modules/grades/repositories/student-assessment-result.repository";
-import { createGradeChangeLog } from "@/modules/grades/repositories/grade-change-log.repository";
 import { gradeCalculationService } from "@/modules/grades/services/grade-calculation.service";
-import { recalculateSubjectProgressCascade } from "@/modules/grades/services/subject-progress-cascade.service";
+import { gradeMutationService } from "@/modules/grades/services/grade-mutation.service";
 import { GRADE_CHANGE_SOURCE } from "@/modules/grades/types";
 import {
   bulkGradeAssessmentSchema,
@@ -98,8 +97,9 @@ export class BulkGradeAssessmentCommand extends BaseCommand<
     const isRegrading = assessment!.status === "GRADED";
     let gradedCount = 0;
 
-    // Enrollments that received a real grade — we'll recalculate progress for these.
-    const recalcTargets: Array<{ studentId: string; enrollmentId: string }> = [];
+    // Reason recorded on every bulk GradeChangeLog. editReason is required by
+    // validate() when regrading; first-time grading falls back to a default.
+    const bulkReason = this.input.editReason?.trim() || "Classificação em lote";
 
     for (const grade of this.input.grades) {
       const resultStatus =
@@ -132,21 +132,20 @@ export class BulkGradeAssessmentCommand extends BaseCommand<
         assessment!.levelSubjectId &&
         assessment!.subjectId
       ) {
-        // Capture previous state before upserting so we can log the change.
-        const existing = isRegrading
-          ? await findResultByEnrollmentAndComponent(
-              grade.enrollmentId,
-              assessment!.assessmentComponentId,
-              this.context.organizationId
-            )
-          : null;
+        // Capture prior state before upserting so the mutation is logged with an
+        // accurate previous snapshot (first-time -> null) and no-op edits skip the log.
+        const existing = await findResultByEnrollmentAndComponent(
+          grade.enrollmentId,
+          assessment!.assessmentComponentId,
+          this.context.organizationId
+        );
 
         const normalizedGrade = gradeCalculationService.normalizeGrade(
           grade.score,
           assessment!.maxScore
         );
 
-        await upsertStudentAssessmentResult({
+        const canonical = await upsertStudentAssessmentResult({
           organizationId: this.context.organizationId,
           enrollmentId: grade.enrollmentId,
           studentId: grade.studentId,
@@ -163,42 +162,28 @@ export class BulkGradeAssessmentCommand extends BaseCommand<
           gradedAt: now,
         });
 
-        // When re-grading an already-graded assessment, log every change.
-        if (existing) {
-          const gradeChanged = Number(existing.grade) !== grade.score;
-          const statusChanged = existing.status !== "GRADED";
-          if (gradeChanged || statusChanged) {
-            await createGradeChangeLog({
-              organizationId: this.context.organizationId,
-              studentAssessmentResultId: existing.id,
-              assessmentEventId: assessment!.id,
-              oldGrade: Number(existing.grade),
-              newGrade: grade.score,
-              oldNormalizedGrade: existing.normalizedGrade,
-              newNormalizedGrade: normalizedGrade,
-              oldStatus: existing.status,
-              newStatus: "GRADED",
-              source: GRADE_CHANGE_SOURCE.BULK,
-              reason: this.input.editReason!,
-              changedBy: this.context.userId,
-            });
-          }
-        }
+        // Only skip the audit entry when a regrade changed nothing at all.
+        const changed =
+          !existing ||
+          canonical.grade !== existing.grade ||
+          canonical.normalizedGrade !== existing.normalizedGrade ||
+          existing.status !== "GRADED";
 
-        recalcTargets.push({ studentId: grade.studentId, enrollmentId: grade.enrollmentId });
+        // Route through the single canonical mutation path: writes the
+        // GradeChangeLog (source = BULK, previous = existing snapshot or null for
+        // first-time grading) and cascades subject -> level -> course.
+        await gradeMutationService.handleGradeMutation(this.context as AuthContext, {
+          result: canonical,
+          previous: existing
+            ? { grade: existing.grade, normalizedGrade: existing.normalizedGrade, status: existing.status }
+            : null,
+          source: GRADE_CHANGE_SOURCE.BULK,
+          reason: bulkReason,
+          logChange: changed,
+        });
+
         gradedCount++;
       }
-    }
-
-    // Auto-recalculate StudentSubjectProgress for every student who received a grade
-    // through the single canonical cascade path (subject -> level -> course).
-    // Skips validate/authorize since the parent command already cleared those.
-    for (const target of recalcTargets) {
-      await recalculateSubjectProgressCascade(this.context as AuthContext, {
-        studentId: target.studentId,
-        enrollmentId: target.enrollmentId,
-        levelSubjectId: assessment!.levelSubjectId,
-      });
     }
 
     // Mark assessment as GRADED when every submitted entry has a terminal status.
