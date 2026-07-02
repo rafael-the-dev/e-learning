@@ -1,4 +1,4 @@
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult } from "@/shared/types/common";
 import type { AssessmentResult, ListAssessmentResultsParams } from "@/modules/assessments/types";
@@ -153,9 +153,10 @@ export async function updateAssessmentResult(
     status: string;
     gradedByUserId: string | null;
     gradedAt: Date | null;
-  }>
+  }>,
+  client?: PrismaClientOrTx
 ): Promise<AssessmentResult> {
-  const db = await getDb();
+  const db = client ?? await getDb();
   const row = await db.assessmentResult.update({
     where: { id },
     data,
@@ -175,8 +176,8 @@ export async function upsertAssessmentResult(data: {
   status: string;
   gradedByUserId?: string | null;
   gradedAt?: Date | null;
-}): Promise<AssessmentResult> {
-  const db = await getDb();
+}, client?: PrismaClientOrTx): Promise<AssessmentResult> {
+  const db = client ?? await getDb();
   const existing = await db.assessmentResult.findFirst({
     where: {
       assessmentId: data.assessmentId,

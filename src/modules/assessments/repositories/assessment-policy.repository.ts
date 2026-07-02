@@ -1,4 +1,4 @@
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult } from "@/shared/types/common";
 import type { AssessmentPolicy, ListAssessmentPoliciesParams } from "@/modules/assessments/types";
@@ -94,9 +94,10 @@ export async function findAssessmentPolicyById(
 
 export async function findActivePolicyForLevelSubject(
   levelSubjectId: string,
-  organizationId: string
+  organizationId: string,
+  client?: PrismaClientOrTx
 ): Promise<AssessmentPolicy | null> {
-  const db = await getDb();
+  const db = client ?? await getDb();
   const row = await db.assessmentPolicy.findFirst({
     where: { levelSubjectId, organizationId, status: "ACTIVE", deletedAt: null },
     select: policySelect,

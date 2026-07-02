@@ -1,4 +1,4 @@
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import type { GradeChangeLog } from "@/modules/grades/types";
 
 const logSelect = {
@@ -50,8 +50,8 @@ export async function createGradeChangeLog(data: {
   source?: string | null;
   reason: string;
   changedBy: string;
-}): Promise<GradeChangeLog> {
-  const db = await getDb();
+}, client?: PrismaClientOrTx): Promise<GradeChangeLog> {
+  const db = client ?? await getDb();
   const row = await db.gradeChangeLog.create({
     data: {
       organizationId: data.organizationId,

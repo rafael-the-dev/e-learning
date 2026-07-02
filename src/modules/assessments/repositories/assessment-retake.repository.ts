@@ -1,4 +1,4 @@
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult } from "@/shared/types/common";
 import type { AssessmentRetake, ListAssessmentRetakesParams } from "@/modules/assessments/types";
@@ -147,9 +147,10 @@ export async function updateAssessmentRetake(
     approvedAt: Date | null;
     approvedByUserId: string | null;
     gradedAt: Date | null;
-  }>
+  }>,
+  client?: PrismaClientOrTx
 ): Promise<AssessmentRetake> {
-  const db = await getDb();
+  const db = client ?? await getDb();
   const row = await db.assessmentRetake.update({
     where: { id },
     data,

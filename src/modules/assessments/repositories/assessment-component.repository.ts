@@ -1,4 +1,4 @@
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import type { AssessmentComponent } from "@/modules/assessments/types";
 
 const componentSelect = {
@@ -50,9 +50,10 @@ export async function findComponentsByPolicy(
 
 export async function findActiveComponentsByPolicy(
   assessmentPolicyId: string,
-  organizationId: string
+  organizationId: string,
+  client?: PrismaClientOrTx
 ): Promise<AssessmentComponent[]> {
-  const db = await getDb();
+  const db = client ?? await getDb();
   const rows = await db.assessmentComponent.findMany({
     where: { assessmentPolicyId, organizationId, status: "ACTIVE", deletedAt: null },
     select: componentSelect,

@@ -1,4 +1,4 @@
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import type {
   StudentAssessmentResult,
   ListStudentAssessmentResultsParams,
@@ -94,9 +94,10 @@ export async function findStudentAssessmentResults(
 export async function findResultsByEnrollmentAndLevelSubject(
   enrollmentId: string,
   levelSubjectId: string,
-  organizationId: string
+  organizationId: string,
+  client?: PrismaClientOrTx
 ): Promise<StudentAssessmentResult[]> {
-  const db = await getDb();
+  const db = client ?? await getDb();
   const rows = await db.studentAssessmentResult.findMany({
     where: {
       enrollmentId,
@@ -131,9 +132,10 @@ export async function findResultsByEnrollmentAndSubject(
 
 export async function findResultById(
   id: string,
-  organizationId: string
+  organizationId: string,
+  client?: PrismaClientOrTx
 ): Promise<StudentAssessmentResult | null> {
-  const db = await getDb();
+  const db = client ?? await getDb();
   const row = await db.studentAssessmentResult.findFirst({
     where: { id, organizationId },
     select: resultSelect,
@@ -161,9 +163,10 @@ export async function findResultsByAssessmentEvent(
 export async function findResultByEnrollmentAndComponent(
   enrollmentId: string,
   assessmentComponentId: string,
-  organizationId: string
+  organizationId: string,
+  client?: PrismaClientOrTx
 ): Promise<StudentAssessmentResult | null> {
-  const db = await getDb();
+  const db = client ?? await getDb();
   const row = await db.studentAssessmentResult.findFirst({
     where: { enrollmentId, assessmentComponentId, organizationId },
     select: resultSelect,
@@ -187,8 +190,8 @@ export async function upsertStudentAssessmentResult(data: {
   status: string;
   gradedBy?: string | null;
   gradedAt?: Date | null;
-}): Promise<StudentAssessmentResult> {
-  const db = await getDb();
+}, client?: PrismaClientOrTx): Promise<StudentAssessmentResult> {
+  const db = client ?? await getDb();
 
   const existing = await db.studentAssessmentResult.findUnique({
     where: {
@@ -253,9 +256,10 @@ export async function updateStudentAssessmentResult(
     status: string;
     gradedBy: string | null;
     gradedAt: Date | null;
-  }>
+  }>,
+  client?: PrismaClientOrTx
 ): Promise<StudentAssessmentResult> {
-  const db = await getDb();
+  const db = client ?? await getDb();
   const row = await db.studentAssessmentResult.update({
     where: { id },
     data: { ...data, updatedAt: new Date() },

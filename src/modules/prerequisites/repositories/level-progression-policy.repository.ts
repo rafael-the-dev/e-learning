@@ -1,6 +1,6 @@
 "use server";
 
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import type { LevelProgressionPolicy, ListProgressionPoliciesParams } from "@/modules/prerequisites/types";
 
 export async function findProgressionPolicies(
@@ -53,9 +53,10 @@ export async function findPolicyByTransition(
   courseId: string,
   fromLevelId: string,
   toLevelId: string,
-  organizationId: string
+  organizationId: string,
+  client?: PrismaClientOrTx
 ): Promise<LevelProgressionPolicy | null> {
-  const db = await getDb();
+  const db = client ?? await getDb();
   const row = await db.levelProgressionPolicy.findFirst({
     where: { courseId, fromLevelId, toLevelId, organizationId, status: "ACTIVE", deletedAt: null },
     include: {

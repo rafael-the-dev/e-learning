@@ -1,4 +1,4 @@
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult } from "@/shared/types/common";
 import type { StudentSubjectProgress, ListStudentSubjectProgressParams } from "@/modules/assessments/types";
@@ -127,8 +127,8 @@ export async function upsertStudentSubjectProgress(data: {
   status: string;
   progressReason: string | null;
   completedAt: Date | null;
-}): Promise<StudentSubjectProgress> {
-  const db = await getDb();
+}, client?: PrismaClientOrTx): Promise<StudentSubjectProgress> {
+  const db = client ?? await getDb();
   const row = await db.studentSubjectProgress.upsert({
     where: {
       enrollmentId_levelSubjectId: {

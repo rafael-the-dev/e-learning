@@ -1,4 +1,4 @@
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import type { AuditAction, ServiceContext } from "@/shared/types/common";
 
 // =============================================================================
@@ -18,9 +18,10 @@ interface AuditLogInput {
 export class AuditService {
   async log(
     context: ServiceContext,
-    input: AuditLogInput
+    input: AuditLogInput,
+    client?: PrismaClientOrTx
   ): Promise<void> {
-    const db = await getDb();
+    const db = client ?? await getDb();
     await db.auditLog.create({
       data: {
         organizationId: context.organizationId,

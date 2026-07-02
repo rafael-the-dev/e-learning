@@ -1,13 +1,14 @@
 "use server";
 
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import type { StudentLevelProgress } from "@/modules/prerequisites/types";
 
 export async function findLevelProgressByEnrollment(
   enrollmentId: string,
-  organizationId: string
+  organizationId: string,
+  client?: PrismaClientOrTx
 ): Promise<StudentLevelProgress[]> {
-  const db = await getDb();
+  const db = client ?? await getDb();
   const rows = await db.studentLevelProgress.findMany({
     where: { enrollmentId, organizationId },
     include: {
@@ -42,8 +43,8 @@ export async function upsertStudentLevelProgress(data: {
   status: string;
   progressReason: string | null;
   completedAt: Date | null;
-}): Promise<StudentLevelProgress> {
-  const db = await getDb();
+}, client?: PrismaClientOrTx): Promise<StudentLevelProgress> {
+  const db = client ?? await getDb();
   const now = new Date();
   const row = await db.studentLevelProgress.upsert({
     where: { enrollmentId_courseLevelId: { enrollmentId: data.enrollmentId, courseLevelId: data.courseLevelId } },
