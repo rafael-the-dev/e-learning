@@ -157,3 +157,50 @@ describe("recalculateStudentLevelProgress — recovery lifecycle", () => {
     expect(completedAtArg()).toBeInstanceOf(Date);
   });
 });
+
+describe("recalculateStudentLevelProgress — attendance INCOMPLETE (Phase 5)", () => {
+  it("9. a required INCOMPLETE subject does NOT make the level FAILED", async () => {
+    mocks.levelSubjectFindMany.mockResolvedValue([{ id: "ls1", isRequired: true, credits: 1, workloadHours: 10 }]);
+    mocks.subjectProgressFindMany.mockResolvedValue([{ levelSubjectId: "ls1", status: "INCOMPLETE", finalGrade: 80 }]);
+    mocks.levelProgressFindFirst.mockResolvedValue(null);
+
+    await recalculateStudentLevelProgress(ENR, LVL, ORG);
+
+    expect(statusArg()).toBe("IN_PROGRESS");
+    expect(statusArg()).not.toBe("FAILED");
+    expect(completedAtArg()).toBeNull();
+  });
+
+  it("10. an INCOMPLETE subject keeps the level out of PASSED (prevents completion)", async () => {
+    mocks.levelSubjectFindMany.mockResolvedValue([
+      { id: "ls1", isRequired: true, credits: 1, workloadHours: 10 },
+      { id: "ls2", isRequired: true, credits: 1, workloadHours: 10 },
+    ]);
+    mocks.subjectProgressFindMany.mockResolvedValue([
+      { levelSubjectId: "ls1", status: "PASSED", finalGrade: 80 },
+      { levelSubjectId: "ls2", status: "INCOMPLETE", finalGrade: 80 },
+    ]);
+    mocks.levelProgressFindFirst.mockResolvedValue(null);
+
+    await recalculateStudentLevelProgress(ENR, LVL, ORG);
+
+    expect(statusArg()).not.toBe("PASSED");
+    expect(statusArg()).toBe("IN_PROGRESS");
+  });
+
+  it("a genuine FAILED required subject still fails the level even with an INCOMPLETE sibling", async () => {
+    mocks.levelSubjectFindMany.mockResolvedValue([
+      { id: "ls1", isRequired: true, credits: 1, workloadHours: 10 },
+      { id: "ls2", isRequired: true, credits: 1, workloadHours: 10 },
+    ]);
+    mocks.subjectProgressFindMany.mockResolvedValue([
+      { levelSubjectId: "ls1", status: "FAILED", finalGrade: 20 },
+      { levelSubjectId: "ls2", status: "INCOMPLETE", finalGrade: 80 },
+    ]);
+    mocks.levelProgressFindFirst.mockResolvedValue(null);
+
+    await recalculateStudentLevelProgress(ENR, LVL, ORG);
+
+    expect(statusArg()).toBe("FAILED"); // INCOMPLETE does not mask a real failure
+  });
+});

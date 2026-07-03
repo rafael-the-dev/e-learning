@@ -39,6 +39,8 @@ import {
 } from "@/modules/grades/services/grade-calculation.service";
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
 import { recalculateStudentLevelProgress } from "@/modules/prerequisites/services/recalculate-level-progress.service";
+import { loadEffectiveAttendancePolicy } from "@/modules/attendance/services/attendance-policy.resolver";
+import { findSummaryByEnrollmentAndSubject } from "@/modules/attendance/repositories/student-subject-attendance-summary.repository";
 
 export interface RecalculateSubjectProgressParams {
   studentId: string;
@@ -65,7 +67,12 @@ export async function recalculateSubjectProgressCascade(
   const db = ctx?.client ?? await getDb();
   const levelSubject = await db.levelSubject.findFirst({
     where: { id: levelSubjectId, organizationId },
-    select: { minimumPassingGrade: true, minimumAttendancePercentage: true, courseLevelId: true },
+    select: {
+      minimumPassingGrade: true,
+      minimumAttendancePercentage: true,
+      courseLevelId: true,
+      attendancePolicyId: true,
+    },
   });
 
   const policy = await findActivePolicyForLevelSubject(levelSubjectId, organizationId, db);
@@ -104,14 +111,32 @@ export async function recalculateSubjectProgressCascade(
     ? Number(levelSubject.minimumAttendancePercentage)
     : null;
 
-  // ATTENDANCE GATING IS INTENTIONALLY INACTIVE (Grade Engine Final Sprint).
-  // The Attendance Engine is out of scope for this sprint, so there is no
-  // canonical per-enrollment attendance percentage to feed in yet. We pass
-  // attendancePercentage: null so the INCOMPLETE (frequência abaixo do mínimo)
-  // branch in GradeCalculationService stays dormant — a subject can pass on
-  // grade alone. minimumAttendancePercentage is still read and forwarded so the
-  // gate activates automatically once the Attendance Engine supplies a real
-  // percentage here. Do NOT fabricate an attendance value to force the branch.
+  // ── ATTENDANCE GATE (Attendance Engine Phase 5 — GATED, opt-in) ─────────────
+  // Attendance can affect academic outcome ONLY when a policy explicitly enables
+  // it. Resolve the effective policy for this subject (LevelSubject override →
+  // org default → safe fallback). The gate fires only when ALL hold:
+  //   • policy.enforceAttendanceForProgress === true  (opt-in, default false)
+  //   • LevelSubject.minimumAttendancePercentage is defined  (threshold exists)
+  //   • a persisted StudentSubjectAttendanceSummary.attendancePercentage exists
+  // Otherwise attendanceForCalc stays null and the INCOMPLETE branch in
+  // GradeCalculationService stays dormant — a subject passes on grade alone
+  // (fully behaviour-neutral). We never fabricate an attendance value.
+  const effectiveAttendancePolicy = await loadEffectiveAttendancePolicy(
+    organizationId,
+    levelSubject?.attendancePolicyId ?? null,
+    db
+  );
+  let attendanceForCalc: number | null = null;
+  if (effectiveAttendancePolicy.enforceAttendanceForProgress && minAttendance != null) {
+    const attendanceSummary = await findSummaryByEnrollmentAndSubject(
+      enrollmentId,
+      levelSubjectId,
+      organizationId,
+      db
+    );
+    attendanceForCalc = attendanceSummary?.attendancePercentage ?? null;
+  }
+
   let calculationResult;
   if (policy && components.length > 0) {
     calculationResult = gradeCalculationService.calculateFinalGrade({
@@ -120,7 +145,7 @@ export async function recalculateSubjectProgressCascade(
       minimumPassingGrade: minPassingGrade,
       allowRecovery: policy.allowRecovery,
       components: componentScores,
-      attendancePercentage: null, // inactive until Attendance Engine — see note above
+      attendancePercentage: attendanceForCalc, // gated — null unless enforcement enabled
       minimumAttendancePercentage: minAttendance,
     });
   } else {
@@ -177,7 +202,10 @@ export async function recalculateSubjectProgressCascade(
     enrollmentId,
     levelSubjectId,
     finalGrade: calculationResult.finalGrade,
-    attendancePercentage: null, // inactive until the Attendance Engine lands (see note above)
+    // Persist the SAME value used for the decision: the real percentage when the
+    // gate is enabled, else null (safe default — no accidental INCOMPLETE and no
+    // stale informational value lingering when enforcement is off).
+    attendancePercentage: attendanceForCalc,
     status: progressStatus,
     progressReason: calculationResult.reason,
     completedAt,

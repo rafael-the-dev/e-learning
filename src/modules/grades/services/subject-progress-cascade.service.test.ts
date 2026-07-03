@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   recalculateStudentLevelProgress: vi.fn(),
   auditLog: vi.fn(),
   publish: vi.fn(),
+  loadEffectiveAttendancePolicy: vi.fn(),
+  findSummaryByEnrollmentAndSubject: vi.fn(),
 }));
 
 vi.mock("@/server/db", () => ({
@@ -39,6 +41,12 @@ vi.mock("@/modules/audit-logs/services/audit.service", () => ({
 vi.mock("@/server/events/event-publisher", () => ({
   eventPublisher: { publish: mocks.publish },
 }));
+vi.mock("@/modules/attendance/services/attendance-policy.resolver", () => ({
+  loadEffectiveAttendancePolicy: mocks.loadEffectiveAttendancePolicy,
+}));
+vi.mock("@/modules/attendance/repositories/student-subject-attendance-summary.repository", () => ({
+  findSummaryByEnrollmentAndSubject: mocks.findSummaryByEnrollmentAndSubject,
+}));
 
 import { recalculateSubjectProgressCascade } from "@/modules/grades/services/subject-progress-cascade.service";
 import type { AuthContext } from "@/server/auth/context";
@@ -52,7 +60,16 @@ beforeEach(() => {
     minimumPassingGrade: 50,
     minimumAttendancePercentage: null,
     courseLevelId: "cl1",
+    attendancePolicyId: null,
   });
+  // Phase 5 gate OFF by default → attendance never affects academics (existing
+  // tests stay behaviour-neutral).
+  mocks.loadEffectiveAttendancePolicy.mockResolvedValue({
+    enforceAttendanceForProgress: false,
+    policyId: null,
+    source: "FALLBACK",
+  });
+  mocks.findSummaryByEnrollmentAndSubject.mockResolvedValue(null);
   mocks.findActivePolicyForLevelSubject.mockResolvedValue({
     id: "p1",
     calculationMethod: "SIMPLE_AVERAGE",
@@ -273,6 +290,87 @@ describe("recalculateSubjectProgressCascade", () => {
 
       expect(progress.finalGrade).toBe(70); // (60 + 80) / 2 — each component counted once
       expect(progress.status).toBe("PASSED");
+    });
+  });
+
+  // Attendance Engine Phase 5 — GATED academic wiring. The gate fires ONLY when
+  // enforcement is enabled AND a threshold + persisted percentage exist.
+  describe("attendance gate (Phase 5)", () => {
+    const statusArg = () => mocks.upsertStudentSubjectProgress.mock.calls[0][0].status as string;
+    const attendanceArg = () =>
+      mocks.upsertStudentSubjectProgress.mock.calls[0][0].attendancePercentage as number | null;
+    const completedAtArg = () => mocks.upsertStudentSubjectProgress.mock.calls[0][0].completedAt as Date | null;
+    const passing = [{ assessmentComponentId: "c1", grade: 80, normalizedGrade: 80 }];
+
+    const withThreshold = (min: number | null) =>
+      mocks.levelSubjectFindFirst.mockResolvedValue({
+        minimumPassingGrade: 50, minimumAttendancePercentage: min, courseLevelId: "cl1", attendancePolicyId: "ap1",
+      });
+    const enforce = (on: boolean) =>
+      mocks.loadEffectiveAttendancePolicy.mockResolvedValue({
+        enforceAttendanceForProgress: on, policyId: "ap1", source: "LEVEL_SUBJECT",
+      });
+
+    it("1/2/3. gate DISABLED: low attendance does not touch progress — stays PASSED, attendancePercentage null", async () => {
+      withThreshold(75);
+      enforce(false);
+      mocks.findSummaryByEnrollmentAndSubject.mockResolvedValue({ attendancePercentage: 40, status: "BELOW_REQUIRED" });
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(passing);
+
+      const progress = await recalculateSubjectProgressCascade(context, params);
+
+      expect(progress.status).toBe("PASSED");
+      expect(attendanceArg()).toBeNull(); // not persisted while gate off (safe default)
+      expect(mocks.findSummaryByEnrollmentAndSubject).not.toHaveBeenCalled(); // short-circuited
+    });
+
+    it("4/5. gate ENABLED + below minimum → INCOMPLETE with completedAt null", async () => {
+      withThreshold(75);
+      enforce(true);
+      mocks.findSummaryByEnrollmentAndSubject.mockResolvedValue({ attendancePercentage: 40, status: "BELOW_REQUIRED" });
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(passing);
+
+      const progress = await recalculateSubjectProgressCascade(context, params);
+
+      expect(progress.status).toBe("INCOMPLETE");
+      expect(attendanceArg()).toBe(40); // real value persisted
+      expect(completedAtArg()).toBeNull(); // non-terminal
+    });
+
+    it("6. gate ENABLED + sufficient attendance + passing grade → PASSED", async () => {
+      withThreshold(75);
+      enforce(true);
+      mocks.findSummaryByEnrollmentAndSubject.mockResolvedValue({ attendancePercentage: 90, status: "SUFFICIENT" });
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(passing);
+
+      const progress = await recalculateSubjectProgressCascade(context, params);
+
+      expect(progress.status).toBe("PASSED");
+      expect(attendanceArg()).toBe(90);
+    });
+
+    it("20. gate ENABLED but no threshold on the subject → not enforced (dormant)", async () => {
+      withThreshold(null);
+      enforce(true);
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(passing);
+
+      const progress = await recalculateSubjectProgressCascade(context, params);
+
+      expect(progress.status).toBe("PASSED");
+      expect(statusArg()).not.toBe("INCOMPLETE");
+      expect(mocks.findSummaryByEnrollmentAndSubject).not.toHaveBeenCalled();
+    });
+
+    it("gate ENABLED + threshold but no persisted summary → dormant (never fabricates)", async () => {
+      withThreshold(75);
+      enforce(true);
+      mocks.findSummaryByEnrollmentAndSubject.mockResolvedValue(null);
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(passing);
+
+      const progress = await recalculateSubjectProgressCascade(context, params);
+
+      expect(progress.status).toBe("PASSED");
+      expect(attendanceArg()).toBeNull();
     });
   });
 });
