@@ -36,85 +36,88 @@ model Organization {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  branches                  Branch[]
-  userOrganizations         UserOrganization[]
-  students                  Student[]
-  teachers                  Teacher[]
-  courses                   Course[]
-  courseCategories          CourseCategory[]
-  subjects                  Subject[]
-  levelSubjects             LevelSubject[]
-  lessons                   Lesson[]
-  lessonAttachments         LessonAttachment[]
-  subjectLessons            SubjectLesson[]
-  lessonProgress            StudentLessonProgress[]
-  vehicles                  Vehicle[]
-  invoices                  Invoice[]
-  payments                  Payment[]
-  receipts                  Receipt[]
-  paymentSplits             PaymentSplit[]
-  paymentAllocations        PaymentAllocation[]
-  studentWallets            StudentWallet[]
-  walletTransactions        StudentWalletTransaction[]
-  creditApplications        CreditApplication[]
-  roles                     Role[]
-  auditLogs                 AuditLog[]
-  notifications             Notification[]
-  notificationTemplates     NotificationTemplate[]
-  notificationEventRules    NotificationEventRule[]
-  notificationDeliveries    NotificationDelivery[]
-  notificationEmailSettings NotificationEmailSettings?
-  settings                  OrganizationSettings?
-  schedulePeriods           SchedulePeriod[]
-  scheduleSlots             ScheduleSlot[]
-  classGroupSchedules       ClassGroupSchedule[]
-  feeDefinitions            FeeDefinition[]
-  enrollmentBillingPolicies EnrollmentBillingPolicy[]
-  policyFees                PolicyFee[]
-  discountRules             DiscountRule[]
-  taxRules                  TaxRule[]
-  appliedDiscounts          AppliedDiscount[]
-  appliedTaxes              AppliedTax[]
-  academicYears             AcademicYear[]
-  academicTerms             AcademicTerm[]
-  academicHolidays          AcademicHoliday[]
-  academicEvents            AcademicEvent[]
-  classrooms                Classroom[]
-  classroomFeatures         ClassroomFeature[]
-  classroomResources        ClassroomResource[]
-  classroomMaintenances     ClassroomMaintenance[]
-  classroomBookings         ClassroomBooking[]
-  domainEvents              DomainEvent[]
-  domainEventHandlerLogs    DomainEventHandlerLog[]
-  importJobs                ImportJob[]
-  studentTimelineEvents     StudentTimelineEvent[]
-  attendanceSessions        AttendanceSession[]
-  attendanceRecords         AttendanceRecord[]
-  attendanceJustifications  AttendanceJustification[]
-  assessmentPolicies        AssessmentPolicy[]
-  assessmentComponents      AssessmentComponent[]
-  assessmentPeriods         AssessmentPeriod[]
-  assessments               Assessment[]
-  assessmentResults         AssessmentResult[]
-  assessmentPublications    AssessmentPublication[]
-  studentSubjectProgress    StudentSubjectProgress[]
-  assessmentRetakes         AssessmentRetake[]
-  studentAssessmentResults  StudentAssessmentResult[]
-  gradeChangeLogs           GradeChangeLog[]
-  studentLevelProgress      StudentLevelProgress[]
-  studentCourseProgress     StudentCourseProgress[]
-  prerequisiteGroups        LevelSubjectPrerequisiteGroup[]
-  prerequisiteItems         LevelSubjectPrerequisiteItem[]
-  prerequisiteWaivers       PrerequisiteWaiver[]
-  levelProgressionPolicies  LevelProgressionPolicy[]
-  levelProgressionRequests  LevelProgressionRequest[]
-  refunds                   Refund[]
-  financialTransactions     FinancialTransaction[]
-  financialIntegrityIssues  FinancialIntegrityIssue[]
-  financialAuditLogs        FinancialAuditLog[]
-  studentDocuments          StudentDocument[]
-  teacherDocuments          TeacherDocument[]
-  guardianLinks             GuardianStudent[]
+  branches                   Branch[]
+  userOrganizations          UserOrganization[]
+  students                   Student[]
+  teachers                   Teacher[]
+  courses                    Course[]
+  courseCategories           CourseCategory[]
+  subjects                   Subject[]
+  levelSubjects              LevelSubject[]
+  lessons                    Lesson[]
+  lessonAttachments          LessonAttachment[]
+  subjectLessons             SubjectLesson[]
+  lessonProgress             StudentLessonProgress[]
+  vehicles                   Vehicle[]
+  invoices                   Invoice[]
+  payments                   Payment[]
+  receipts                   Receipt[]
+  paymentSplits              PaymentSplit[]
+  paymentAllocations         PaymentAllocation[]
+  studentWallets             StudentWallet[]
+  walletTransactions         StudentWalletTransaction[]
+  creditApplications         CreditApplication[]
+  roles                      Role[]
+  auditLogs                  AuditLog[]
+  notifications              Notification[]
+  notificationTemplates      NotificationTemplate[]
+  notificationEventRules     NotificationEventRule[]
+  notificationDeliveries     NotificationDelivery[]
+  notificationEmailSettings  NotificationEmailSettings?
+  settings                   OrganizationSettings?
+  schedulePeriods            SchedulePeriod[]
+  scheduleSlots              ScheduleSlot[]
+  classGroupSchedules        ClassGroupSchedule[]
+  feeDefinitions             FeeDefinition[]
+  enrollmentBillingPolicies  EnrollmentBillingPolicy[]
+  policyFees                 PolicyFee[]
+  discountRules              DiscountRule[]
+  taxRules                   TaxRule[]
+  appliedDiscounts           AppliedDiscount[]
+  appliedTaxes               AppliedTax[]
+  academicYears              AcademicYear[]
+  academicTerms              AcademicTerm[]
+  academicHolidays           AcademicHoliday[]
+  academicEvents             AcademicEvent[]
+  classrooms                 Classroom[]
+  classroomFeatures          ClassroomFeature[]
+  classroomResources         ClassroomResource[]
+  classroomMaintenances      ClassroomMaintenance[]
+  classroomBookings          ClassroomBooking[]
+  domainEvents               DomainEvent[]
+  domainEventHandlerLogs     DomainEventHandlerLog[]
+  importJobs                 ImportJob[]
+  studentTimelineEvents      StudentTimelineEvent[]
+  attendanceSessions         AttendanceSession[]
+  attendanceRecords          AttendanceRecord[]
+  attendanceJustifications   AttendanceJustification[]
+  assessmentPolicies         AssessmentPolicy[]
+  assessmentComponents       AssessmentComponent[]
+  assessmentPeriods          AssessmentPeriod[]
+  assessments                Assessment[]
+  assessmentResults          AssessmentResult[]
+  assessmentPublications     AssessmentPublication[]
+  studentSubjectProgress     StudentSubjectProgress[]
+  assessmentRetakes          AssessmentRetake[]
+  studentAssessmentResults   StudentAssessmentResult[]
+  gradeChangeLogs            GradeChangeLog[]
+  studentLevelProgress       StudentLevelProgress[]
+  studentCourseProgress      StudentCourseProgress[]
+  prerequisiteGroups         LevelSubjectPrerequisiteGroup[]
+  prerequisiteItems          LevelSubjectPrerequisiteItem[]
+  prerequisiteWaivers        PrerequisiteWaiver[]
+  levelProgressionPolicies   LevelProgressionPolicy[]
+  levelProgressionRequests   LevelProgressionRequest[]
+  refunds                    Refund[]
+  financialTransactions      FinancialTransaction[]
+  financialIntegrityIssues   FinancialIntegrityIssue[]
+  financialAuditLogs         FinancialAuditLog[]
+  studentDocuments           StudentDocument[]
+  teacherDocuments           TeacherDocument[]
+  guardianLinks              GuardianStudent[]
+  attendancePolicies         AttendancePolicy[]
+  subjectAttendanceSummaries StudentSubjectAttendanceSummary[]
+  periodAttendanceSummaries  StudentPeriodAttendanceSummary[]
 
   @@map("organizations")
 }
@@ -366,30 +369,32 @@ model Student {
   createdBy      String?
   updatedBy      String?
 
-  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  branch                   Branch?                   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  user                     User?                     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  enrollments              Enrollment[]
-  attendanceRecords        AttendanceRecord[]
-  attendanceJustifications AttendanceJustification[]
-  practicalLessons         PracticalLesson[]
-  invoices                 Invoice[]
-  payments                 Payment[]
-  receipts                 Receipt[]
-  wallets                  StudentWallet[]
-  lessonProgress           StudentLessonProgress[]
-  timelineEvents           StudentTimelineEvent[]
-  assessmentResults        AssessmentResult[]
-  studentSubjectProgress   StudentSubjectProgress[]
-  assessmentRetakes        AssessmentRetake[]
-  studentAssessmentResults StudentAssessmentResult[]
-  studentLevelProgress     StudentLevelProgress[]
-  studentCourseProgress    StudentCourseProgress[]
-  prerequisiteWaivers      PrerequisiteWaiver[]
-  levelProgressionRequests LevelProgressionRequest[]
-  refunds                  Refund[]
-  documents                StudentDocument[]
-  guardianLinks            GuardianStudent[]
+  organization               Organization                      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch                     Branch?                           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user                       User?                             @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollments                Enrollment[]
+  attendanceRecords          AttendanceRecord[]
+  attendanceJustifications   AttendanceJustification[]
+  practicalLessons           PracticalLesson[]
+  subjectAttendanceSummaries StudentSubjectAttendanceSummary[]
+  periodAttendanceSummaries  StudentPeriodAttendanceSummary[]
+  invoices                   Invoice[]
+  payments                   Payment[]
+  receipts                   Receipt[]
+  wallets                    StudentWallet[]
+  lessonProgress             StudentLessonProgress[]
+  timelineEvents             StudentTimelineEvent[]
+  assessmentResults          AssessmentResult[]
+  studentSubjectProgress     StudentSubjectProgress[]
+  assessmentRetakes          AssessmentRetake[]
+  studentAssessmentResults   StudentAssessmentResult[]
+  studentLevelProgress       StudentLevelProgress[]
+  studentCourseProgress      StudentCourseProgress[]
+  prerequisiteWaivers        PrerequisiteWaiver[]
+  levelProgressionRequests   LevelProgressionRequest[]
+  refunds                    Refund[]
+  documents                  StudentDocument[]
+  guardianLinks              GuardianStudent[]
 
   @@index([organizationId, branchId])
   @@map("students")
@@ -406,25 +411,25 @@ model Student {
 // =============================================================================
 
 model GuardianStudent {
-  id             String    @id @default(cuid())
-  organizationId String
+  id                      String    @id @default(cuid())
+  organizationId          String
   // The guardian's platform login (User with GUARDIAN role). NEVER the Student.userId.
-  guardianUserId String
-  studentId      String
+  guardianUserId          String
+  studentId               String
   // GuardianRelationshipType: FATHER | MOTHER | GUARDIAN | SPONSOR | OTHER
-  relationshipType String  @default("GUARDIAN")
-  isPrimary        Boolean @default(false)
+  relationshipType        String    @default("GUARDIAN")
+  isPrimary               Boolean   @default(false)
   // Per-link visibility flags — enforced server-side in every Guardian Portal read.
-  canViewAcademic         Boolean @default(true)
-  canViewAttendance       Boolean @default(true)
-  canViewFinance          Boolean @default(false)
-  canViewDocuments        Boolean @default(true)
-  canReceiveNotifications Boolean @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
-  createdBy      String?
-  updatedBy      String?
+  canViewAcademic         Boolean   @default(true)
+  canViewAttendance       Boolean   @default(true)
+  canViewFinance          Boolean   @default(false)
+  canViewDocuments        Boolean   @default(true)
+  canReceiveNotifications Boolean   @default(true)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+  createdBy               String?
+  updatedBy               String?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   guardian     User         @relation(fields: [guardianUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -551,15 +556,16 @@ model Course {
   createdBy      String?
   updatedBy      String?
 
-  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  category                 CourseCategory?           @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levels                   CourseLevel[]
-  levelSubjects            LevelSubject[]
-  classGroups              ClassGroup[]
-  enrollments              Enrollment[]
-  studentCourseProgress    StudentCourseProgress[]
-  levelProgressionPolicies LevelProgressionPolicy[]
-  levelProgressionRequests LevelProgressionRequest[]
+  organization              Organization                     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  category                  CourseCategory?                  @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levels                    CourseLevel[]
+  levelSubjects             LevelSubject[]
+  classGroups               ClassGroup[]
+  enrollments               Enrollment[]
+  studentCourseProgress     StudentCourseProgress[]
+  levelProgressionPolicies  LevelProgressionPolicy[]
+  levelProgressionRequests  LevelProgressionRequest[]
+  periodAttendanceSummaries StudentPeriodAttendanceSummary[]
 
   @@map("courses")
 }
@@ -579,17 +585,18 @@ model CourseLevel {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  course                  Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  levelSubjects           LevelSubject[]
-  classGroups             ClassGroup[]
-  enrollments             Enrollment[]              @relation("CourseLevelEnrollments")
-  initialEnrollments      Enrollment[]              @relation("InitialLevelEnrollments")
-  currentEnrollments      Enrollment[]              @relation("CurrentLevelEnrollments")
-  studentLevelProgress    StudentLevelProgress[]
-  fromProgressionPolicies LevelProgressionPolicy[]  @relation("FromLevel")
-  toProgressionPolicies   LevelProgressionPolicy[]  @relation("ToLevel")
-  fromProgressionRequests LevelProgressionRequest[] @relation("FromLevelRequests")
-  toProgressionRequests   LevelProgressionRequest[] @relation("ToLevelRequests")
+  course                    Course                           @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubjects             LevelSubject[]
+  classGroups               ClassGroup[]
+  enrollments               Enrollment[]                     @relation("CourseLevelEnrollments")
+  initialEnrollments        Enrollment[]                     @relation("InitialLevelEnrollments")
+  currentEnrollments        Enrollment[]                     @relation("CurrentLevelEnrollments")
+  studentLevelProgress      StudentLevelProgress[]
+  fromProgressionPolicies   LevelProgressionPolicy[]         @relation("FromLevel")
+  toProgressionPolicies     LevelProgressionPolicy[]         @relation("ToLevel")
+  fromProgressionRequests   LevelProgressionRequest[]        @relation("FromLevelRequests")
+  toProgressionRequests     LevelProgressionRequest[]        @relation("ToLevelRequests")
+  periodAttendanceSummaries StudentPeriodAttendanceSummary[]
 
   @@map("course_levels")
 }
@@ -635,24 +642,29 @@ model LevelSubject {
   allowCompensation           Boolean   @default(false)
   certificateRequired         Boolean   @default(false)
   credits                     Int?      @default(0)
+  // Optional interpretation-policy override; null → organization default policy.
+  attendancePolicyId          String?
   // LevelSubjectStatus: ACTIVE | INACTIVE | ARCHIVED
   status                      String    @default("ACTIVE")
   createdAt                   DateTime  @default(now())
   updatedAt                   DateTime  @updatedAt
   deletedAt                   DateTime?
 
-  organization              Organization                    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  course                    Course                          @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courseLevel               CourseLevel                     @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  subject                   Subject                         @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization              Organization                      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course                    Course                            @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel               CourseLevel                       @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject                   Subject                           @relation(fields: [subjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendancePolicy          AttendancePolicy?                 @relation(fields: [attendancePolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   assessmentPolicies        AssessmentPolicy[]
   studentSubjectProgress    StudentSubjectProgress[]
   studentAssessmentResults  StudentAssessmentResult[]
   prerequisiteGroups        LevelSubjectPrerequisiteGroup[]
-  prerequisiteItemsAsPrereq LevelSubjectPrerequisiteItem[]  @relation("PrerequisiteSubject")
+  prerequisiteItemsAsPrereq LevelSubjectPrerequisiteItem[]    @relation("PrerequisiteSubject")
   prerequisiteWaivers       PrerequisiteWaiver[]
+  attendanceSummaries       StudentSubjectAttendanceSummary[]
 
   @@unique([courseLevelId, subjectId])
+  @@index([organizationId, attendancePolicyId])
   @@map("level_subjects")
 }
 
@@ -695,17 +707,18 @@ model ClassGroup {
   deletedAt      DateTime?
   createdBy      String?
 
-  branch              Branch?              @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  course              Course               @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courseLevel         CourseLevel?         @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  teacher             Teacher?             @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicYear        AcademicYear         @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicTerm        AcademicTerm?        @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  classGroupSchedules ClassGroupSchedule[]
-  enrollments         Enrollment[]
-  attendanceSessions  AttendanceSession[]
-  classroomBookings   ClassroomBooking[]
-  assessments         Assessment[]
+  branch                    Branch?                          @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course                    Course                           @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel               CourseLevel?                     @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teacher                   Teacher?                         @relation(fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear              AcademicYear                     @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm              AcademicTerm?                    @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroupSchedules       ClassGroupSchedule[]
+  enrollments               Enrollment[]
+  attendanceSessions        AttendanceSession[]
+  classroomBookings         ClassroomBooking[]
+  assessments               Assessment[]
+  periodAttendanceSummaries StudentPeriodAttendanceSummary[]
 
   @@map("class_groups")
 }
@@ -985,29 +998,31 @@ model Enrollment {
   createdBy        String?
   updatedBy        String?
 
-  branch                   Branch?                   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  student                  Student                   @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  course                   Course                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courseLevel              CourseLevel?              @relation("CourseLevelEnrollments", fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  initialLevel             CourseLevel?              @relation("InitialLevelEnrollments", fields: [initialLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  currentLevel             CourseLevel?              @relation("CurrentLevelEnrollments", fields: [currentLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  classGroup               ClassGroup?               @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicYear             AcademicYear              @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicTerm             AcademicTerm?             @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  billingPolicy            EnrollmentBillingPolicy?  @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  invoices                 Invoice[]
-  payments                 Payment[]
-  statusHistory            EnrollmentStatusHistory[]
-  lessonProgress           StudentLessonProgress[]
-  assessmentResults        AssessmentResult[]
-  studentSubjectProgress   StudentSubjectProgress[]
-  assessmentRetakes        AssessmentRetake[]
-  studentAssessmentResults StudentAssessmentResult[]
-  studentLevelProgress     StudentLevelProgress[]
-  studentCourseProgress    StudentCourseProgress?
-  prerequisiteWaivers      PrerequisiteWaiver[]
-  levelProgressionRequests LevelProgressionRequest[]
-  refunds                  Refund[]
+  branch                     Branch?                           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student                    Student                           @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course                     Course                            @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel                CourseLevel?                      @relation("CourseLevelEnrollments", fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  initialLevel               CourseLevel?                      @relation("InitialLevelEnrollments", fields: [initialLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  currentLevel               CourseLevel?                      @relation("CurrentLevelEnrollments", fields: [currentLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup                 ClassGroup?                       @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear               AcademicYear                      @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm               AcademicTerm?                     @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  billingPolicy              EnrollmentBillingPolicy?          @relation(fields: [billingPolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoices                   Invoice[]
+  payments                   Payment[]
+  statusHistory              EnrollmentStatusHistory[]
+  lessonProgress             StudentLessonProgress[]
+  assessmentResults          AssessmentResult[]
+  studentSubjectProgress     StudentSubjectProgress[]
+  assessmentRetakes          AssessmentRetake[]
+  studentAssessmentResults   StudentAssessmentResult[]
+  studentLevelProgress       StudentLevelProgress[]
+  studentCourseProgress      StudentCourseProgress?
+  prerequisiteWaivers        PrerequisiteWaiver[]
+  levelProgressionRequests   LevelProgressionRequest[]
+  refunds                    Refund[]
+  subjectAttendanceSummaries StudentSubjectAttendanceSummary[]
+  periodAttendanceSummaries  StudentPeriodAttendanceSummary[]
 
   @@unique([organizationId, enrollmentNumber])
   @@index([organizationId, courseId], name: "enrollments_org_course_idx")
@@ -1082,6 +1097,9 @@ model AttendanceRecord {
   organizationId      String
   attendanceSessionId String
   studentId           String
+  // Phase 1: kept NULLABLE deliberately — existing rows may lack an enrolment.
+  // Phase 2 backfills (student, classGroup, session date) → enrolment and then
+  // promotes this to NOT NULL. See docs/attendance-engine.md.
   enrollmentId        String?
   // AttendanceRecordStatus: PRESENT | ABSENT | LATE | EXCUSED | REMOTE
   status              String    @default("ABSENT")
@@ -1103,6 +1121,7 @@ model AttendanceRecord {
 
   @@unique([attendanceSessionId, studentId])
   @@index([organizationId, studentId])
+  @@index([organizationId, enrollmentId])
   @@map("attendance_records")
 }
 
@@ -1129,6 +1148,140 @@ model AttendanceJustification {
   @@index([organizationId, studentId])
   @@index([organizationId, status])
   @@map("attendance_justifications")
+}
+
+// =============================================================================
+// ATTENDANCE ENGINE — PHASE 1 (schema foundation only)
+// AttendancePolicy governs *interpretation* of attendance only. It NEVER stores
+// thresholds — minimumAttendancePercentage / maxAbsences stay on LevelSubject
+// (Decision #1). The two summary models are persisted read-models: nothing
+// writes them yet (Phase 4) and they do NOT drive academic progression yet
+// (Phase 5, gated). See docs/attendance-engine-domain.md + docs/attendance-engine.md.
+// =============================================================================
+
+model AttendancePolicy {
+  id                           String    @id @default(cuid())
+  organizationId               String
+  name                         String
+  // Interpretation knobs only (never thresholds).
+  countExcusedAsPresent        Boolean   @default(false)
+  countRemoteAsPresent         Boolean   @default(true)
+  countLateAsPartial           Boolean   @default(true)
+  lateAfterMinutes             Int       @default(10)
+  absenceAfterMinutes          Int       @default(30)
+  atRiskBufferPercentage       Decimal   @default(5) @db.Decimal(5, 2)
+  // Justification workflow.
+  allowJustification           Boolean   @default(true)
+  requireJustificationApproval Boolean   @default(true)
+  justificationWindowDays      Int?
+  // Session lifecycle.
+  autoCloseSessions            Boolean   @default(false)
+  // Attendance Engine Phase 5 — GATED academic wiring. When true, this policy's
+  // subjects feed StudentSubjectAttendanceSummary.attendancePercentage into the
+  // grade cascade and low attendance can produce INCOMPLETE. Default false →
+  // attendance stays reporting-only (behaviour-neutral). The THRESHOLD still
+  // lives on LevelSubject.minimumAttendancePercentage; this only enables enforcement.
+  enforceAttendanceForProgress Boolean   @default(false)
+  isDefault                    Boolean   @default(false)
+  // AttendancePolicyStatus: ACTIVE | INACTIVE | ARCHIVED
+  status                       String    @default("ACTIVE")
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+  deletedAt                    DateTime?
+
+  organization               Organization                      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubjects              LevelSubject[]
+  subjectAttendanceSummaries StudentSubjectAttendanceSummary[]
+
+  // "One default active policy per organization" is enforced by a FILTERED
+  // unique index (WHERE isDefault = 1 AND deletedAt IS NULL) created in the
+  // migration — Prisma @@unique cannot express the predicate.
+  @@index([organizationId, status])
+  @@map("attendance_policies")
+}
+
+model StudentSubjectAttendanceSummary {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  enrollmentId          String
+  studentId             String
+  levelSubjectId        String
+  // Policy in effect for this summary (interpretation snapshot). Optional:
+  // falls back to the org default when null.
+  attendancePolicyId    String?
+  totalSessions         Int       @default(0)
+  totalScheduledMinutes Int       @default(0)
+  totalPresentMinutes   Int       @default(0)
+  totalAbsentMinutes    Int       @default(0)
+  totalLateMinutes      Int       @default(0)
+  totalExcusedMinutes   Int       @default(0)
+  attendancePercentage  Decimal?  @db.Decimal(5, 2)
+  // StudentSubjectAttendanceSummaryStatus: NOT_STARTED | SUFFICIENT | AT_RISK | BELOW_REQUIRED
+  status                String    @default("NOT_STARTED")
+  // Null until the first recalculation writes it (Phase 4).
+  calculatedAt          DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment       Enrollment        @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject     LevelSubject      @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendancePolicy AttendancePolicy? @relation(fields: [attendancePolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([enrollmentId, levelSubjectId])
+  @@index([organizationId, studentId])
+  @@index([organizationId, levelSubjectId])
+  @@index([organizationId, status])
+  @@index([organizationId, calculatedAt])
+  @@map("student_subject_attendance_summaries")
+}
+
+model StudentPeriodAttendanceSummary {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  academicYearId        String
+  academicTermId        String?
+  enrollmentId          String
+  studentId             String
+  courseId              String
+  courseLevelId         String?
+  classGroupId          String?
+  totalSessions         Int       @default(0)
+  presentCount          Int       @default(0)
+  absentCount           Int       @default(0)
+  lateCount             Int       @default(0)
+  excusedCount          Int       @default(0)
+  remoteCount           Int       @default(0)
+  totalScheduledMinutes Int       @default(0)
+  totalPresentMinutes   Int       @default(0)
+  attendancePercentage  Decimal?  @db.Decimal(5, 2)
+  // StudentPeriodAttendanceSummaryStatus: GOOD | AT_RISK | BELOW_REQUIRED
+  status                String    @default("GOOD")
+  // Null until the first recalculation writes it (Phase 6).
+  calculatedAt          DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicTerm AcademicTerm? @relation(fields: [academicTermId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course       Course        @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel  CourseLevel?  @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  classGroup   ClassGroup?   @relation(fields: [classGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Uniqueness of (enrollmentId, academicYearId, academicTermId) with a NULLABLE
+  // academicTermId is enforced by TWO filtered unique indexes in the migration
+  // (SQL Server treats multiple NULLs as duplicates under a plain UNIQUE).
+  @@index([organizationId, studentId])
+  @@index([organizationId, academicYearId])
+  @@index([organizationId, academicTermId])
+  @@index([organizationId, classGroupId])
+  @@index([organizationId, status])
+  @@index([organizationId, calculatedAt])
+  @@map("student_period_attendance_summaries")
 }
 
 // =============================================================================
@@ -1576,29 +1729,29 @@ model NotificationDelivery {
 // =============================================================================
 
 model NotificationEmailSettings {
-  id             String  @id @default(cuid())
-  organizationId String  @unique
+  id             String @id @default(cuid())
+  organizationId String @unique
 
   // NotificationEmailProviderType: SMTP | MICROSOFT_GRAPH
   providerType String  @default("SMTP")
   isEnabled    Boolean @default(false)
 
-  fromName String
+  fromName  String
   fromEmail String
-  replyTo  String?
+  replyTo   String?
 
   smtpHost              String?
   smtpPort              Int?
   smtpUsername          String?
-  smtpPasswordEncrypted String?  @db.NVarChar(Max)
-  smtpSecure            Boolean  @default(true)
+  smtpPasswordEncrypted String? @db.NVarChar(Max)
+  smtpSecure            Boolean @default(true)
 
   // Reserved — Microsoft Graph is not implemented in this phase.
   graphTenantId              String?
   graphClientId              String?
   graphClientSecretEncrypted String? @db.NVarChar(Max)
 
-  lastTestedAt DateTime?
+  lastTestedAt   DateTime?
   // NotificationEmailTestStatus: SUCCESS | FAILED
   lastTestStatus String?
   lastTestError  String?   @db.NVarChar(Max)
@@ -1823,16 +1976,17 @@ model AcademicYear {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  terms              AcademicTerm[]
-  holidays           AcademicHoliday[]
-  events             AcademicEvent[]
-  classGroups        ClassGroup[]
-  enrollments        Enrollment[]
-  classroomBookings  ClassroomBooking[]
-  attendanceSessions AttendanceSession[]
-  assessmentPeriods  AssessmentPeriod[]
-  assessments        Assessment[]
+  organization              Organization                     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  terms                     AcademicTerm[]
+  holidays                  AcademicHoliday[]
+  events                    AcademicEvent[]
+  classGroups               ClassGroup[]
+  enrollments               Enrollment[]
+  classroomBookings         ClassroomBooking[]
+  attendanceSessions        AttendanceSession[]
+  assessmentPeriods         AssessmentPeriod[]
+  assessments               Assessment[]
+  periodAttendanceSummaries StudentPeriodAttendanceSummary[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -1854,15 +2008,16 @@ model AcademicTerm {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  academicYear       AcademicYear        @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  events             AcademicEvent[]
-  classGroups        ClassGroup[]
-  enrollments        Enrollment[]
-  classroomBookings  ClassroomBooking[]
-  attendanceSessions AttendanceSession[]
-  assessmentPeriods  AssessmentPeriod[]
-  assessments        Assessment[]
+  organization              Organization                     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  academicYear              AcademicYear                     @relation(fields: [academicYearId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events                    AcademicEvent[]
+  classGroups               ClassGroup[]
+  enrollments               Enrollment[]
+  classroomBookings         ClassroomBooking[]
+  attendanceSessions        AttendanceSession[]
+  assessmentPeriods         AssessmentPeriod[]
+  assessments               Assessment[]
+  periodAttendanceSummaries StudentPeriodAttendanceSummary[]
 
   @@unique([academicYearId, order])
   @@unique([academicYearId, code])
