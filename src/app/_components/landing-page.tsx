@@ -86,7 +86,7 @@ export function LandingPage() {
                   : "/images/logo/racio-horizontal-black-transparent.png"
               }
               alt="Racio — Gestão Escolar"
-              style={{ height: 30, width: "auto", display: "block" }}
+              style={{ height: 36, width: "auto", display: "block" }}
             />
           </a>
           <div
@@ -737,7 +737,7 @@ export function LandingPage() {
                       : "/images/logo/racio-horizontal-black-transparent.png"
                   }
                   alt="Racio — Gestão Escolar"
-                  style={{ height: 28, width: "auto", display: "block" }}
+                  style={{ height: 34, width: "auto", display: "block" }}
                 />
               </a>
               <p
