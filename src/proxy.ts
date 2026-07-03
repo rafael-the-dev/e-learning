@@ -32,7 +32,7 @@ export default auth( async (req) => {
 
 export const config = {
   // Skip Next internals and any path with a file extension. Files in `public/`
-  // are served from the ROOT (e.g. `/images/icons/x.png`, never `/public/...`),
+  // are served from the ROOT (e.g. `/images/logo/x.png`, never `/public/...`),
   // so the old `public/` exclusion matched nothing and the auth middleware
   // intercepted every static asset — redirecting unauthenticated requests to
   // `/login` and serving HTML in place of the file. The `.*\..*` rule excludes

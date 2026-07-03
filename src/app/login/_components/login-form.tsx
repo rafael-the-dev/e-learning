@@ -39,13 +39,13 @@ import { getPostLoginRedirect } from "../actions";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Marca "Lectario" (logos em /public/images/icons). São monocromáticas e
+ * Marca "Racio" (logos em /public/images/mark). São monocromáticas e
  * transparentes, por isso escolhe-se a variante que contrasta com o fundo —
  * tendo em conta a inversão de tema (o painel de marca usa `--primary`, que o
  * tema escuro inverte para claro).
  */
-const MARK_WHITE = "/images/icons/lectario-mark-white-512.png";
-const MARK_BLACK = "/images/icons/lectario-mark-black-512.png";
+const MARK_WHITE = "/images/mark/racio-mark-white-transparent.png";
+const MARK_BLACK = "/images/mark/racio-mark-black-transparent.png";
 
 /**
  * Equipamento escolar espalhado pelo painel de marca como decoração subtil.
@@ -307,12 +307,12 @@ export function LoginForm() {
           >
             <Link
               href="/"
-              aria-label="Lectario — ir para a página inicial"
+              aria-label="Racio — ir para a página inicial"
               style={{ display: "inline-flex", marginBottom: 12 }}
             >
               <Image
                 src={surfaceMark}
-                alt="Lectario"
+                alt="Racio"
                 width={64}
                 height={64}
                 priority
@@ -573,7 +573,7 @@ export function LoginForm() {
             color: "var(--muted-foreground)",
           }}
         >
-          © 2026 Lectario
+          © 2026 Racio
         </p>
       </main>
     </div>

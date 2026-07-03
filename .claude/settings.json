@@ -140,7 +140,8 @@
       "Bash(echo \"commit3 rc=$?\")",
       "Bash(pnpm prisma *)",
       "Bash(npx vitest *)",
-      "Bash(echo \"rc=$?\")"
+      "Bash(echo \"rc=$?\")",
+      "Bash(grep -iE \"layout\\\\.tsx|manifest\\\\.ts|login-form|sidebar-shell|landing-page|login\\\\\\\\\\\\\\\\page|proxy\\\\.ts\")"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\settings\\roles\\[roleId]",

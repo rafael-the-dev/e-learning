@@ -82,10 +82,10 @@ export function LandingPage() {
             <img
               src={
                 dark
-                  ? "/images/lectario-logo-horizontal-white-trim.png"
-                  : "/images/lectario-logo-horizontal-black-trim.png"
+                  ? "/images/logo/racio-horizontal-white-transparent.png"
+                  : "/images/logo/racio-horizontal-black-transparent.png"
               }
-              alt="Lectário — Gestão Escolar"
+              alt="Racio — Gestão Escolar"
               style={{ height: 30, width: "auto", display: "block" }}
             />
           </a>
@@ -733,10 +733,10 @@ export function LandingPage() {
                 <img
                   src={
                     dark
-                      ? "/images/lectario-logo-horizontal-white-trim.png"
-                      : "/images/lectario-logo-horizontal-black-trim.png"
+                      ? "/images/logo/racio-horizontal-white-transparent.png"
+                      : "/images/logo/racio-horizontal-black-transparent.png"
                   }
-                  alt="Lectário — Gestão Escolar"
+                  alt="Racio — Gestão Escolar"
                   style={{ height: 28, width: "auto", display: "block" }}
                 />
               </a>
@@ -801,7 +801,7 @@ export function LandingPage() {
             }}
           >
             <span style={{ fontSize: 12.5, color: "var(--muted-foreground)" }}>
-              © 2026 Lectário. Todos os direitos reservados.
+              © 2026 Racio. Todos os direitos reservados.
             </span>
             <span
               style={{ fontSize: 12.5, color: "var(--muted-foreground)", display: "flex", gap: 20 }}
