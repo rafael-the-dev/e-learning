@@ -233,3 +233,15 @@ antes de qualquer mutação — a UI nunca é a fonte de autorização.
 | UI (detalhe)  | `src/app/(org)/academic/progression-requests/[requestId]/page.tsx` |
 | Componentes   | `src/modules/prerequisites/components/progression-*.tsx` |
 | Testes        | `*/review-progression-request.service.test.ts`, `*/progression-request-workflow.actions.test.ts` |
+
+## Frequência e INCOMPLETE (Attendance Engine — Fase 5, opcional)
+
+Quando a frequência é aplicada academicamente (opt-in via
+`AttendancePolicy.enforceAttendanceForProgress = true`), uma disciplina com nota
+suficiente mas frequência abaixo de `LevelSubject.minimumAttendancePercentage`
+fica **INCOMPLETE** — estado **não-terminal** (`completedAt = null`). Na agregação
+de nível, uma disciplina obrigatória `INCOMPLETE` mantém o nível **IN_PROGRESS**
+(nunca `FAILED` só por isso, nunca `PASSED`), pelo que o curso não conclui nem
+reprova apenas por frequência; resolve para `PASSED` quando a frequência recupera.
+Desativado por omissão (comportamento inalterado). Ver
+[`attendance-engine.md`](./attendance-engine.md) → *Phase 5*.
