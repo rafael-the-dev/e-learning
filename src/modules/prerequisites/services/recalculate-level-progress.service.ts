@@ -57,6 +57,11 @@ export async function recalculateStudentLevelProgress(
   // Required subjects still in the (non-terminal) RECOVERY_REQUIRED state. While
   // any exist the level is UNRESOLVED — it must not finalise as FAILED.
   let recoveryRequiredRequired = 0;
+  // Required subjects held INCOMPLETE by the attendance gate (Phase 5). Like
+  // RECOVERY_REQUIRED, this is NON-terminal and unresolved: it must keep the
+  // level out of PASSED/FAILED (attendance may still recover) — never FAILED
+  // solely because of it, never counted as a positive completion.
+  let incompleteRequired = 0;
 
   for (const ls of levelSubjects) {
     const p = progressMap.get(ls.id);
@@ -68,6 +73,8 @@ export async function recalculateStudentLevelProgress(
       if (ls.isRequired) failedRequired++;
     } else if (status === "RECOVERY_REQUIRED") {
       if (ls.isRequired) recoveryRequiredRequired++;
+    } else if (status === "INCOMPLETE") {
+      if (ls.isRequired) incompleteRequired++;
     } else if (status === "IN_PROGRESS") {
       anyInProgress = true;
     }
@@ -102,8 +109,17 @@ export async function recalculateStudentLevelProgress(
     levelStatus = "RECOVERY_REQUIRED";
     progressReason = `${recoveryRequiredRequired} disciplina(s) obrigatória(s) em recuperação`;
   } else if (failedRequired > 0 && !anyInProgress) {
+    // A genuinely FAILED required subject fails the level (an INCOMPLETE one does
+    // not mask a real failure — grade recovery/attendance can't turn FAILED into
+    // PASSED here).
     levelStatus = "FAILED";
     progressReason = `${failedRequired} disciplina(s) obrigatória(s) reprovada(s)`;
+  } else if (incompleteRequired > 0) {
+    // Attendance-gated INCOMPLETE on a required subject with no genuine failure:
+    // the level stays UNRESOLVED (IN_PROGRESS), never FAILED, never PASSED, so it
+    // cannot complete the course. Resolves once attendance recovers → PASSED.
+    levelStatus = "IN_PROGRESS";
+    progressReason = `${incompleteRequired} disciplina(s) obrigatória(s) incompleta(s) por frequência`;
   } else {
     levelStatus = "IN_PROGRESS";
   }
