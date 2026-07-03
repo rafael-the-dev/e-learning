@@ -133,7 +133,14 @@
       "Bash(pnpm exec *)",
       "Bash(pnpm lint *)",
       "Bash(grep -iE \"progression-request|review-progression|progression-review|academic\\\\\\\\\\\\\\\\progression|level-progression-request|progression-request-workflow\")",
-      "Bash(git commit -q -m '@ *)"
+      "Bash(git commit -q -m '@ *)",
+      "Bash(echo \"eslint rc=$?\")",
+      "Bash(echo \"commit1 rc=$?\")",
+      "Bash(echo \"commit2 rc=$?\")",
+      "Bash(echo \"commit3 rc=$?\")",
+      "Bash(pnpm prisma *)",
+      "Bash(npx vitest *)",
+      "Bash(echo \"rc=$?\")"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\settings\\roles\\[roleId]",
