@@ -1470,6 +1470,8 @@ function btnOutline(
 }
 
 const styles = `
+  html{ scroll-behavior:smooth; }
+  @media (prefers-reduced-motion:reduce){ html{ scroll-behavior:auto; } }
   @keyframes gs-fade { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:none } }
   .gs-link{ color:var(--muted-foreground); transition:color .15s; }
   .gs-link:hover{ color:var(--foreground); }
