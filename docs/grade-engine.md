@@ -447,3 +447,15 @@ grades have no publication gate.
 All normalization and final-grade calculation go through the single
 `GradeCalculationService`. The legacy `assessments/services/grade-calculator.service.ts`
 was **removed**.
+
+### Attendance gating (Attendance Engine Phase 5 — GATED, opt-in)
+
+`GradeCalculationService` has always carried an `INCOMPLETE` branch (frequência
+abaixo do mínimo). As of Attendance Engine Phase 5 it is **wired but gated**: the
+`subject-progress-cascade` feeds a real `attendancePercentage` into the calc
+**only when** `AttendancePolicy.enforceAttendanceForProgress = true` and the
+`LevelSubject.minimumAttendancePercentage` threshold exists; otherwise it passes
+`null` and the branch stays dormant (subjects pass on grade alone). The threshold
+lives on `LevelSubject`; the policy flag only *enables* enforcement. `INCOMPLETE`
+is **non-terminal** (`completedAt = null`, grade preserved) and never `FAILED`.
+See [`attendance-engine.md`](./attendance-engine.md) → *Phase 5*.

@@ -122,9 +122,17 @@ behaviour: `STANDARD` strategy, `WEIGHTED_BY_HOURS` grade, **all requirement gat
 off**. The requirement gates are accepted but **not enforced** yet (documented
 stubs) until their owning services exist:
 
+> **Attendance vs `requireAttendance` (Phase 5 clarification).** Attendance
+> Engine Phase 5 gates attendance at the **subject** level (a low-attendance
+> subject becomes `INCOMPLETE`, which keeps its level `IN_PROGRESS` and therefore
+> keeps the course out of `COMPLETED` — never `FAILED` solely from it). That is a
+> *derived* effect through level status and needs **no** course-level gate. The
+> `requireAttendance` gate below is a **separate, still-inactive** course-level
+> clearance check (§13.8 of the domain doc) — a later, distinct product decision.
+
 | Gate | Owning service (future) |
 |------|-------------------------|
-| `requireAttendance` | AttendanceEngine |
+| `requireAttendance` | AttendanceEngine (course-level clearance; still off — distinct from Phase 5 subject gating) |
 | `requireFinancialClearance` | FinancialEligibilityService |
 | `requireInternship` | Internship module |
 | `requirePracticalLessons` | Lessons module |
