@@ -26,14 +26,14 @@ export default async function AdminLayout({
         <div className="h-14 flex items-center px-5 border-b">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/images/lectario-logo-horizontal-black-trim.png"
-            alt="Lectário — Gestão Escolar"
+            src="/images/logo/racio-horizontal-black-transparent.png"
+            alt="Racio — Gestão Escolar"
             className="h-6 w-auto dark:hidden"
           />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/images/lectario-logo-horizontal-white-trim.png"
-            alt="Lectário — Gestão Escolar"
+            src="/images/logo/racio-horizontal-white-transparent.png"
+            alt="Racio — Gestão Escolar"
             className="hidden h-6 w-auto dark:block"
           />
         </div>

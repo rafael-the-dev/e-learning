@@ -29,25 +29,25 @@ export function SidebarShell({ orgName, userName, userEmail, children }: Props) 
         {collapsed ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src="/images/lectario-mark.svg"
-            alt="Lectário"
-            title={orgName ?? "Lectário"}
+            src="/images/svg/racio-mark-squircle.svg"
+            alt="Racio"
+            title={orgName ?? "Racio"}
             className="size-7 rounded-lg shrink-0"
           />
         ) : (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/images/lectario-logo-horizontal-black-trim.png"
-              alt="Lectário — Gestão Escolar"
-              title={orgName ?? "Lectário"}
+              src="/images/logo/racio-horizontal-black-transparent.png"
+              alt="Racio — Gestão Escolar"
+              title={orgName ?? "Racio"}
               className="h-6 w-auto dark:hidden"
             />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/images/lectario-logo-horizontal-white-trim.png"
-              alt="Lectário — Gestão Escolar"
-              title={orgName ?? "Lectário"}
+              src="/images/logo/racio-horizontal-white-transparent.png"
+              alt="Racio — Gestão Escolar"
+              title={orgName ?? "Racio"}
               className="hidden h-6 w-auto dark:block"
             />
           </>
