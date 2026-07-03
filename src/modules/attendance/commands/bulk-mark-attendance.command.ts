@@ -13,6 +13,8 @@ import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getDb } from "@/server/db";
 import { findAttendanceSessionById } from "@/modules/attendance/repositories/attendance-session.repository";
 import { upsertAttendanceRecord } from "@/modules/attendance/repositories/attendance-record.repository";
+import { triggerAttendanceSummaryRecalcForSession } from "@/modules/attendance/services/student-subject-attendance-summary.service";
+import { triggerPeriodSummaryRecalcForSession } from "@/modules/attendance/services/student-period-attendance-summary.service";
 import {
   bulkMarkAttendanceSchema,
   type BulkMarkAttendanceSchema,
@@ -96,6 +98,21 @@ export class BulkMarkAttendanceCommand extends BaseCommand<
     const now = new Date();
     const records: AttendanceRecord[] = [];
 
+    // Resolve enrolments once so new records carry enrollmentId (Phase 2 intent)
+    // and the summary trigger can attribute them. Behaviour-neutral.
+    const db = await getDb();
+    const enrollmentRows = await db.enrollment.findMany({
+      where: {
+        studentId: { in: this.input.records.map((r) => r.studentId) },
+        classGroupId: session.classGroupId,
+        organizationId: this.context.organizationId,
+        status: "ACTIVE",
+        deletedAt: null,
+      },
+      select: { id: true, studentId: true },
+    });
+    const enrollmentByStudent = new Map(enrollmentRows.map((e) => [e.studentId, e.id]));
+
     for (const rec of this.input.records) {
       let minutesAttended = 0;
       if (rec.minutesAttended != null) {
@@ -111,7 +128,7 @@ export class BulkMarkAttendanceCommand extends BaseCommand<
         organizationId: this.context.organizationId,
         attendanceSessionId: this.input.sessionId,
         studentId: rec.studentId,
-        enrollmentId: rec.enrollmentId ?? null,
+        enrollmentId: rec.enrollmentId ?? enrollmentByStudent.get(rec.studentId) ?? null,
         status: rec.status,
         lateMinutes: rec.lateMinutes ?? null,
         minutesAttended,
@@ -131,6 +148,11 @@ export class BulkMarkAttendanceCommand extends BaseCommand<
         count: this.input.records.length,
       },
     });
+
+    // Attendance Engine Phase 3: one fan-out recalc for the whole session. Best-effort.
+    triggerAttendanceSummaryRecalcForSession(this.context, this.input.sessionId);
+    // Attendance Engine Phase 4: period reporting summaries fan-out. Best-effort.
+    triggerPeriodSummaryRecalcForSession(this.context, this.input.sessionId);
 
     return records;
   }

@@ -19,6 +19,8 @@ import {
   type RejectAttendanceJustificationSchema,
 } from "@/modules/attendance/schemas/attendance.schema";
 import type { AttendanceJustification } from "@/modules/attendance/types";
+import { triggerAttendanceSummaryRecalcForRecord } from "@/modules/attendance/services/student-subject-attendance-summary.service";
+import { triggerPeriodSummaryRecalcForRecord } from "@/modules/attendance/services/student-period-attendance-summary.service";
 
 export class RejectAttendanceJustificationCommand extends BaseCommand<
   RejectAttendanceJustificationSchema,
@@ -92,6 +94,12 @@ export class RejectAttendanceJustificationCommand extends BaseCommand<
       },
       actorId: this.context.userId,
     });
+
+    // Attendance Engine Phase 3: a rejected justification removes any prior excuse
+    // effect from the summary. Best-effort.
+    triggerAttendanceSummaryRecalcForRecord(this.context, justification.attendanceRecordId);
+    // Attendance Engine Phase 4: period reporting summary too. Best-effort.
+    triggerPeriodSummaryRecalcForRecord(this.context, justification.attendanceRecordId);
 
     return justification;
   }

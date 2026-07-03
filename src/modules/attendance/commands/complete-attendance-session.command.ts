@@ -18,6 +18,8 @@ import {
   type CompleteAttendanceSessionSchema,
 } from "@/modules/attendance/schemas/attendance.schema";
 import { evaluateAttendanceRiskForSession } from "@/modules/attendance/services/attendance-risk.service";
+import { triggerAttendanceSummaryRecalcForSession } from "@/modules/attendance/services/student-subject-attendance-summary.service";
+import { triggerPeriodSummaryRecalcForSession } from "@/modules/attendance/services/student-period-attendance-summary.service";
 
 export class CompleteAttendanceSessionCommand extends BaseCommand<
   CompleteAttendanceSessionSchema,
@@ -70,5 +72,14 @@ export class CompleteAttendanceSessionCommand extends BaseCommand<
     ).catch((err) =>
       console.error("[CompleteAttendanceSessionCommand] risk evaluation failed", err)
     );
+
+    // Attendance Engine Phase 3: recompute persisted summaries for every enrolment
+    // in this session now that it counts. Best-effort — a summary failure must
+    // never roll back the completion (behaviour-neutral).
+    triggerAttendanceSummaryRecalcForSession(this.context, session.id);
+
+    // Attendance Engine Phase 4: recompute the period (year/term) reporting
+    // summaries for the same enrolments. Best-effort, reporting-only.
+    triggerPeriodSummaryRecalcForSession(this.context, session.id);
   }
 }
