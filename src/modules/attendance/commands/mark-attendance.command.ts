@@ -13,6 +13,8 @@ import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { getDb } from "@/server/db";
 import { findAttendanceSessionById } from "@/modules/attendance/repositories/attendance-session.repository";
 import { upsertAttendanceRecord } from "@/modules/attendance/repositories/attendance-record.repository";
+import { triggerAttendanceSummaryRecalcForRecord } from "@/modules/attendance/services/student-subject-attendance-summary.service";
+import { triggerPeriodSummaryRecalcForRecord } from "@/modules/attendance/services/student-period-attendance-summary.service";
 import {
   markAttendanceSchema,
   type MarkAttendanceSchema,
@@ -94,10 +96,25 @@ export class MarkAttendanceCommand extends BaseCommand<MarkAttendanceSchema, Att
       minutesAttended = Math.max(0, session.durationMinutes - late);
     }
 
+    // Resolve the enrolment so new records carry enrollmentId (Phase 2 intent) and
+    // the summary trigger can attribute the record. Behaviour-neutral.
+    const db = await getDb();
+    const enrollment = await db.enrollment.findFirst({
+      where: {
+        studentId: this.input.studentId,
+        classGroupId: session.classGroupId,
+        organizationId: this.context.organizationId,
+        status: "ACTIVE",
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
     const record = await upsertAttendanceRecord({
       organizationId: this.context.organizationId,
       attendanceSessionId: this.input.sessionId,
       studentId: this.input.studentId,
+      enrollmentId: enrollment?.id ?? null,
       status: this.input.status,
       lateMinutes: this.input.lateMinutes ?? null,
       minutesAttended,
@@ -112,6 +129,11 @@ export class MarkAttendanceCommand extends BaseCommand<MarkAttendanceSchema, Att
       action: "attendance_record.marked",
       newValues: { sessionId: this.input.sessionId, studentId: this.input.studentId, status: this.input.status },
     });
+
+    // Attendance Engine Phase 3: recompute this enrolment's summary. Best-effort.
+    triggerAttendanceSummaryRecalcForRecord(this.context, record.id);
+    // Attendance Engine Phase 4: recompute the period reporting summary. Best-effort.
+    triggerPeriodSummaryRecalcForRecord(this.context, record.id);
 
     return record;
   }

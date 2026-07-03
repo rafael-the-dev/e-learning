@@ -18,6 +18,8 @@ import {
   updateAttendanceRecordSchema,
   type UpdateAttendanceRecordSchema,
 } from "@/modules/attendance/schemas/attendance.schema";
+import { triggerAttendanceSummaryRecalcForRecord } from "@/modules/attendance/services/student-subject-attendance-summary.service";
+import { triggerPeriodSummaryRecalcForRecord } from "@/modules/attendance/services/student-period-attendance-summary.service";
 import type { AttendanceRecord } from "@/modules/attendance/types";
 
 export class UpdateAttendanceRecordCommand extends BaseCommand<
@@ -88,6 +90,11 @@ export class UpdateAttendanceRecordCommand extends BaseCommand<
       oldValues: { status: existing.status, minutesAttended: existing.minutesAttended },
       newValues: { status: record.status, minutesAttended: record.minutesAttended },
     });
+
+    // Attendance Engine Phase 3: recompute this enrolment's summary. Best-effort.
+    triggerAttendanceSummaryRecalcForRecord(this.context, record.id);
+    // Attendance Engine Phase 4: recompute the period reporting summary. Best-effort.
+    triggerPeriodSummaryRecalcForRecord(this.context, record.id);
 
     return record;
   }

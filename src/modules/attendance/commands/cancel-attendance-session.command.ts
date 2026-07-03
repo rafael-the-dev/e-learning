@@ -17,6 +17,8 @@ import {
   cancelAttendanceSessionSchema,
   type CancelAttendanceSessionSchema,
 } from "@/modules/attendance/schemas/attendance.schema";
+import { triggerAttendanceSummaryRecalcForSession } from "@/modules/attendance/services/student-subject-attendance-summary.service";
+import { triggerPeriodSummaryRecalcForSession } from "@/modules/attendance/services/student-period-attendance-summary.service";
 
 export class CancelAttendanceSessionCommand extends BaseCommand<
   CancelAttendanceSessionSchema,
@@ -60,5 +62,11 @@ export class CancelAttendanceSessionCommand extends BaseCommand<
       action: "attendance_session.cancelled",
       newValues: { status: "CANCELLED", reason: this.input.reason },
     });
+
+    // Attendance Engine Phase 3: a cancelled session no longer counts — recompute
+    // affected summaries. Best-effort; never rolls back the cancellation.
+    triggerAttendanceSummaryRecalcForSession(this.context, session.id);
+    // Attendance Engine Phase 4: period reporting summaries too.
+    triggerPeriodSummaryRecalcForSession(this.context, session.id);
   }
 }
