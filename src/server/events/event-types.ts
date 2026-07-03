@@ -56,6 +56,26 @@ export const DomainEventType = {
   ATTENDANCE_JUSTIFICATION_REJECTED: "attendance.justification_rejected",
   ATTENDANCE_STUDENT_AT_RISK: "attendance.student_at_risk",
   ATTENDANCE_STUDENT_BELOW_REQUIRED: "attendance.student_below_required",
+  // Attendance Engine Phase 3 — summary read-model lifecycle. `summary_recalculated`
+  // fires whenever a persisted summary's percentage/status actually changes; the
+  // two transition events fire only on a SUFFICIENT⇄BELOW_REQUIRED crossing.
+  // No notifications are wired to these yet (behaviour-neutral).
+  ATTENDANCE_SUMMARY_RECALCULATED: "attendance.summary_recalculated",
+  ATTENDANCE_STUDENT_RECOVERED_ATTENDANCE: "attendance.student_recovered_attendance",
+  // Attendance Engine Phase 4 — period/year reporting read-model lifecycle.
+  // Reporting-only (never drives academics). `period_summary_recalculated` fires
+  // on any percentage/status change; the transition events only on a status
+  // change. No notifications wired yet.
+  ATTENDANCE_PERIOD_SUMMARY_RECALCULATED: "attendance.period_summary_recalculated",
+  ATTENDANCE_PERIOD_BELOW_REQUIRED: "attendance.period_below_required",
+  ATTENDANCE_PERIOD_AT_RISK: "attendance.period_at_risk",
+  ATTENDANCE_PERIOD_RECOVERED: "attendance.period_recovered",
+  // Attendance Engine Phase 5 — GATED academic wiring (opt-in). Emitted only when
+  // enforcement is enabled and only on meaningful academic transitions.
+  ATTENDANCE_ACADEMIC_GATE_ENABLED: "attendance.academic_gate_enabled",
+  ATTENDANCE_ACADEMIC_IMPACT_APPLIED: "attendance.academic_impact_applied",
+  ATTENDANCE_SUBJECT_MARKED_INCOMPLETE: "attendance.subject_marked_incomplete",
+  ATTENDANCE_SUBJECT_RECOVERED_FROM_INCOMPLETE: "attendance.subject_recovered_from_incomplete",
 
   // Assessments
   ASSESSMENT_RESULTS_PUBLISHED: "assessment.results_published",

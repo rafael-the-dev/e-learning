@@ -148,12 +148,32 @@ export const PERMISSIONS = {
   ATTENDANCE_RECORDS_VIEW: "attendanceRecords.view",
   ATTENDANCE_RECORDS_MARK: "attendanceRecords.mark",
   ATTENDANCE_RECORDS_UPDATE: "attendanceRecords.update",
+  // Admin-only maintenance: backfill legacy AttendanceRecord.enrollmentId
+  // (Attendance Engine Phase 2). Granted only to SUPER_ADMIN / ORG_ADMIN via
+  // Object.values — never added to the SECRETARY/TEACHER explicit lists.
+  ATTENDANCE_RECORDS_BACKFILL_ENROLLMENT: "attendanceRecords.backfillEnrollment",
 
   // Attendance Justifications
   ATTENDANCE_JUSTIFICATIONS_VIEW: "attendanceJustifications.view",
   ATTENDANCE_JUSTIFICATIONS_CREATE: "attendanceJustifications.create",
   ATTENDANCE_JUSTIFICATIONS_APPROVE: "attendanceJustifications.approve",
   ATTENDANCE_JUSTIFICATIONS_REJECT: "attendanceJustifications.reject",
+
+  // Attendance Policies (interpretation config — Attendance Engine Phase 1)
+  ATTENDANCE_POLICIES_VIEW: "attendancePolicies.view",
+  ATTENDANCE_POLICIES_CREATE: "attendancePolicies.create",
+  ATTENDANCE_POLICIES_UPDATE: "attendancePolicies.update",
+  ATTENDANCE_POLICIES_ARCHIVE: "attendancePolicies.archive",
+
+  // Attendance Summaries & Reports (read models — Attendance Engine Phase 1).
+  // Row-level scoping (teacher assigned classes, student own, guardian linked)
+  // is enforced by the scope layer, not by these coarse permissions.
+  ATTENDANCE_SUMMARIES_VIEW: "attendanceSummaries.view",
+  ATTENDANCE_REPORTS_VIEW: "attendanceReports.view",
+  // Admin-only maintenance: recompute persisted attendance summaries (Attendance
+  // Engine Phase 3). Behaviour-neutral — recalculates the read-model only.
+  // Auto-granted to SUPER_ADMIN / ORG_ADMIN via Object.values.
+  ATTENDANCE_SUMMARIES_RECALCULATE: "attendanceSummaries.recalculate",
 
   // Vehicles
   VEHICLES_CREATE: "vehicles.create",
@@ -573,6 +593,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_CREATE,
     PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_APPROVE,
     PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_REJECT,
+    PERMISSIONS.ATTENDANCE_POLICIES_VIEW,
+    PERMISSIONS.ATTENDANCE_SUMMARIES_VIEW,
+    PERMISSIONS.ATTENDANCE_REPORTS_VIEW,
     PERMISSIONS.INVOICES_VIEW,
     PERMISSIONS.INVOICES_CREATE,
     PERMISSIONS.INVOICES_UPDATE,
@@ -674,6 +697,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.ATTENDANCE_RECORDS_MARK,
     PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_VIEW,
     PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_CREATE,
+    // Teacher sees attendance summaries only for assigned classes/subjects;
+    // the row-level filter lives in the teacher-scope layer, not here.
+    PERMISSIONS.ATTENDANCE_SUMMARIES_VIEW,
     PERMISSIONS.PRACTICAL_LESSONS_CREATE,
     PERMISSIONS.PRACTICAL_LESSONS_READ,
     PERMISSIONS.PRACTICAL_LESSONS_UPDATE,
@@ -711,6 +737,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.ATTENDANCE_RECORDS_VIEW,
     PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_VIEW,
     PERMISSIONS.ATTENDANCE_JUSTIFICATIONS_CREATE,
+    // Student sees only their OWN attendance summaries; the student-scope layer
+    // enforces the row-level filter.
+    PERMISSIONS.ATTENDANCE_SUMMARIES_VIEW,
     PERMISSIONS.INVOICES_VIEW,
     PERMISSIONS.PAYMENTS_VIEW,
     PERMISSIONS.RECEIPTS_VIEW,
