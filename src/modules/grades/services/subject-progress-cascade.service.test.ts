@@ -373,4 +373,98 @@ describe("recalculateSubjectProgressCascade", () => {
       expect(attendanceArg()).toBeNull();
     });
   });
+
+  // Sprint C: events (STUDENT_SUBJECT_PASSED/FAILED) and the generic
+  // `student_subject_progress.updated` audit must represent REAL transitions.
+  describe("transition-only events & audit (Sprint C)", () => {
+    const eventTypes = () => mocks.publish.mock.calls.map((c: unknown[]) => (c[0] as { eventType: string }).eventType);
+    const auditActions = () => mocks.auditLog.mock.calls.map((c: unknown[]) => (c[1] as { action: string }).action);
+    const passing = [{ assessmentComponentId: "c1", grade: 80, normalizedGrade: 80 }];
+    const failing = [{ assessmentComponentId: "c1", grade: 40, normalizedGrade: 40, sourceType: "CONTINUOUS" }];
+
+    it("IN_PROGRESS → PASSED emits STUDENT_SUBJECT_PASSED and writes the updated audit", async () => {
+      mocks.subjectProgressFindFirst.mockResolvedValue({ status: "IN_PROGRESS", finalGrade: null, attendancePercentage: null, completedAt: null, progressReason: null });
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(passing);
+
+      await recalculateSubjectProgressCascade(context, params);
+
+      expect(eventTypes()).toContain("student_subject.passed");
+      expect(auditActions()).toContain("student_subject_progress.updated");
+    });
+
+    it("PASSED → PASSED (idempotent recalc) emits NOTHING and writes NO audit", async () => {
+      mocks.subjectProgressFindFirst.mockResolvedValue(null);
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(passing);
+      await recalculateSubjectProgressCascade(context, params); // first run → PASSED
+
+      const persisted = mocks.upsertStudentSubjectProgress.mock.calls[0][0];
+      mocks.subjectProgressFindFirst.mockResolvedValue({
+        status: persisted.status,
+        finalGrade: persisted.finalGrade,
+        attendancePercentage: persisted.attendancePercentage,
+        completedAt: persisted.completedAt,
+        progressReason: persisted.progressReason,
+      });
+      mocks.publish.mockClear();
+      mocks.auditLog.mockClear();
+
+      await recalculateSubjectProgressCascade(context, params); // second run → identical
+
+      expect(mocks.publish).not.toHaveBeenCalled();
+      expect(mocks.auditLog).not.toHaveBeenCalled();
+    });
+
+    it("FAILED → FAILED (idempotent recalc) emits NOTHING and writes NO audit", async () => {
+      mocks.subjectProgressFindFirst.mockResolvedValue(null);
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(failing);
+      await recalculateSubjectProgressCascade(context, params); // first run → FAILED
+
+      const persisted = mocks.upsertStudentSubjectProgress.mock.calls[0][0];
+      mocks.subjectProgressFindFirst.mockResolvedValue({
+        status: persisted.status,
+        finalGrade: persisted.finalGrade,
+        attendancePercentage: persisted.attendancePercentage,
+        completedAt: persisted.completedAt,
+        progressReason: persisted.progressReason,
+      });
+      mocks.publish.mockClear();
+      mocks.auditLog.mockClear();
+
+      await recalculateSubjectProgressCascade(context, params); // second run → identical
+
+      expect(mocks.publish).not.toHaveBeenCalled();
+      expect(mocks.auditLog).not.toHaveBeenCalled();
+    });
+
+    it("FAILED → PASSED emits STUDENT_SUBJECT_PASSED", async () => {
+      mocks.subjectProgressFindFirst.mockResolvedValue({ status: "FAILED", finalGrade: 40, attendancePercentage: null, completedAt: new Date("2026-01-01"), progressReason: null });
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(passing);
+
+      await recalculateSubjectProgressCascade(context, params);
+
+      expect(eventTypes()).toContain("student_subject.passed");
+      expect(eventTypes()).not.toContain("student_subject.failed");
+    });
+
+    it("PASSED → FAILED emits STUDENT_SUBJECT_FAILED", async () => {
+      mocks.subjectProgressFindFirst.mockResolvedValue({ status: "PASSED", finalGrade: 80, attendancePercentage: null, completedAt: new Date("2026-01-01"), progressReason: null });
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(failing);
+
+      await recalculateSubjectProgressCascade(context, params);
+
+      expect(eventTypes()).toContain("student_subject.failed");
+      expect(eventTypes()).not.toContain("student_subject.passed");
+    });
+
+    it("a grade change with the same status still writes the updated audit (meaningful change)", async () => {
+      mocks.subjectProgressFindFirst.mockResolvedValue({ status: "PASSED", finalGrade: 70, attendancePercentage: null, completedAt: new Date("2026-01-01"), progressReason: null });
+      mocks.findResultsByEnrollmentAndLevelSubject.mockResolvedValue(passing); // grade 80 → still PASSED
+
+      await recalculateSubjectProgressCascade(context, params);
+
+      expect(auditActions()).toContain("student_subject_progress.updated");
+      // stays PASSED → no duplicate terminal event
+      expect(mocks.publish).not.toHaveBeenCalled();
+    });
+  });
 });
