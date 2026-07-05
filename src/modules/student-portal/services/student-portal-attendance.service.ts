@@ -14,12 +14,20 @@ export function buildStudentAttendanceKpis(rows: AttendanceStatRow[]): StudentAt
   let present = 0;
   let absent = 0;
   let justified = 0;
+  let unjustifiedAbsent = 0;
   let attended = 0;
 
   for (const r of rows) {
+    // Since Fix H2 an approved justification no longer rewrites the record to
+    // EXCUSED — the record keeps its real status. "Justified" is therefore any
+    // record carrying an approved justification, plus legacy EXCUSED rows.
+    const isJustified = r.status === "EXCUSED" || r.hasApprovedJustification;
     if (r.status === "PRESENT") present++;
-    if (r.status === "ABSENT") absent++;
-    if (r.status === "EXCUSED") justified++;
+    if (r.status === "ABSENT") {
+      absent++;
+      if (!r.hasApprovedJustification) unjustifiedAbsent++;
+    }
+    if (isJustified) justified++;
     if (ATTENDED_STATUSES.has(r.status)) attended++;
   }
 
@@ -28,7 +36,8 @@ export function buildStudentAttendanceKpis(rows: AttendanceStatRow[]): StudentAt
     presentCount: present,
     absentCount: absent,
     justifiedCount: justified,
-    unjustifiedCount: absent,
+    // Absences without an approved justification (justified absences excluded).
+    unjustifiedCount: unjustifiedAbsent,
   };
 }
 

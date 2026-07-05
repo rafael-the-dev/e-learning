@@ -83,6 +83,14 @@ calculator.
 
 ### 1.3 Summary layer — computed on-read, NOT persisted
 
+> **⚠️ Historical (baseline analysis). RETIRED as of Fix C1.** This section
+> describes the pre-engine state. Attendance is now read from the **persisted**
+> `StudentSubjectAttendanceSummary` (Phase 3) — the single source of truth. The
+> on-read `attendance-calculator.service.ts` is **`@deprecated`** and no longer
+> used by any live read path (`/api/attendance/reports`, Student 360, the risk
+> service); a guard test enforces this. See
+> [`attendance-engine.md` → "Read source of truth"](./attendance-engine.md).
+
 `attendance-calculator.service.ts` computes `StudentSubjectAttendance` live on
 every read:
 
@@ -385,6 +393,19 @@ original mark.
    stays valid but **deprecated**, and an approved justification is the
    authoritative excuse signal. No hard data migration of existing `EXCUSED`
    rows; the effect is applied at calculation time.
+
+> **✅ Shipped — model implemented end-to-end (Fix H2).** The proposed model above
+> is now the actual behaviour. `AttendanceRecord.status`/`minutesAttended`/
+> `lateMinutes` are immutable evidence: **approving a justification updates only
+> `AttendanceJustification` and never rewrites the record** (an earlier version of
+> the approve command overwrote it to `EXCUSED` + 0 minutes — Option A — which
+> silently defeated the weighting fix; that is corrected). The excused effect is
+> applied purely at calculation time via `hasApprovedJustification` (the APPROVED
+> justification relation), interpreted by `weighAttendanceRecord` so an
+> accommodation can only keep or raise attendance, never lower it. The approval
+> workflow creates **no new `EXCUSED` records**; legacy `EXCUSED` primary rows are
+> read as an excused absence for backward compatibility. See
+> [attendance-engine.md → "Justified records never reduce attendance (Fix H2)"](./attendance-engine.md).
 
 Answers: multiple justifications per record — **yes** historically, but only one
 `PENDING` at a time. Rejected can be resubmitted (new row). Submitters:

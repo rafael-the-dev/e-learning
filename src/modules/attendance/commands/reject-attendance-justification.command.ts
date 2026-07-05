@@ -58,6 +58,10 @@ export class RejectAttendanceJustificationCommand extends BaseCommand<
   }
 
   async execute(): Promise<AttendanceJustification> {
+    // Fix H2 invariant: rejecting a justification updates ONLY the justification
+    // review state. The factual AttendanceRecord (status / minutesAttended /
+    // lateMinutes) is never mutated — the original attendance evidence is
+    // preserved regardless of the review outcome.
     const justification = await updateJustificationStatus(
       this.input.justificationId,
       this.context.organizationId,

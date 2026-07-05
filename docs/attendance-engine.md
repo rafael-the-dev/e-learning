@@ -462,6 +462,20 @@ Idempotent, tenant-scoped.
   `attendance.academic_impact_applied`, plus `attendance.academic_gate_enabled`
   (reserved for the future policy-toggle path). **No notifications wired.**
 
+The attendance-specific audit/events above are emitted **only on a status change**
+(`INCOMPLETE` entered/left) — an `INCOMPLETE → INCOMPLETE` repeat is silent. The
+wiring runs the shared subject-progress cascade, whose own
+`STUDENT_SUBJECT_PASSED/FAILED` events and `student_subject_progress.updated`
+audit are **also** transition-only (Sprint C — see grade-engine.md → "Events
+represent transitions"). So a passing subject that dips to `INCOMPLETE` on low
+attendance fires each terminal event exactly once per crossing.
+
+**Repair-command idempotency.** Because both the wiring layer and the cascade gate
+on real transitions, running `RecalculateAttendanceAcademicImpactCommand` twice
+changes data once, emits events once, and writes audit once — the second run finds
+identical state and stays silent. Repair therefore never generates duplicate
+academic history (safe for the Timeline / Transcript to consume).
+
 ### Enabling (no policy UI yet)
 
 There is no AttendancePolicy CRUD/UI, so enabling is a deliberate data change:
@@ -485,6 +499,210 @@ Set `enforceAttendanceForProgress = false` and run the repair command for the
 scope: the cascade recomputes with `attendancePercentage: null`, clearing any
 attendance-driven `INCOMPLETE` back to its grade-only status. The flag column can
 also be dropped (reverse of the Phase 5 migration) if fully abandoning the gate.
+
+---
+
+## Read source of truth — legacy calculator retired (Fix C1) ✅
+
+`StudentSubjectAttendanceSummary` (Phase 3) is the **single source of truth** for
+subject attendance reads. Every live read path reads the persisted summary and
+**never recomputes attendance from raw `AttendanceRecord` rows on-read**.
+
+The retired legacy calculator
+([attendance-calculator.service.ts](../src/modules/attendance/services/attendance-calculator.service.ts))
+computed on every read with **divergent semantics** — it ignored
+`countExcusedAsPresent`, ignored approved justifications, and mapped an empty
+subject to `0% / OK` instead of `null / NOT_STARTED`. It is marked **`@deprecated`**
+and is **not imported by any live read path**; a guard test
+([legacy-calculator-not-in-read-paths.test.ts](../src/modules/attendance/services/__tests__/legacy-calculator-not-in-read-paths.test.ts))
+enforces this. It is kept temporarily for reference only.
+
+### Migrated consumers
+
+- **`/api/attendance/reports`** →
+  [attendance-read-model.service.ts](../src/modules/attendance/services/attendance-read-model.service.ts)
+  `getClassGroupSubjectAttendanceReport`. Cells come verbatim from the persisted
+  summary. A **missing summary** renders as `attendancePercentage: null`,
+  `status: NOT_STARTED`, `needsRecalculation: true` (never a fabricated `0% / OK`).
+- **Student 360** → `getStudentSubjectAttendanceViews` (per-subject views) +
+  `getStudentAttendanceCounts` (per-status session counts from the Phase 4 period
+  year-rollups). Percentages shown match the persisted summary; NOT_STARTED
+  subjects are excluded from the average rather than counted as 0%.
+- **Attendance risk service** →
+  [attendance-risk.service.ts](../src/modules/attendance/services/attendance-risk.service.ts)
+  reads the persisted summary. `BELOW_REQUIRED` comes straight from the summary
+  **status**; `AT_RISK` is derived from the summary **percentage** vs the subject
+  minimum plus the **effective policy's `atRiskBufferPercentage`** (LevelSubject
+  override → org default → fallback 5). A missing / `NOT_STARTED` summary emits no
+  risk signal (no on-read recalculation).
+
+### Ordering on session completion
+
+`CompleteAttendanceSessionCommand` now **recalculates the persisted summaries
+first, then evaluates risk** from those fresh summaries (both async, best-effort,
+never rolling back the completion). Because risk reads the persisted summary, the
+recalc must complete first — otherwise risk would read a stale/absent summary.
+
+### Missing summary = stale/missing read-model
+
+`needsRecalculation: true` (or a `null` percentage) means the read-model has not
+been written yet for that `(enrollment, levelSubject)`. This is **not** an error
+and is **not** fixed by recomputing on-read — repair it by running the recalc
+commands (`RecalculateStudentSubjectAttendanceSummaryCommand` /
+`RecalculateAttendanceSummariesCommand`).
+
+---
+
+## Reports API — row-level authorization (Fix H1) ✅
+
+`GET /api/attendance/reports?classGroupId=…`
+([route.ts](../src/app/api/attendance/reports/route.ts)) returns a **class
+roster** (every enrolled student × subject). The `attendanceSessions.view`
+permission plus `organizationId` scoping only enforces **tenant isolation** — it
+does **not** enforce **horizontal authorization inside the tenant**. The UI pages
+redirect teacher-/student-scoped users away, but **the API is directly reachable**,
+so the effective scope is resolved and enforced **server-side, in the route,
+before any read**. The incoming `classGroupId` is treated as **untrusted** and
+`organizationId` is always taken from the authenticated context — never the query.
+
+| Role | Reports API behaviour |
+| --- | --- |
+| `SUPER_ADMIN` / `ORG_ADMIN` / `SECRETARY` | Unrestricted **within their tenant**. |
+| `TEACHER` | Only class groups **they teach** — `assertTeacherCanAccessClassGroup` (from [teacher-access.ts](../src/server/auth/teacher-access.ts)) throws `AuthorizationError` for any other class group. No-op for admins/secretaries. |
+| `STUDENT` | **Denied** (`403`). A class roster exposes other students; a student reads **their own** attendance through the `/student` portal, which is scoped independently. Denied via `isStudentScopedRoles(context.roles)` **before** any read. |
+| `GUARDIAN` | **Denied** (`403`). Guardians normally lack `attendanceSessions.view` (blocked at the permission gate); the explicit `isGuardianScopedRoles` check is **defence-in-depth** should that permission ever be granted. Guardians read linked-student attendance through the `/guardian` portal, gated by the per-link `canViewAttendance` flag. |
+
+Authorization runs **before** `getClassGroupSubjectAttendanceReport`, so a denied
+caller never triggers a query — there is **no read-then-filter**. `AuthorizationError`
+maps to `403`; unexpected failures map to `401`; neither leaks details. No attendance
+calculation, business logic, DTO shape, or UI changed — this is a **source-of-truth-
+respecting, authorization-only** fix that reuses the existing
+teacher/student/guardian scope infrastructure (no second authorization model).
+
+---
+
+## Justified records never reduce attendance (Fix H2) ✅
+
+> **A justified attendance record can never reduce a student's attendance
+> percentage, present minutes, or status.** Approving a justification either
+> leaves attendance unchanged or improves it — never the reverse.
+
+### The defect (two layers)
+
+The defect had **two** layers, both now fixed:
+
+1. **Weighting layer.** The pre-fix weighting entered the excused branch **first and
+   unconditionally**, so `presentMinutes = countExcusedAsPresent ? dur : 0`. Under
+   the default policy (`countLateAsPartial = true`, `countExcusedAsPresent = false`)
+   a 60-min session with a 15-min-late arrival went from **45 present minutes** to
+   **0** the moment it was scored as excused — attendance got *worse* after an
+   accommodation.
+
+2. **Write-path layer (the reason the weighting fix alone was not enough).** The
+   `ApproveAttendanceJustificationCommand` **overwrote the `AttendanceRecord`
+   itself** — `status → EXCUSED`, `minutesAttended → 0`. This destroyed the
+   original fact, so by the time the (fixed) weighting engine ran, the record no
+   longer said `LATE` with 45 attended minutes; it said `EXCUSED` with 0. The
+   `LATE`-preserves-partial-minutes branch of the weighting fix was therefore
+   **unreachable in production** (Option A — status replacement — instead of the
+   intended Option B). A justified `LATE` still collapsed to 0 under the default
+   policy. Approving a justification now updates **only** the justification review
+   state; the factual record is never mutated (see below).
+
+### The domain rule
+
+The `AttendanceRecord` stores **reality**; the `AttendancePolicy` **interprets**
+it; an approved justification is an **accommodation layered on top** — it is
+never a status replacement (Option B, not Option A). Weighting
+([attendance-weighting.ts](../src/modules/attendance/services/attendance-weighting.ts))
+computes present-equivalent minutes by the **real status first**, then layers the
+excused effect so the value can only rise:
+
+```
+presentMinutes = max( presentByRealStatus, countExcusedAsPresent ? duration : 0 )
+```
+
+- The student keeps every minute they actually attended — a justified `LATE`
+  never drops below its partial minutes.
+- When the policy counts excused time as present, they are credited the **full
+  duration** (the accommodation *improves* attendance).
+- The non-present remainder is reported as **excused** (accommodated) minutes —
+  never as an absence/lateness penalty (`absentMinutes`/`lateMinutesLost` = 0 for
+  an excused record).
+- **Monotonic by construction:** `max(raw, …) ≥ raw`, so no policy combination can
+  make a justified record score lower than the same record un-justified.
+
+### Approval never replaces the record (write path)
+
+`ApproveAttendanceJustificationCommand` and `RejectAttendanceJustificationCommand`
+update **only** the `AttendanceJustification` (status + reviewer + reviewedAt +
+notes). They never touch `AttendanceRecord.status`, `minutesAttended`, or
+`lateMinutes`:
+
+- **The record stores reality; the justification stores the accommodation.** A
+  `LATE` record stays `LATE`; an `ABSENT` record stays `ABSENT`. The calc-record
+  queries (`findCalcRecordsForEnrollment`, and the period equivalent) expose the
+  approval as `hasApprovedJustification` via the **APPROVED justification
+  relation** — that flag, not a rewritten status, drives the excused effect.
+- **No new `EXCUSED` records.** The approval workflow does not create `EXCUSED`
+  primary statuses. `EXCUSED` is legacy/transitional only (see below); it may still
+  be set manually via the mark form, but never as a side effect of approving a
+  justification.
+- **Audit is honest.** The approval audit records the justification transition
+  (`PENDING → APPROVED`) and notes that the record status was preserved
+  (`attendanceRecordStatusPreserved`). It does **not** log a fabricated record
+  status change, because no record changed.
+- **Recalc after review.** Both approve and reject fire best-effort subject +
+  period summary recalculation for the affected record, so the interpreted summary
+  reflects the new review state without any record mutation.
+
+A static guard test
+([approval-does-not-mutate-attendance-record.guard.test.ts](../src/modules/attendance/commands/__tests__/approval-does-not-mutate-attendance-record.guard.test.ts))
+fails loudly if either review command ever re-introduces a record write, a
+`status: "EXCUSED"` assignment, or a `minutesAttended` reset.
+
+### Excused absence & transitional parity
+
+`ABSENT + approved justification` behaves purely by policy: `countExcusedAsPresent`
+false → stays 0 present (fully excused, **not** counted present, but never *worse*
+than a plain absence); true → credited full present. A **legacy `EXCUSED`** primary
+status carries no attended minutes, so it is read as an excused absence and yields
+the **identical** interpretation to `ABSENT + approved justification` — the two are
+guaranteed equal for every policy value.
+
+### Consistency across engines
+
+The subject summary (Phase 3) and period summary (Phase 4) engines both delegate
+present-minute weighting to the same `weighAttendanceRecord`, so the fix applies
+**identically** in both — a cross-engine parity test locks this in. The
+[attendance-risk.service](../src/modules/attendance/services/attendance-risk.service.ts)
+is a pure function of the (now monotonic) persisted summary, so it can never emit a
+*worse* risk signal after a justification. No academic outcome, `INCOMPLETE` gating,
+or `StudentSubjectProgress.attendancePercentage` semantics changed — where a
+justification lifts a subject back to/above its minimum, the existing gate clears
+`INCOMPLETE` naturally.
+
+**Tests:** a dedicated
+[attendance-weighting.test.ts](../src/modules/attendance/services/__tests__/attendance-weighting.test.ts)
+(LATE ±justification, ABSENT ±justification, legacy-EXCUSED parity, and a
+**property-style** assertion that a justification never lowers present minutes
+across every status × policy × duration × lateness combination) plus subject-engine
+(monotonicity / status non-regression / recovery), period-engine parity, and
+risk-engine parity tests.
+
+**End-to-end tests (the write-path layer):**
+[attendance-justification-review.command.test.ts](../src/modules/attendance/commands/__tests__/attendance-justification-review.command.test.ts)
+asserts approve/reject update only the justification and never mutate the record
+(no `EXCUSED`, no `minutesAttended` reset), audit the preserved status, and fire
+the recalc triggers. The
+[static guard](../src/modules/attendance/commands/__tests__/approval-does-not-mutate-attendance-record.guard.test.ts)
+locks the source against regression. Finally,
+[student-subject-attendance-summary.service.test.ts](../src/modules/attendance/services/__tests__/student-subject-attendance-summary.service.test.ts)
+drives the **real** calculation engine through the summary service on the now-live
+production shape (`status: LATE/ABSENT` + `hasApprovedJustification: true`) and
+asserts a justified `LATE` stays at 87.5% under the default policy (was 0 pre-fix),
+rises to 100% under `countExcusedAsPresent`, that `ABSENT + approval` is never
+worse, and that legacy `EXCUSED` matches `ABSENT + approved justification`.
 
 ---
 

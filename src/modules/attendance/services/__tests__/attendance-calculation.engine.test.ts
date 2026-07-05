@@ -198,6 +198,87 @@ describe("calculateAttendanceSummary — status (tests 9–11)", () => {
   });
 });
 
+describe("Fix H2 — a justification never reduces attendance", () => {
+  it("LATE + approved justification ≥ LATE alone (default policy: 75% stays 75%, not 0%)", () => {
+    const base = calculateAttendanceSummary({
+      sessions: [S1],
+      records: [rec({ attendanceSessionId: "s1", status: "LATE", lateMinutes: 15 })],
+      policy: policy(), // countLateAsPartial=true, countExcusedAsPresent=false
+      minimumAttendancePercentage: 75,
+    });
+    const justified = calculateAttendanceSummary({
+      sessions: [S1],
+      records: [rec({ attendanceSessionId: "s1", status: "LATE", lateMinutes: 15, hasApprovedJustification: true })],
+      policy: policy(),
+      minimumAttendancePercentage: 75,
+    });
+    expect(base.attendancePercentage).toBe(75);
+    // Pre-fix this collapsed to 0% (EXCUSED branch). It must never regress.
+    expect(justified.attendancePercentage).toBeGreaterThanOrEqual(base.attendancePercentage as number);
+    expect(justified.attendancePercentage).toBe(75);
+    expect(justified.totalExcusedMinutes).toBe(15); // the 15 late minutes are excused, not lost
+  });
+
+  it("status never regresses: a SUFFICIENT LATE stays SUFFICIENT after justification", () => {
+    const justified = calculateAttendanceSummary({
+      sessions: [S1],
+      records: [rec({ attendanceSessionId: "s1", status: "LATE", lateMinutes: 15, hasApprovedJustification: true })],
+      policy: policy(),
+      minimumAttendancePercentage: 75,
+    });
+    expect(justified.status).toBe("SUFFICIENT"); // was BELOW_REQUIRED (0%) pre-fix
+  });
+
+  it("recovery: a justification that counts excused as present lifts BELOW_REQUIRED → SUFFICIENT", () => {
+    // 60-min session, 15 late, minimum 80%. Partial = 45/60 = 75% < 80 → BELOW_REQUIRED.
+    const below = calculateAttendanceSummary({
+      sessions: [S1],
+      records: [rec({ attendanceSessionId: "s1", status: "LATE", lateMinutes: 15 })],
+      policy: policy({ countExcusedAsPresent: true }),
+      minimumAttendancePercentage: 80,
+    });
+    expect(below.status).toBe("BELOW_REQUIRED");
+
+    const recovered = calculateAttendanceSummary({
+      sessions: [S1],
+      records: [rec({ attendanceSessionId: "s1", status: "LATE", lateMinutes: 15, hasApprovedJustification: true })],
+      policy: policy({ countExcusedAsPresent: true }),
+      minimumAttendancePercentage: 80,
+    });
+    expect(recovered.attendancePercentage).toBe(100); // full credit via accommodation
+    expect(recovered.status).toBe("SUFFICIENT"); // INCOMPLETE-gate would clear
+  });
+
+  it("no policy combination makes the justified percentage lower than the un-justified one", () => {
+    const bools = [false, true];
+    for (const status of ["LATE", "ABSENT", "REMOTE", "PRESENT"]) {
+      for (const countExcusedAsPresent of bools) {
+        for (const countRemoteAsPresent of bools) {
+          for (const countLateAsPartial of bools) {
+            const p = policy({ countExcusedAsPresent, countRemoteAsPresent, countLateAsPartial });
+            const without = calculateAttendanceSummary({
+              sessions: [S1],
+              records: [rec({ attendanceSessionId: "s1", status, lateMinutes: 20 })],
+              policy: p,
+              minimumAttendancePercentage: 75,
+            });
+            const withJust = calculateAttendanceSummary({
+              sessions: [S1],
+              records: [rec({ attendanceSessionId: "s1", status, lateMinutes: 20, hasApprovedJustification: true })],
+              policy: p,
+              minimumAttendancePercentage: 75,
+            });
+            expect(withJust.totalPresentMinutes).toBeGreaterThanOrEqual(without.totalPresentMinutes);
+            expect(withJust.attendancePercentage as number).toBeGreaterThanOrEqual(
+              without.attendancePercentage as number
+            );
+          }
+        }
+      }
+    }
+  });
+});
+
 describe("parity with the legacy on-read calculator (default policy)", () => {
   // Legacy math: numerator = PRESENT/REMOTE full + LATE (minutesAttended||dur-lateMin);
   // EXCUSED/ABSENT 0; denominator = Σ completed session minutes; round to 2dp.
