@@ -98,8 +98,12 @@ export class BulkMarkAttendanceCommand extends BaseCommand<
     const now = new Date();
     const records: AttendanceRecord[] = [];
 
-    // Resolve enrolments once so new records carry enrollmentId (Phase 2 intent)
-    // and the summary trigger can attribute them. Behaviour-neutral.
+    // Resolve enrolments server-side ONLY — never from client input. Each
+    // enrolment is matched by (studentId, session.classGroupId, organizationId,
+    // ACTIVE), so the resolved id is guaranteed to belong to that student, that
+    // class group's course/level context, and this tenant. A client-supplied
+    // enrollmentId is neither accepted (schema) nor trusted here, which closes the
+    // cross-student / cross-tenant attribution IDOR. Mirrors MarkAttendanceCommand.
     const db = await getDb();
     const enrollmentRows = await db.enrollment.findMany({
       where: {
@@ -128,7 +132,8 @@ export class BulkMarkAttendanceCommand extends BaseCommand<
         organizationId: this.context.organizationId,
         attendanceSessionId: this.input.sessionId,
         studentId: rec.studentId,
-        enrollmentId: rec.enrollmentId ?? enrollmentByStudent.get(rec.studentId) ?? null,
+        // Server-resolved only (validate() guarantees an ACTIVE enrolment exists).
+        enrollmentId: enrollmentByStudent.get(rec.studentId) ?? null,
         status: rec.status,
         lateMinutes: rec.lateMinutes ?? null,
         minutesAttended,
