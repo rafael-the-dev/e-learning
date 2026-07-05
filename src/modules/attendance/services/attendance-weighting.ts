@@ -5,13 +5,40 @@ import type { EffectiveAttendancePolicy } from "@/modules/attendance/types";
 // period (Phase 4) engines so present-equivalent minutes are computed IDENTICALLY
 // everywhere. Interpretation is driven by the effective AttendancePolicy.
 //
+// MODEL: the AttendanceRecord stores REALITY (PRESENT/LATE/ABSENT/REMOTE, the
+// minutes attended). The AttendancePolicy INTERPRETS it. An approved
+// justification is an EFFECT layered on top of that reality — never a status
+// replacement.
+//
 //   PRESENT          → full duration present
 //   REMOTE           → full IF countRemoteAsPresent, else 0 (not counted absent)
 //   LATE             → partial (minutesAttended, else duration − lateMinutes) IF
 //                      countLateAsPartial; otherwise full present
 //   ABSENT           → 0 present, full duration absent
-//   EXCUSED / approved-justification effect → full IF countExcusedAsPresent,
-//                      else 0; the duration is tracked as excused minutes
+//   EXCUSED (legacy primary status) → an excused absence (no attended minutes)
+//
+// EXCUSED / justification RULE (Fix H2) — an accommodation NEVER penalises:
+//   A record with an approved justification (ABSENT/LATE) or the legacy EXCUSED
+//   status is weighed by its REAL status FIRST, then the excused effect is
+//   layered on so present-equivalent minutes can only RISE, never fall:
+//
+//       presentMinutes = max( presentByRealStatus,
+//                             countExcusedAsPresent ? duration : 0 )
+//
+//   • The student keeps every minute they actually attended — a justified LATE
+//     never drops below its partial minutes (the pre-fix bug produced 0).
+//   • When the policy counts excused time as present, they are credited the full
+//     duration (the accommodation IMPROVES attendance).
+//   • The non-present remainder is reported as EXCUSED (accommodated) minutes,
+//     never as an absence/lateness penalty.
+//   • A legacy EXCUSED row has no attended minutes (real status = absence), so it
+//     yields `countExcusedAsPresent ? duration : 0` — IDENTICAL to
+//     `ABSENT + approved justification` (transitional parity).
+//
+//   This is monotonic by construction: max(raw, …) ≥ raw, so approving a
+//   justification can never reduce present minutes / percentage / status under
+//   ANY policy combination. See docs/attendance-engine.md → "Justified records
+//   never reduce attendance (Fix H2)".
 // =============================================================================
 
 export interface WeighingInput {
@@ -47,6 +74,33 @@ export function weighAttendanceRecord(
   durationMinutes: number,
   policy: WeighingPolicy
 ): RecordWeighting {
+  // 1) Interpret the RECORDED reality first, independent of any excuse.
+  const raw = weighByRealStatus(rec, durationMinutes, policy);
+
+  if (!isExcusedEffect(rec)) return raw;
+
+  // 2) Layer the excused accommodation on top. It may only RAISE present minutes,
+  //    never lower them (Fix H2). The remainder is reported as excused, not as an
+  //    absence/lateness penalty.
+  const excusedPresent = policy.countExcusedAsPresent ? durationMinutes : 0;
+  const presentMinutes = Math.max(raw.presentMinutes, excusedPresent);
+
+  return {
+    presentMinutes,
+    absentMinutes: 0,
+    lateMinutesLost: 0,
+    excusedMinutes: durationMinutes - presentMinutes,
+    isExcusedEffect: true,
+  };
+}
+
+/** Present-equivalent weighting by the record's REAL status, ignoring any excuse.
+ *  A legacy EXCUSED primary status has no attended minutes → an excused absence. */
+function weighByRealStatus(
+  rec: WeighingInput,
+  durationMinutes: number,
+  policy: WeighingPolicy
+): RecordWeighting {
   const zero: RecordWeighting = {
     presentMinutes: 0,
     absentMinutes: 0,
@@ -54,15 +108,6 @@ export function weighAttendanceRecord(
     excusedMinutes: 0,
     isExcusedEffect: false,
   };
-
-  if (isExcusedEffect(rec)) {
-    return {
-      ...zero,
-      isExcusedEffect: true,
-      excusedMinutes: durationMinutes,
-      presentMinutes: policy.countExcusedAsPresent ? durationMinutes : 0,
-    };
-  }
 
   switch (rec.status) {
     case "PRESENT":
@@ -83,6 +128,7 @@ export function weighAttendanceRecord(
       }
       return { ...zero, presentMinutes: attended, lateMinutesLost: Math.max(0, durationMinutes - attended) };
     }
+    case "EXCUSED":
     case "ABSENT":
     default:
       return { ...zero, absentMinutes: durationMinutes };

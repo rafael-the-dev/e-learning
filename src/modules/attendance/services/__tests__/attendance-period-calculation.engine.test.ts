@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { calculatePeriodAttendanceSummary } from "../attendance-period-calculation.engine";
+import { calculateAttendanceSummary } from "../attendance-calculation.engine";
 import { DEFAULT_ATTENDANCE_POLICY } from "@/modules/attendance/types";
 import type { EffectiveAttendancePolicy, PeriodCalcRecord } from "@/modules/attendance/types";
 
@@ -126,5 +127,49 @@ describe("calculatePeriodAttendanceSummary — baseline & status", () => {
     expect(r.attendancePercentage).toBeNull();
     expect(r.status).toBe("GOOD");
     expect(r.totalSessions).toBe(0);
+  });
+});
+
+describe("Fix H2 — justified records & subject-engine parity (no divergence)", () => {
+  it("a justified LATE keeps its partial minutes in the period rollup too (default policy)", () => {
+    const r = calculatePeriodAttendanceSummary({
+      records: [rec({ levelSubjectId: "ls", status: "LATE", lateMinutes: 15, hasApprovedJustification: true })],
+      atRiskBufferPercentage: 5,
+    });
+    expect(r.totalPresentMinutes).toBe(45); // not 0
+    expect(r.attendancePercentage).toBe(75);
+  });
+
+  it("period and subject engines weigh a justified LATE IDENTICALLY across policy combos", () => {
+    const bools = [false, true];
+    for (const countExcusedAsPresent of bools) {
+      for (const countLateAsPartial of bools) {
+        const p = pol({ countExcusedAsPresent, countLateAsPartial });
+
+        const subject = calculateAttendanceSummary({
+          sessions: [{ id: "s1", durationMinutes: 60 }],
+          records: [
+            {
+              attendanceSessionId: "s1",
+              status: "LATE",
+              minutesAttended: 0,
+              lateMinutes: 15,
+              hasApprovedJustification: true,
+            },
+          ],
+          policy: p,
+          minimumAttendancePercentage: 75,
+        });
+
+        const period = calculatePeriodAttendanceSummary({
+          records: [rec({ levelSubjectId: "ls", status: "LATE", lateMinutes: 15, hasApprovedJustification: true, policy: p })],
+          atRiskBufferPercentage: 5,
+        });
+
+        // Same present-equivalent minutes and percentage in both engines.
+        expect(period.totalPresentMinutes).toBe(subject.totalPresentMinutes);
+        expect(period.attendancePercentage).toBe(subject.attendancePercentage);
+      }
+    }
   });
 });

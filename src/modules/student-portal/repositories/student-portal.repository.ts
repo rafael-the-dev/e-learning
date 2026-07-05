@@ -194,6 +194,10 @@ export async function findStudentPublishedGrades(
 export interface AttendanceStatRow {
   status: string;
   sessionDate: Date;
+  /** True when this record carries an APPROVED justification. Since Fix H2 the
+   *  approval workflow no longer rewrites the record to EXCUSED, so "justified"
+   *  is derived from the justification relation, not the raw status. */
+  hasApprovedJustification: boolean;
 }
 
 /**
@@ -210,11 +214,20 @@ export async function findStudentAttendanceForStats(
     select: {
       status: true,
       attendanceSession: { select: { sessionDate: true } },
+      justifications: {
+        where: { status: "APPROVED", deletedAt: null },
+        select: { id: true },
+        take: 1,
+      },
     },
     orderBy: { attendanceSession: { sessionDate: "desc" } },
     take: ATTENDANCE_STATS_LIMIT,
   });
-  return rows.map((r) => ({ status: r.status, sessionDate: r.attendanceSession.sessionDate }));
+  return rows.map((r) => ({
+    status: r.status,
+    sessionDate: r.attendanceSession.sessionDate,
+    hasApprovedJustification: r.justifications.length > 0,
+  }));
 }
 
 /** Re-asserts organizationId even though subjectIds come from already-scoped queries. */

@@ -179,3 +179,89 @@ describe("recalculateStudentSubjectAttendanceSummary", () => {
     expect(eventTypes).toContain("attendance.student_recovered_attendance");
   });
 });
+
+// =============================================================================
+// Fix H2 (end-to-end): with the approve command no longer overwriting the record
+// to EXCUSED, the production data shape is now `status: LATE/ABSENT` +
+// `hasApprovedJustification: true`. These tests drive the REAL calculation engine
+// through the summary service on that exact shape and assert the summary
+// percentage is never lowered by an approval — the invariant the pure weighting
+// test could only assert on a shape production previously never produced.
+// =============================================================================
+describe("Fix H2 (end-to-end) — an approved justification never reduces the summary", () => {
+  async function recalcPercentage(): Promise<number | null> {
+    store.summaries = new Map(); // fresh write each call (no idempotent short-circuit)
+    const r = await recalculateStudentSubjectAttendanceSummary(ctx, { enrollmentId: ENR, levelSubjectId: LS });
+    return r.next.attendancePercentage;
+  }
+
+  it("LATE keeps its partial minutes after approval (default policy: 87.5% unchanged)", async () => {
+    store.policy = effPolicy({ countExcusedAsPresent: false, countLateAsPartial: true });
+    store.records = [
+      { attendanceSessionId: "s1", status: "LATE", minutesAttended: 45, lateMinutes: 15, hasApprovedJustification: false },
+      { attendanceSessionId: "s2", status: "PRESENT", minutesAttended: 60, lateMinutes: null, hasApprovedJustification: false },
+    ];
+    const before = await recalcPercentage(); // (45 + 60) / 120
+
+    // Justification APPROVED — the record is STILL LATE (Fix H2: no status replacement).
+    store.records[0].hasApprovedJustification = true;
+    const after = await recalcPercentage();
+
+    expect(before).toBe(87.5);
+    expect(after).toBe(87.5); // the 45 attended minutes are preserved, not erased
+    expect(after as number).toBeGreaterThanOrEqual(before as number);
+  });
+
+  it("LATE + approval is UPGRADED to full when countExcusedAsPresent=true (87.5% → 100%)", async () => {
+    store.policy = effPolicy({ countExcusedAsPresent: true, countLateAsPartial: true });
+    store.records = [
+      { attendanceSessionId: "s1", status: "LATE", minutesAttended: 45, lateMinutes: 15, hasApprovedJustification: false },
+      { attendanceSessionId: "s2", status: "PRESENT", minutesAttended: 60, lateMinutes: null, hasApprovedJustification: false },
+    ];
+    const before = await recalcPercentage();
+    store.records[0].hasApprovedJustification = true;
+    const after = await recalcPercentage();
+
+    expect(before).toBe(87.5);
+    expect(after).toBe(100);
+  });
+
+  it("ABSENT + approval never worse: unchanged under countExcusedAsPresent=false, improves under true", async () => {
+    const baseRecords = () => [
+      { attendanceSessionId: "s1", status: "ABSENT", minutesAttended: 0, lateMinutes: null, hasApprovedJustification: false },
+      { attendanceSessionId: "s2", status: "PRESENT", minutesAttended: 60, lateMinutes: null, hasApprovedJustification: false },
+    ];
+
+    store.policy = effPolicy({ countExcusedAsPresent: false });
+    store.records = baseRecords();
+    const beforeOff = await recalcPercentage(); // 60 / 120
+    store.records[0].hasApprovedJustification = true;
+    const afterOff = await recalcPercentage();
+    expect(beforeOff).toBe(50);
+    expect(afterOff).toBe(50); // never worse than a plain absence
+
+    store.policy = effPolicy({ countExcusedAsPresent: true });
+    store.records = baseRecords();
+    const beforeOn = await recalcPercentage();
+    store.records[0].hasApprovedJustification = true;
+    const afterOn = await recalcPercentage();
+    expect(beforeOn).toBe(50);
+    expect(afterOn).toBe(100); // accommodation improves attendance
+  });
+
+  it("legacy EXCUSED row is interpreted identically to ABSENT + approved justification", async () => {
+    store.policy = effPolicy({ countExcusedAsPresent: false });
+    store.records = [
+      { attendanceSessionId: "s1", status: "EXCUSED", minutesAttended: 0, lateMinutes: null, hasApprovedJustification: false },
+      { attendanceSessionId: "s2", status: "PRESENT", minutesAttended: 60, lateMinutes: null, hasApprovedJustification: false },
+    ];
+    const legacy = await recalcPercentage();
+
+    store.records[0] = {
+      attendanceSessionId: "s1", status: "ABSENT", minutesAttended: 0, lateMinutes: null, hasApprovedJustification: true,
+    };
+    const justifiedAbsence = await recalcPercentage();
+
+    expect(legacy).toBe(justifiedAbsence); // transitional parity holds
+  });
+});
