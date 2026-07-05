@@ -77,7 +77,10 @@ export const bulkMarkAttendanceSchema = z.object({
     .array(
       z.object({
         studentId: z.string().min(1),
-        enrollmentId: z.string().optional(),
+        // NOTE: no client `enrollmentId`. The enrolment is ALWAYS resolved
+        // server-side from (studentId, session.classGroupId, organizationId) in
+        // BulkMarkAttendanceCommand — a client value would be an IDOR vector
+        // (cross-student / cross-tenant attribution). Mirrors markAttendanceSchema.
         status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED", "REMOTE"]),
         lateMinutes: z.number().int().min(0).optional(),
         minutesAttended: z.number().int().min(0).optional(),

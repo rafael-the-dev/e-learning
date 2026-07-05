@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Badge } from "@/shared/components/ui/badge";
 import { toast } from "@/shared/hooks/use-toast";
 import { bulkMarkAttendanceAction } from "@/modules/attendance/actions/attendance.actions";
 import { ATTENDANCE_RECORD_STATUS_LABELS, ATTENDANCE_RECORD_STATUS_COLORS } from "@/modules/attendance/types";
@@ -37,7 +36,6 @@ type RecordStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED" | "REMOTE";
 
 interface StudentRow {
   studentId: string;
-  enrollmentId: string;
   firstName: string;
   lastName: string;
   code: string | null;
@@ -52,7 +50,6 @@ function initRows(students: StudentEntry[], existingRecords: AttendanceRecord[])
     const rec = existing.get(s.studentId);
     return {
       studentId: s.studentId,
-      enrollmentId: s.enrollmentId,
       firstName: s.firstName,
       lastName: s.lastName,
       code: s.code,
@@ -96,7 +93,8 @@ export function MarkAttendanceForm({
       sessionId,
       records: rows.map((r) => ({
         studentId: r.studentId,
-        enrollmentId: r.enrollmentId,
+        // enrollmentId is intentionally NOT sent — the server resolves it from
+        // (studentId, session class group, org). See BulkMarkAttendanceCommand.
         status: r.status,
         lateMinutes: r.status === "LATE" ? r.lateMinutes : undefined,
         notes: r.notes || undefined,
