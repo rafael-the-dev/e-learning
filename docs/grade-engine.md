@@ -209,10 +209,45 @@ All mutation commands emit an audit event via `AuditService`:
 
 The subject-progress cascade (`recalculateSubjectProgressCascade`) emits:
 
-- `STUDENT_SUBJECT_PASSED` — when final status is `PASSED`
-- `STUDENT_SUBJECT_FAILED` — when final status is `FAILED` or `RECOVERY_REQUIRED`
+- `STUDENT_SUBJECT_PASSED` — on **entry** into `PASSED`
+- `STUDENT_SUBJECT_FAILED` — on **entry** into `FAILED`
 
 These events are consumed by the Student Timeline module to create timeline entries.
+
+### Events represent transitions (idempotent recalculation is silent)
+
+Academic events and the `student_subject_progress.updated` audit are **transition-only**.
+A recalculation that produces the *same* state emits nothing and writes no audit —
+so the Timeline, Notifications, and the Transcript Engine never accumulate
+duplicate history from repeated recalculations or repair commands.
+
+The single, testable decision lives in the pure helper
+[`detectSubjectProgressTransition`](../src/modules/grades/services/subject-progress-transition.ts),
+which compares the prior persisted row against the freshly computed one:
+
+| Transition | Event |
+|---|---|
+| `IN_PROGRESS`/`RECOVERY_REQUIRED`/`INCOMPLETE` → `PASSED` | `STUDENT_SUBJECT_PASSED` |
+| `PASSED` → `PASSED` | *(none)* |
+| `FAILED` → `FAILED` | *(none)* |
+| `PASSED` → `FAILED` | `STUDENT_SUBJECT_FAILED` |
+| `FAILED` → `PASSED` | `STUDENT_SUBJECT_PASSED` |
+
+There is no separate `STUDENT_SUBJECT_RECOVERED` event — an `INCOMPLETE → PASSED`
+recovery re-enters `PASSED` and emits `STUDENT_SUBJECT_PASSED`; the attendance
+wiring emits its own `attendance.subject_recovered_from_incomplete` signal
+(also transition-only).
+
+- **Audit gating:** `student_subject_progress.updated` (or the caller's custom
+  action) is written only when a *meaningful* field changed — `status`,
+  `finalGrade`, `attendancePercentage`, `completedAt`, or `progressReason`. The
+  precise recovery-lifecycle audits (`recovery_required` / `recovered` /
+  `failed_after_recovery`) remain transition-gated as before.
+- **Observability:** every recalc logs one `[subject-progress-cascade]` line with
+  `previousStatus`, `newStatus`, `transition`, `eventEmitted`, `auditWritten` —
+  `transition=false` with `eventEmitted=true` would signal a duplicate-event bug.
+- **Level progress** (`recalculateStudentLevelProgress`) emits **no** domain
+  events today (only subject + course do); nothing to gate there.
 
 ---
 

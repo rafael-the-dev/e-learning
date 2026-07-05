@@ -167,6 +167,15 @@ An audit row (`course_completion.completed` / `course_completion.reopened`) is
 written alongside each event, with `actorId = null` for system-driven cascades.
 Future modules (certificates, alumni, CRM, analytics) subscribe to these events.
 
+**Events represent transitions — recalculation is idempotent.** `COMPLETED →
+COMPLETED` and any not-completed → not-completed recompute cross no boundary, so
+they emit no event and write no audit (`transition = null`). Re-running the
+completion evaluation any number of times therefore produces exactly one
+`completed`/`reopened` entry per real crossing — no duplicate history for
+downstream consumers (Timeline, Transcript, certificates). This mirrors the
+subject cascade's transition gating (see grade-engine.md → "Events represent
+transitions").
+
 ## Observability
 
 Each evaluation logs a structured line via `logCourseCompletionEvaluation`:

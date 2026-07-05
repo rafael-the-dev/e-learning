@@ -41,6 +41,10 @@ import type { StudentSubjectProgress } from "@/modules/assessments/types";
 import { recalculateStudentLevelProgress } from "@/modules/prerequisites/services/recalculate-level-progress.service";
 import { loadEffectiveAttendancePolicy } from "@/modules/attendance/services/attendance-policy.resolver";
 import { findSummaryByEnrollmentAndSubject } from "@/modules/attendance/repositories/student-subject-attendance-summary.repository";
+import {
+  detectSubjectProgressTransition,
+  type SubjectProgressSnapshot,
+} from "@/modules/grades/services/subject-progress-transition";
 
 export interface RecalculateSubjectProgressParams {
   studentId: string;
@@ -184,7 +188,13 @@ export async function recalculateSubjectProgressCascade(
   // already-PASSED/FAILED subject must not move the date forward.
   const existingProgress = await db.studentSubjectProgress.findFirst({
     where: { enrollmentId, levelSubjectId, organizationId },
-    select: { status: true, completedAt: true },
+    select: {
+      status: true,
+      finalGrade: true,
+      attendancePercentage: true,
+      completedAt: true,
+      progressReason: true,
+    },
   });
 
   const completedAt = resolveStableCompletedAt({
@@ -211,17 +221,48 @@ export async function recalculateSubjectProgressCascade(
     completedAt,
   }, db);
 
-  await auditService.log(context, {
-    entity: "StudentSubjectProgress",
-    entityId: progress.id,
-    action: params.auditAction ?? "student_subject_progress.updated",
-    newValues: {
-      studentId,
-      levelSubjectId,
-      finalGrade: progress.finalGrade,
-      status: progress.status,
-    },
-  }, db);
+  // ── Transition detection (Sprint C) ─────────────────────────────────────────
+  // Events + the generic `updated` audit must represent REAL transitions. Compare
+  // the freshly-persisted row against the prior snapshot so an idempotent recalc
+  // (identical status/grade/attendance/completion/reason) stays completely silent.
+  const previousSnapshot: SubjectProgressSnapshot = {
+    status: existingProgress?.status ?? null,
+    finalGrade: existingProgress?.finalGrade != null ? Number(existingProgress.finalGrade) : null,
+    attendancePercentage:
+      existingProgress?.attendancePercentage != null ? Number(existingProgress.attendancePercentage) : null,
+    completedAt: existingProgress?.completedAt ?? null,
+    progressReason: existingProgress?.progressReason ?? null,
+  };
+  const transition = detectSubjectProgressTransition(previousSnapshot, {
+    status: progress.status,
+    finalGrade: progress.finalGrade,
+    attendancePercentage: progress.attendancePercentage,
+    completedAt: progress.completedAt,
+    progressReason: progress.progressReason,
+  });
+
+  // `student_subject_progress.updated` (or the caller's custom action) is written
+  // ONLY when a meaningful field changed — never on a no-op recalculation.
+  if (transition.hasMeaningfulChange) {
+    await auditService.log(context, {
+      entity: "StudentSubjectProgress",
+      entityId: progress.id,
+      action: params.auditAction ?? "student_subject_progress.updated",
+      oldValues: {
+        status: transition.previousStatus,
+        finalGrade: previousSnapshot.finalGrade,
+        attendancePercentage: previousSnapshot.attendancePercentage,
+      },
+      newValues: {
+        studentId,
+        levelSubjectId,
+        finalGrade: progress.finalGrade,
+        status: progress.status,
+        attendancePercentage: progress.attendancePercentage,
+        progressReason: progress.progressReason,
+      },
+    }, db);
+  }
 
   // Recovery-lifecycle audit: emit a precise action on the recovery transitions so
   // every recovery decision is traceable (required / recovered / failed-after-recovery).
@@ -249,7 +290,13 @@ export async function recalculateSubjectProgressCascade(
     await recalculateStudentLevelProgress(enrollmentId, levelSubject.courseLevelId, organizationId, ctx);
   }
 
-  if (progressStatus === "PASSED") {
+  // Terminal-status events fire ONLY on entry into that status (transition), so a
+  // subject that stays PASSED/FAILED across recalculations emits nothing — no
+  // duplicate Timeline entries, Notifications, or Transcript history. An
+  // INCOMPLETE/RECOVERY_REQUIRED → PASSED recovery re-enters PASSED and correctly
+  // emits STUDENT_SUBJECT_PASSED (existing architecture; no separate RECOVERED
+  // event — the attendance wiring emits its own recovered_from_incomplete signal).
+  if (transition.enteredPassed) {
     await emitOrCollect(ctx, {
       organizationId,
       eventType: DomainEventType.STUDENT_SUBJECT_PASSED,
@@ -258,7 +305,7 @@ export async function recalculateSubjectProgressCascade(
       actorId: context.userId,
       payload: { studentId, enrollmentId, levelSubjectId, finalGrade: progress.finalGrade, progressId: progress.id },
     });
-  } else if (progressStatus === "FAILED") {
+  } else if (transition.enteredFailed) {
     await emitOrCollect(ctx, {
       organizationId,
       eventType: DomainEventType.STUDENT_SUBJECT_FAILED,
@@ -268,6 +315,21 @@ export async function recalculateSubjectProgressCascade(
       payload: { studentId, enrollmentId, levelSubjectId, finalGrade: progress.finalGrade, progressId: progress.id },
     });
   }
+
+  // Observability: one structured line per recalc — makes duplicate-event triage
+  // trivial (grep for transition=false with eventEmitted=true would be a bug).
+  console.info(
+    "[subject-progress-cascade]",
+    JSON.stringify({
+      enrollmentId,
+      levelSubjectId,
+      previousStatus: transition.previousStatus,
+      newStatus: transition.newStatus,
+      transition: transition.hasStatusChanged,
+      eventEmitted: transition.enteredPassed || transition.enteredFailed,
+      auditWritten: transition.hasMeaningfulChange,
+    })
+  );
 
   return progress;
 }
