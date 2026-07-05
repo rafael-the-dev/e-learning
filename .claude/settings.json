@@ -141,7 +141,11 @@
       "Bash(pnpm prisma *)",
       "Bash(npx vitest *)",
       "Bash(echo \"rc=$?\")",
-      "Bash(grep -iE \"layout\\\\.tsx|manifest\\\\.ts|login-form|sidebar-shell|landing-page|login\\\\\\\\\\\\\\\\page|proxy\\\\.ts\")"
+      "Bash(grep -iE \"layout\\\\.tsx|manifest\\\\.ts|login-form|sidebar-shell|landing-page|login\\\\\\\\\\\\\\\\page|proxy\\\\.ts\")",
+      "PowerShell(pnpm exec tsc --noEmit 2>&1)",
+      "PowerShell(pnpm exec vitest run src/app/api/attendance/reports 2>&1)",
+      "PowerShell(pnpm exec vitest run src/modules/attendance src/server/auth 2>&1)",
+      "PowerShell(pnpm exec vitest run src/modules/attendance 2>&1)"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\settings\\roles\\[roleId]",

@@ -217,6 +217,7 @@ async function ActiveTabPanel({
       return (
         <StudentAttendanceTab
           subjects={core.attendanceSubjects}
+          counts={core.attendanceCounts}
           records={records}
           justifications={justifications}
           pendingJustificationCount={core.pendingJustificationCount}
