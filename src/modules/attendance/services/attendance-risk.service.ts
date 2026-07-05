@@ -1,19 +1,30 @@
 import { getDb } from "@/server/db";
 import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
-import { calculateStudentSubjectAttendance } from "./attendance-calculator.service";
+import { findSummaryByEnrollmentAndSubject } from "@/modules/attendance/repositories/student-subject-attendance-summary.repository";
+import { loadEffectiveAttendancePolicy } from "@/modules/attendance/services/attendance-policy.resolver";
+import { StudentSubjectAttendanceSummaryStatus } from "@/modules/attendance/types";
 
 // =============================================================================
 // ATTENDANCE RISK SERVICE
 //
-// Purpose: evaluate risk conditions AFTER attendance data changes.
-// Called by CompleteAttendanceSessionCommand after a session is completed.
+// Purpose: emit risk notifications AFTER attendance data changes.
+// Called by CompleteAttendanceSessionCommand once a session is completed AND the
+// persisted subject summaries have been recalculated (see the command ordering).
+//
+// Source of truth: this service NEVER recomputes attendance from raw records.
+// It reads the persisted `StudentSubjectAttendanceSummary` (Attendance Engine
+// Phase 3) — the single source of truth — with the same semantics operators see
+// in reports and Student 360. The retired legacy calculator is not used.
+//   • BELOW_REQUIRED comes straight from the summary status.
+//   • AT_RISK is derived from the summary percentage vs the subject minimum plus
+//     the effective policy's atRiskBufferPercentage.
+//   • A missing summary (or null percentage → NOT_STARTED) yields no risk signal;
+//     we do not fabricate a percentage by recalculating on-read.
 //
 // Idempotency:
 //   Events are only emitted on state TRANSITIONS, not on every calculation.
-//   We store the last-known risk state in a lightweight cache key:
-//     risk_state:{organizationId}:{studentId}:{levelSubjectId}
-//   For simplicity, we query the last domain event to detect re-emission.
+//   We detect re-emission by querying the last matching domain event.
 // =============================================================================
 
 export async function evaluateAttendanceRiskForSession(
@@ -49,6 +60,7 @@ export async function evaluateAttendanceRiskForSession(
     where: { id: session.levelSubjectId, organizationId },
     select: {
       minimumAttendancePercentage: true,
+      attendancePolicyId: true,
       subject: { select: { name: true } },
     },
   });
@@ -56,20 +68,30 @@ export async function evaluateAttendanceRiskForSession(
   if (!levelSubject?.minimumAttendancePercentage) return;
 
   const minPct = Number(levelSubject.minimumAttendancePercentage);
-  const AT_RISK_THRESHOLD = minPct + 5;
+  // AT_RISK band width comes from the effective policy (LevelSubject override →
+  // org default → deterministic fallback), matching the read-model display band.
+  const policy = await loadEffectiveAttendancePolicy(
+    organizationId,
+    levelSubject.attendancePolicyId,
+    db
+  );
+  const atRiskThreshold = minPct + policy.atRiskBufferPercentage;
   const subjectName = levelSubject.subject?.name ?? "";
 
   for (const enrollment of enrollments) {
     if (!enrollment.classGroupId) continue;
 
     try {
-      const summary = await calculateStudentSubjectAttendance(
-        enrollment.studentId,
+      // Source of truth: the persisted summary. NEVER recomputed on-read.
+      const summary = await findSummaryByEnrollmentAndSubject(
         enrollment.id,
-        enrollment.classGroupId,
         session.levelSubjectId,
         organizationId
       );
+
+      // No summary yet, or attendance not started (null percentage / NOT_STARTED)
+      // → no risk signal. We do not fabricate a percentage by recalculating.
+      if (!summary || summary.attendancePercentage == null) continue;
 
       await maybeEmitRiskEvent(
         organizationId,
@@ -77,8 +99,9 @@ export async function evaluateAttendanceRiskForSession(
         enrollment.id,
         session.levelSubjectId,
         summary.attendancePercentage,
+        summary.status,
         minPct,
-        AT_RISK_THRESHOLD,
+        atRiskThreshold,
         subjectName
       );
     } catch {
@@ -93,11 +116,15 @@ async function maybeEmitRiskEvent(
   enrollmentId: string,
   levelSubjectId: string,
   currentPercentage: number,
+  summaryStatus: string,
   minimumPercentage: number,
   atRiskThreshold: number,
   subjectName: string
 ): Promise<void> {
-  if (currentPercentage < minimumPercentage) {
+  // BELOW_REQUIRED is decided by the persisted summary status (source of truth),
+  // not by re-comparing the percentage here — the summary already applied the
+  // policy semantics (countExcusedAsPresent, approved justifications, …).
+  if (summaryStatus === StudentSubjectAttendanceSummaryStatus.BELOW_REQUIRED) {
     // Check if we already emitted student_below_required recently (idempotency)
     const alreadyEmitted = await hasRecentEvent(
       organizationId,
@@ -122,6 +149,7 @@ async function maybeEmitRiskEvent(
       },
     });
   } else if (currentPercentage < atRiskThreshold) {
+    // SUFFICIENT but within the at-risk buffer of the minimum.
     const alreadyEmitted = await hasRecentEvent(
       organizationId,
       studentId,

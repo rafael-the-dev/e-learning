@@ -9,7 +9,25 @@ import {
 import type { StudentSubjectAttendance } from "@/modules/attendance/types";
 
 // =============================================================================
-// ATTENDANCE CALCULATOR SERVICE
+// ⚠️ DEPRECATED — LEGACY ATTENDANCE CALCULATOR SERVICE (RETIRED FROM READ PATHS)
+//
+// This service recomputes subject attendance from raw AttendanceRecord rows on
+// every read, with semantics that DIVERGE from the persisted
+// `StudentSubjectAttendanceSummary` (the Attendance Engine Phase 3 read-model and
+// the single source of truth):
+//   • ignores `countExcusedAsPresent`
+//   • ignores approved justifications
+//   • maps an empty subject to 0% / OK instead of null / NOT_STARTED
+//
+// It is NO LONGER USED by any live read path. Reports (`/api/attendance/reports`),
+// Student 360 and the attendance risk service all read the persisted summary via
+// `attendance-read-model.service.ts` / the summary repository instead. A guard
+// test (`legacy-calculator-not-in-read-paths.test.ts`) asserts no live read path
+// imports this file.
+//
+// Kept temporarily for reference only; do NOT wire it into new read paths. Prefer
+// `SubjectAttendanceView` sourced from `StudentSubjectAttendanceSummary`.
+// =============================================================================
 //
 // Formula:
 //   attendancePercentage =
@@ -48,6 +66,9 @@ function calculateMinutesAttended(
   }
 }
 
+/** @deprecated Legacy on-read calculator. Read the persisted
+ *  `StudentSubjectAttendanceSummary` (via the summary repository /
+ *  `attendance-read-model.service.ts`) instead. Not used by any live read path. */
 export async function calculateStudentSubjectAttendance(
   studentId: string,
   enrollmentId: string,
@@ -193,6 +214,7 @@ export async function calculateStudentSubjectAttendance(
   };
 }
 
+/** @deprecated Legacy on-read calculator — see `calculateStudentSubjectAttendance`. */
 export async function calculateEnrollmentAttendanceSummary(
   studentId: string,
   enrollmentId: string,
@@ -232,6 +254,7 @@ export async function calculateEnrollmentAttendanceSummary(
   return results.filter((r): r is StudentSubjectAttendance => r !== null);
 }
 
+/** @deprecated Legacy on-read calculator — see `calculateStudentSubjectAttendance`. */
 export async function checkMinimumAttendanceRequirement(
   studentId: string,
   enrollmentId: string,

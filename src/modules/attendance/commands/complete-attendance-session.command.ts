@@ -18,7 +18,7 @@ import {
   type CompleteAttendanceSessionSchema,
 } from "@/modules/attendance/schemas/attendance.schema";
 import { evaluateAttendanceRiskForSession } from "@/modules/attendance/services/attendance-risk.service";
-import { triggerAttendanceSummaryRecalcForSession } from "@/modules/attendance/services/student-subject-attendance-summary.service";
+import { recalculateSummariesForSession } from "@/modules/attendance/services/student-subject-attendance-summary.service";
 import { triggerPeriodSummaryRecalcForSession } from "@/modules/attendance/services/student-period-attendance-summary.service";
 
 export class CompleteAttendanceSessionCommand extends BaseCommand<
@@ -64,19 +64,18 @@ export class CompleteAttendanceSessionCommand extends BaseCommand<
       newValues: { status: "COMPLETED" },
     });
 
-    // Evaluate attendance risk for all enrolled students AFTER completing the session.
-    // This runs async — failure must not roll back the completion.
-    evaluateAttendanceRiskForSession(
-      session.id,
-      this.context.organizationId
-    ).catch((err) =>
-      console.error("[CompleteAttendanceSessionCommand] risk evaluation failed", err)
-    );
-
     // Attendance Engine Phase 3: recompute persisted summaries for every enrolment
-    // in this session now that it counts. Best-effort — a summary failure must
-    // never roll back the completion (behaviour-neutral).
-    triggerAttendanceSummaryRecalcForSession(this.context, session.id);
+    // in this session now that it counts, THEN evaluate attendance risk from those
+    // fresh summaries. Risk reads the persisted StudentSubjectAttendanceSummary
+    // (source of truth), so the recalc MUST complete first — otherwise risk would
+    // read a stale/absent summary. Both run async and best-effort: a failure here
+    // must never roll back the completion (behaviour-neutral).
+    void (async () => {
+      await recalculateSummariesForSession(this.context, session.id);
+      await evaluateAttendanceRiskForSession(session.id, this.context.organizationId);
+    })().catch((err) =>
+      console.error("[CompleteAttendanceSessionCommand] summary/risk post-processing failed", err)
+    );
 
     // Attendance Engine Phase 4: recompute the period (year/term) reporting
     // summaries for the same enrolments. Best-effort, reporting-only.

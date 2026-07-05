@@ -7,22 +7,31 @@ import { StatusBadge } from "@/shared/components/data/status-badge";
 import { EmptyState } from "@/shared/components/layout/empty-state";
 import { Button } from "@/shared/components/ui/button";
 import {
-  ATTENDANCE_RISK_STATUS_LABELS,
+  SUBJECT_ATTENDANCE_VIEW_STATUS_LABELS,
   ATTENDANCE_JUSTIFICATION_STATUS_LABELS,
 } from "@/modules/attendance/types";
 import { Activity, ChevronLeft, ChevronRight, ClipboardList } from "lucide-react";
-import type { StudentSubjectAttendance, AttendanceJustification } from "@/modules/attendance/types";
+import type {
+  SubjectAttendanceView,
+  StudentAttendanceCounts,
+  AttendanceJustification,
+} from "@/modules/attendance/types";
 import type { AttendanceRecordRow } from "@/modules/students/student-360/types";
 import type { PaginatedResult } from "@/shared/types/common";
 
 const RISK_VARIANT: Record<string, "secondary" | "outline" | "destructive"> = {
+  NOT_STARTED: "secondary",
   OK: "secondary",
   AT_RISK: "outline",
   BELOW_REQUIRED: "destructive",
 };
 
 interface StudentAttendanceTabProps {
-  subjects: StudentSubjectAttendance[];
+  // Per-subject attendance read verbatim from the persisted summary read-model
+  // (source of truth). Never recomputed from raw records.
+  subjects: SubjectAttendanceView[];
+  // Per-status session counts from the persisted period year-rollups.
+  counts: StudentAttendanceCounts;
   records: PaginatedResult<AttendanceRecordRow>;
   justifications: PaginatedResult<AttendanceJustification>;
   pendingJustificationCount: number;
@@ -30,16 +39,22 @@ interface StudentAttendanceTabProps {
 
 export function StudentAttendanceTab({
   subjects,
+  counts,
   records,
   justifications,
   pendingJustificationCount,
 }: StudentAttendanceTabProps) {
-  const totalSessions = subjects.reduce((sum, s) => sum + s.totalSessions, 0);
-  const present = subjects.reduce((sum, s) => sum + s.presentCount, 0);
-  const absent = subjects.reduce((sum, s) => sum + s.absentCount, 0);
-  const excused = subjects.reduce((sum, s) => sum + s.excusedCount, 0);
+  const totalSessions = counts.totalSessions;
+  const present = counts.presentCount;
+  const absent = counts.absentCount;
+  const excused = counts.excusedCount;
+  // Average over subjects with a persisted percentage (NOT_STARTED subjects are
+  // null and excluded rather than counted as 0%).
+  const percentages = subjects
+    .map((s) => s.attendancePercentage)
+    .filter((p): p is number => p != null);
   const avgAttendance =
-    subjects.length > 0 ? subjects.reduce((sum, s) => sum + s.attendancePercentage, 0) / subjects.length : null;
+    percentages.length > 0 ? percentages.reduce((sum, p) => sum + p, 0) / percentages.length : null;
 
   return (
     <div className="space-y-6">
@@ -75,9 +90,11 @@ export function StudentAttendanceTab({
                   <span className="text-xs text-muted-foreground shrink-0">
                     mín. {s.minimumAttendancePercentage != null ? `${s.minimumAttendancePercentage}%` : "—"}
                   </span>
-                  <span className="font-medium tabular-nums shrink-0">{s.attendancePercentage.toFixed(1)}%</span>
+                  <span className="font-medium tabular-nums shrink-0">
+                    {s.attendancePercentage != null ? `${s.attendancePercentage.toFixed(1)}%` : "—"}
+                  </span>
                   <Badge variant={RISK_VARIANT[s.status] ?? "secondary"} className="shrink-0 text-xs">
-                    {ATTENDANCE_RISK_STATUS_LABELS[s.status] ?? s.status}
+                    {SUBJECT_ATTENDANCE_VIEW_STATUS_LABELS[s.status] ?? s.status}
                   </Badge>
                 </div>
               ))}

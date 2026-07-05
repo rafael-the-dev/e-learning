@@ -47,9 +47,14 @@ export function StudentOverviewTab({
   const blocked = levelProgress.some((p) => p.status === "BLOCKED");
 
   const belowRequired = attendanceSubjects.filter((s) => s.status === "BELOW_REQUIRED");
+  // attendancePercentage is null for NOT_STARTED subjects (no persisted summary
+  // yet) — exclude those from the average rather than treating them as 0%.
+  const attendancePercentages = attendanceSubjects
+    .map((s) => s.attendancePercentage)
+    .filter((p): p is number => p != null);
   const avgAttendance =
-    attendanceSubjects.length > 0
-      ? attendanceSubjects.reduce((sum, s) => sum + s.attendancePercentage, 0) / attendanceSubjects.length
+    attendancePercentages.length > 0
+      ? attendancePercentages.reduce((sum, p) => sum + p, 0) / attendancePercentages.length
       : null;
 
   const academicRisk = failed > 0 || blocked;

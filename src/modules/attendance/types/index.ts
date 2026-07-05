@@ -133,6 +133,15 @@ export interface AttendanceJustification {
 
 // ─── Calculation types ────────────────────────────────────────────────────────
 
+/**
+ * @deprecated Legacy on-read calculation DTO produced by
+ * `attendance-calculator.service.ts`. It recomputes attendance from raw records
+ * with semantics that DIVERGE from the persisted `StudentSubjectAttendanceSummary`
+ * (ignores `countExcusedAsPresent`, ignores approved justifications, maps empty →
+ * `0/OK` instead of `null/NOT_STARTED`). Retired from all live read paths — use
+ * `SubjectAttendanceView` sourced from the persisted summary instead. Kept only
+ * for reference until the legacy calculator is deleted.
+ */
 export interface StudentSubjectAttendance {
   studentId: string;
   enrollmentId: string;
@@ -151,6 +160,65 @@ export interface StudentSubjectAttendance {
   excusedCount: number;
   remoteCount: number;
   totalSessions: number;
+}
+
+// ─── Read-model view (source of truth = StudentSubjectAttendanceSummary) ──────
+
+/** Presentation status for a subject's attendance, derived PURELY from the
+ *  persisted summary percentage + the LevelSubject threshold. `AT_RISK` is a
+ *  display band (percentage within `atRiskBuffer` of the minimum); it never
+ *  contradicts the academic summary status (BELOW_REQUIRED ⇔ below minimum). */
+export type SubjectAttendanceDisplayStatus =
+  | "NOT_STARTED"
+  | "OK"
+  | "AT_RISK"
+  | "BELOW_REQUIRED";
+
+/**
+ * The single read shape for subject attendance across reports, Student 360 and
+ * risk evaluation. Numbers are read verbatim from the persisted
+ * `StudentSubjectAttendanceSummary` (never recomputed from raw records).
+ * When no summary row exists yet, `attendancePercentage` is `null`, `status` is
+ * `NOT_STARTED` and `needsRecalculation` is `true` (repair via the recalc command).
+ */
+export interface SubjectAttendanceView {
+  studentId: string;
+  enrollmentId: string;
+  levelSubjectId: string;
+  subjectId: string;
+  subjectName: string;
+  totalSessions: number;
+  totalScheduledMinutes: number;
+  totalPresentMinutes: number;
+  totalAbsentMinutes: number;
+  totalLateMinutes: number;
+  totalExcusedMinutes: number;
+  attendancePercentage: number | null;
+  minimumAttendancePercentage: number | null;
+  status: SubjectAttendanceDisplayStatus;
+  /** true when no persisted summary exists yet (stale/missing read-model). */
+  needsRecalculation: boolean;
+  calculatedAt: Date | null;
+}
+
+/** One student's row in the class-group attendance report grid. */
+export interface ClassGroupAttendanceReportEntry {
+  studentId: string;
+  studentName: string;
+  studentCode: string | null;
+  subjects: SubjectAttendanceView[];
+}
+
+/** Aggregate session counts for a student, read from the persisted period
+ *  year-rollups (`academicTermId = null`) — the reporting source that persists
+ *  per-status counts. Used for display KPI cards, not academic decisions. */
+export interface StudentAttendanceCounts {
+  totalSessions: number;
+  presentCount: number;
+  absentCount: number;
+  lateCount: number;
+  excusedCount: number;
+  remoteCount: number;
 }
 
 // ─── Summary engine types (Attendance Engine Phase 3) ─────────────────────────
@@ -408,6 +476,14 @@ export const ATTENDANCE_JUSTIFICATION_STATUS_LABELS: Record<string, string> = {
 };
 
 export const ATTENDANCE_RISK_STATUS_LABELS: Record<string, string> = {
+  OK: "OK",
+  AT_RISK: "Em Risco",
+  BELOW_REQUIRED: "Abaixo do Mínimo",
+};
+
+/** Labels for the read-model `SubjectAttendanceView.status`. */
+export const SUBJECT_ATTENDANCE_VIEW_STATUS_LABELS: Record<string, string> = {
+  NOT_STARTED: "Não Iniciada",
   OK: "OK",
   AT_RISK: "Em Risco",
   BELOW_REQUIRED: "Abaixo do Mínimo",

@@ -2,7 +2,10 @@ import { getStudentById } from "@/modules/students/services/student.service";
 import { getEnrollmentsByOrganization } from "@/modules/enrollments/services/enrollment.service";
 import { getStudentFinancialStatement } from "@/modules/reports/finance/services/financial-reports.service";
 import { findProgressByOrganization } from "@/modules/assessments/repositories/student-subject-progress.repository";
-import { calculateEnrollmentAttendanceSummary } from "@/modules/attendance/services/attendance-calculator.service";
+import {
+  getStudentSubjectAttendanceViews,
+  getStudentAttendanceCounts,
+} from "@/modules/attendance/services/attendance-read-model.service";
 import { findJustificationsByOrganization } from "@/modules/attendance/repositories/attendance-justification.repository";
 import { findStudentAssessmentResults } from "@/modules/grades/repositories/student-assessment-result.repository";
 import { getRecentTimelineEvents, getStudentTimeline } from "@/modules/student-timeline/services/student-timeline.service";
@@ -27,7 +30,7 @@ import type { StudentFinancialStatement } from "@/modules/reports/finance/types"
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
 import { SUBJECT_ELIGIBILITY_STATUS } from "@/modules/prerequisites/types";
 import type { StudentLevelProgress, StudentCourseProgress, SubjectEligibilityResult } from "@/modules/prerequisites/types";
-import type { StudentSubjectAttendance } from "@/modules/attendance/types";
+import type { SubjectAttendanceView, StudentAttendanceCounts } from "@/modules/attendance/types";
 import type { StudentTimelineEvent } from "@/modules/student-timeline/types";
 import type { LevelSubject } from "@/modules/courses/types";
 import type { StudentWallet, WalletTransaction } from "@/modules/wallets/types";
@@ -43,7 +46,8 @@ export interface Student360Core {
   subjectProgress: StudentSubjectProgress[];
   levelProgress: StudentLevelProgress[];
   courseProgress: StudentCourseProgress[];
-  attendanceSubjects: StudentSubjectAttendance[];
+  attendanceSubjects: SubjectAttendanceView[];
+  attendanceCounts: StudentAttendanceCounts;
   lastActivityAt: Date | null;
   recentTimeline: StudentTimelineEvent[];
   documentCount: number;
@@ -87,16 +91,19 @@ export async function getStudent360Core(
   const enrollments = enrollmentsResult.data;
   const activeEnrollments = enrollments.filter((e) => e.status === "ACTIVE");
 
-  const attendanceByEnrollment = await Promise.all(
-    activeEnrollments
-      .filter((e) => e.classGroupId)
-      .map((e) =>
-        calculateEnrollmentAttendanceSummary(studentId, e.id, e.classGroupId as string, organizationId).catch(
-          () => [] as StudentSubjectAttendance[]
-        )
-      )
-  );
-  const attendanceSubjects = attendanceByEnrollment.flat();
+  // Source of truth: persisted StudentSubjectAttendanceSummary (Phase 3), never
+  // recomputed on-read. Missing summaries surface as NOT_STARTED / null. The
+  // per-status counts come from the persisted period year-rollups (Phase 4).
+  const [attendanceSubjects, attendanceCounts] = await Promise.all([
+    getStudentSubjectAttendanceViews(
+      studentId,
+      activeEnrollments.map((e) => ({ id: e.id, classGroupId: e.classGroupId ?? null })),
+      organizationId
+    ).catch(() => [] as SubjectAttendanceView[]),
+    getStudentAttendanceCounts(studentId, organizationId).catch(
+      () => ({ totalSessions: 0, presentCount: 0, absentCount: 0, lateCount: 0, excusedCount: 0, remoteCount: 0 })
+    ),
+  ]);
 
   const currentEnrollment = activeEnrollments[0] ?? enrollments[0] ?? null;
 
@@ -112,6 +119,7 @@ export async function getStudent360Core(
     levelProgress,
     courseProgress,
     attendanceSubjects,
+    attendanceCounts,
     lastActivityAt,
     recentTimeline,
     documentCount,
@@ -125,7 +133,9 @@ export function buildHealthScoreInput(core: Student360Core): HealthScoreInput {
     levelStatuses: core.levelProgress.map((p) => p.status),
     outstandingBalance: core.statement?.kpis.outstandingBalance ?? 0,
     hasOverdueInvoice: core.statement?.invoices.some((i) => i.status === "OVERDUE") ?? false,
-    attendancePercentages: core.attendanceSubjects.map((s) => s.attendancePercentage),
+    attendancePercentages: core.attendanceSubjects
+      .map((s) => s.attendancePercentage)
+      .filter((p): p is number => p != null),
     hasBelowRequiredAttendance: core.attendanceSubjects.some((s) => s.status === "BELOW_REQUIRED"),
     enrollmentStatuses: core.enrollments.map((e) => e.status),
     lastActivityAt: core.lastActivityAt,
@@ -144,7 +154,7 @@ export function buildAlertsInput(core: Student360Core): StudentAlertsInput {
     overdueInvoiceCount: core.statement?.invoices.filter((i) => i.status === "OVERDUE").length ?? 0,
     belowRequiredAttendanceSubjects: core.attendanceSubjects
       .filter((s) => s.status === "BELOW_REQUIRED")
-      .map((s) => ({ subjectName: s.subjectName, attendancePercentage: s.attendancePercentage })),
+      .map((s) => ({ subjectName: s.subjectName, attendancePercentage: s.attendancePercentage ?? 0 })),
     pendingRefundCount,
     pendingJustificationCount: core.pendingJustificationCount,
     documentCount: core.documentCount,
@@ -168,9 +178,12 @@ export function buildSummaryCards(core: Student360Core, openAlertsCount: number)
     gradedSubjects.length > 0
       ? gradedSubjects.reduce((sum, p) => sum + (p.finalGrade ?? 0), 0) / gradedSubjects.length
       : null;
+  const attendancePercentages = core.attendanceSubjects
+    .map((s) => s.attendancePercentage)
+    .filter((p): p is number => p != null);
   const attendancePercentage =
-    core.attendanceSubjects.length > 0
-      ? core.attendanceSubjects.reduce((sum, s) => sum + s.attendancePercentage, 0) / core.attendanceSubjects.length
+    attendancePercentages.length > 0
+      ? attendancePercentages.reduce((sum, p) => sum + p, 0) / attendancePercentages.length
       : null;
 
   return {
