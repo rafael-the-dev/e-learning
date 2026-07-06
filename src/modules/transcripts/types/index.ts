@@ -4,6 +4,9 @@
 // Repository/domain-level record and parameter types ONLY. These are NOT UI
 // DTOs and are NOT part of any client contract yet (§10 / §17 of the spec).
 //
+// Phase 3 adds the Snapshot Builder contract in ./snapshot-payload, re-exported
+// here so `@/modules/transcripts/types` remains the single type entry point.
+//
 // Conventions (mirroring the existing repository layer):
 //   • Prisma `Decimal @db.Decimal(5,2)` columns are surfaced as `number | null`
 //     (or `number` where the source column is non-null). Decimal(5,2) is well
@@ -382,6 +385,9 @@ export interface SourcePeriodAttendanceSummaryRecord {
   status: string;
   calculatedAt: Date | null;
 }
+
+// Re-export the Phase-3 Snapshot Builder contract (input + payload types).
+export * from "./snapshot-payload";
 
 /** Aggregate of everything the Snapshot Builder loads for one transcript scope. */
 export interface TranscriptSourceData {

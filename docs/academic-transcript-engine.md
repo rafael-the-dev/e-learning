@@ -882,8 +882,9 @@ at DRAFT). Unique per org via filtered unique index. Concurrency-safe via a
   indexes (§16). No commands yet.
 - **Phase 2 — Repositories.** Org-scoped repositories (the only Prisma layer) + read-only
   loaders over the Academic Core sources (§17). No writes back to source models.
-- **Phase 3 — Snapshot Builder.** Implement the pure builder + canonical serializer +
-  checksum against the Phase-0 contracts. Fully unit-testable without I/O.
+- **Phase 3 — Snapshot Builder.** ✅ **IMPLEMENTED** (see §20.1). Pure builder +
+  canonical serializer + checksum against the Phase-0 contracts. Fully unit-testable
+  without I/O.
 - **Phase 4 — Generate Transcript Command.** `GenerateTranscriptSnapshotCommand`
   (`BaseCommand` run→validate→authorize→execute), auditing + `transcript.generated`
   event; auto-DRAFT handler on `student_course.completed` (D7).
@@ -900,6 +901,67 @@ at DRAFT). Unique per org via filtered unique index. Concurrency-safe via a
 
 Each phase closes only with `backend ✔ / frontend ✔ / qa ✔ / security ✔`. Any Security
 finding of severity C or H blocks deploy (per CLAUDE.md flow).
+
+---
+
+### 20.1 Phase 3 implementation notes (as built)
+
+The Snapshot Builder is a **pure, read-only, in-memory** service under
+`src/modules/transcripts/services/`. It reads official Academic Core outputs through the
+Phase-2 **source repository only** and assembles a deterministic
+`TranscriptSnapshotPayload`. It performs **no** DB writes, emits **no** events, writes
+**no** audit, allocates **no** transcript numbers, creates **no** transcript/version rows,
+and decides **no** status transitions or eligibility. Enforced by static architecture-guard
+tests (no `getDb`, no `.create/.update/.delete`, no engine/eventPublisher/auditService/
+number-allocator imports).
+
+**Copies, never calculates.** Grades, statuses, attendance percentages, `earnedCredits`
+(course/level from progress; subject copied unconditionally from `LevelSubject.credits`),
+minimum thresholds and identity names/codes are copied verbatim from the source rows
+(Decimal→number surface only). Identity (student, course + category, level, subject,
+policy) is **frozen** into the payload so later live renames never mutate an issued
+snapshot. `level.startedAt` is the documented derivation `StudentLevelProgress.createdAt`
+(§4.3), not a recomputation.
+
+**Supported transcript types (Phase 3):**
+
+| Type | Support | Requires | Notes |
+|---|---|---|---|
+| `COURSE_TRANSCRIPT` | full | `enrollmentId` | one enrollment/course |
+| `CERTIFICATE_SUPPORT` | full | `enrollmentId` | same assembly; **facts only**, eligibility decided later (not here) |
+| `LEVEL_TRANSCRIPT` | full | `enrollmentId` + `scopeRef` = `courseLevelId` | course assembly filtered to one level (structural filter, not outcome filter) |
+| `SUBJECT_REPORT` | full | `enrollmentId` + `scopeRef` = `levelSubjectId` | course assembly filtered to one subject |
+| `TERM_REPORT` | **fail-fast** | — | throws `NotImplementedError`; term membership needs interpretation, not a copy |
+| `FULL_ACADEMIC_HISTORY` | **fail-fast** | — | throws `NotImplementedError`; spans multiple enrollments (Phase 4+) |
+
+Unsupported types **fail fast** with a typed `NotImplementedError` — the builder never
+silently produces an incomplete snapshot. Missing **required** student/enrollment →
+`NotFoundError`; invalid `transcriptType`/`detailLevel`/missing required scope →
+`ValidationError`. Missing **optional** data (course progress, subject attendance) yields
+`null`/`[]`, never invented values.
+
+**SUMMARY vs DETAILED.** `SUMMARY` omits assessment component rows (the `assessments` key
+is absent on subjects); `DETAILED` includes only `StudentAssessmentResult` rows with
+`status = GRADED` (a filter, not a recalculation — `CANCELLED`/`DRAFT` excluded), including
+`sourceType = RECOVERY` recovery rows. `StudentAssessmentResult` is the only grade source.
+
+**Deterministic ordering** (checksum stability): levels by `levelOrder`, `levelName`,
+`courseLevelId`; subjects by `subjectOrder`, `subjectName`, `levelSubjectId`; assessments
+by component `order`, `gradedAt`, `id`; attendance by `academicYearId`, `academicTermId`,
+`id`. Null sort keys are ordered last, deterministically.
+
+**Canonical payload / checksum** (`transcript-canonical-payload.service.ts`) delegates to
+the Phase-0 `@/shared/lib/checksum` (sorted keys, Decimal→number, Date→ISO, `undefined`
+omitted, `null` preserved, array order significant). It checksums **content only** — the
+resolved `scope`, `detailLevel`, and all academic content — and deliberately **excludes**
+the envelope (`snapshotDate`, `metadata.generatedBy`, counts) so identical academic content
+hashes identically regardless of when/by whom it was generated. `SUMMARY` and `DETAILED`
+never collide (`detailLevel` is part of the content).
+
+**Source-repository extension (read-only, org-scoped).** Two identity fields were added to
+existing source selects for the freeze: `Course.category { id, name }` (via the enrollment
+read) and `AssessmentComponent.order` (assessment-results read, for deterministic
+assessment ordering). No new writes; no schema change.
 
 ---
 

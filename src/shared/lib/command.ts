@@ -65,6 +65,19 @@ export class BusinessRuleError extends Error {
 }
 
 /**
+ * Thrown when a feature/branch is deliberately not yet implemented and the
+ * caller must fail fast rather than receive a silently-incomplete result.
+ * Used by the Academic Transcript Snapshot Builder for transcript types not
+ * supported in the current phase.
+ */
+export class NotImplementedError extends Error {
+  constructor(feature: string) {
+    super(`${feature} is not implemented`);
+    this.name = "NotImplementedError";
+  }
+}
+
+/**
  * Thrown when a conditional update (WHERE ... AND status = expected) affects
  * zero rows — the record was modified by another process between the read
  * and the write. Distinct from BusinessRuleError: this is a transient race,
