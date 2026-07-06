@@ -885,9 +885,11 @@ at DRAFT). Unique per org via filtered unique index. Concurrency-safe via a
 - **Phase 3 — Snapshot Builder.** ✅ **IMPLEMENTED** (see §20.1). Pure builder +
   canonical serializer + checksum against the Phase-0 contracts. Fully unit-testable
   without I/O.
-- **Phase 4 — Generate Transcript Command.** `GenerateTranscriptSnapshotCommand`
-  (`BaseCommand` run→validate→authorize→execute), auditing + `transcript.generated`
-  event; auto-DRAFT handler on `student_course.completed` (D7).
+- **Phase 4 — Generate Transcript Command.** ✅ **IMPLEMENTED** (see §20.2).
+  `GenerateTranscriptSnapshotCommand` (`BaseCommand` run→validate→authorize→execute)
+  persists the Phase-3 payload as a DRAFT version + immutable snapshot rows in ONE
+  transaction. **Deferred to Phase 5+:** audit + `transcript.generated` event; the
+  auto-DRAFT handler on `student_course.completed` (D7).
 - **Phase 5 — Issue / Supersede / Revoke.** `IssueTranscriptCommand`,
   `RegenerateTranscriptCommand` (+ diff), `RevokeTranscriptCommand`; stale-detection
   handler + reconciliation safety-net job (D2/D3).
@@ -962,6 +964,59 @@ never collide (`detailLevel` is part of the content).
 existing source selects for the freeze: `Course.category { id, name }` (via the enrollment
 read) and `AssessmentComponent.order` (assessment-results read, for deterministic
 assessment ordering). No new writes; no schema change.
+
+---
+
+### 20.2 Phase 4 implementation notes (as built)
+
+`GenerateTranscriptSnapshotCommand`
+(`src/modules/transcripts/commands/generate-transcript-snapshot.command.ts`) extends
+`BaseCommand` (`run → validate → authorize → execute`) and does exactly one thing: **read
+Academic Core → build snapshot → persist a DRAFT transcript + DRAFT version + immutable
+snapshot rows**, then return the Draft aggregate `{ transcript, version }`.
+
+- **validate()** — Zod parse (`generateTranscriptSnapshotSchema`); input-shape scope
+  requirements (`enrollmentId` for enrollment-scoped types; `scopeRef` for
+  LEVEL_TRANSCRIPT/SUBJECT_REPORT). Unsupported types (`TERM_REPORT`,
+  `FULL_ACADEMIC_HISTORY`) fail fast with `NotImplementedError` before authorize/tx.
+- **authorize()** — `PERMISSIONS.TRANSCRIPTS_GENERATE` via `getUserPermissions` +
+  `createAbility` (else `AuthorizationError`).
+- **execute()** — everything inside a single `db.$transaction`:
+  1. `buildTranscriptSnapshot(input, tx)` (Phase-3 builder; reads Academic Core).
+  2. `checksum = transcriptContentChecksum(payload)` — computed once, persisted, **never
+     recomputed**.
+  3. Resolve the **single root** for the scope via `findTranscriptByScope`; reuse it if
+     present, else `createTranscript({ status: "DRAFT", transcriptNumber: null })`. No
+     duplicate DRAFT roots; issued versions are never touched (no root-status flip, no
+     `currentVersionId` change — that is Phase 5).
+  4. `versionNumber` = caller-supplied (temporary) else `max(versionNumber)+1`.
+  5. `createVersion({ status: "DRAFT", checksum, issuedAt/superseded/revoked = null,
+     studentSnapshot, courseSnapshot })`. The JSON `courseSnapshot` column carries
+     `{ course, courseProgress }` (there is no dedicated course-progress column).
+  6. Persist snapshot rows in order **Level → Subject → Assessment → Attendance**, wiring
+     each child to its freshly-created parent id (index-zipped, since the append-only
+     snapshot repo returns rows in input order). Subject-grain attendance nests under its
+     subject; version/period-grain attendance is written with `transcriptSubjectId = null`.
+
+**Persist exactly, never calculate.** The command maps the Builder payload to repository
+inputs with pure mappers and never mutates the payload (verified by a test that deep-equals
+the payload before/after persistence). A `required()` guard fails fast (`ValidationError`)
+if a payload field that maps to a NON-NULL column is unexpectedly null — it never invents a
+value. Subject identity credits map `payload.subject.earnedCredits → column credits`.
+
+**One transaction, all-or-nothing.** Any failure (including a snapshot write) rolls back the
+whole transaction — no partial transcript (verified: a poisoned attendance insert leaves
+zero transcript/version/level/subject/assessment/attendance rows).
+
+**Out of scope (unchanged).** No issue/supersede/revoke, no transcript numbering, no
+export/PDF, no notifications, **no events**, **no audit**, no stale detection. Static
+architecture-guard tests reject imports of the later-phase commands, PDF/export/notification/
+certificate/diploma modules, React/Next, and any `eventPublisher`/`auditService` reference.
+
+**Tests:** 29 (types #1–#4, unsupported/errors #5/#16–#18, checksum/builder #7/#8/#14,
+persistence order + immutability #9/#13, root reuse + versions #10–#12, rollback #6/#15,
+guards #19/#20 + import guards). The in-memory fake DB gained real `$transaction` rollback
+semantics for these tests. Full transcript module 129/129; tsc/eslint/prisma validate green.
 
 ---
 

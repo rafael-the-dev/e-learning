@@ -150,12 +150,39 @@ function makeModel(name: string): FakeModel & { __store: Row[]; __seed(row: Row)
 export type FakeDb = Record<string, ReturnType<typeof makeModel>>;
 
 /** Build a fresh in-memory DB. Model delegates are created lazily on first
- *  access, so any Prisma model name works without an up-front registry. */
+ *  access, so any Prisma model name works without an up-front registry.
+ *
+ *  Also exposes `$transaction(fn)` with real ROLLBACK semantics: every model's
+ *  store is snapshotted (shallow row copies) before the callback runs; if the
+ *  callback throws, all stores are restored (rows created mid-transaction are
+ *  discarded) and the error re-throws. This lets command tests prove
+ *  "rollback leaves zero rows" behaviourally, not just structurally. */
 export function makeFakeDb(): FakeDb {
   const models = new Map<string, ReturnType<typeof makeModel>>();
-  return new Proxy({} as FakeDb, {
+
+  // Reads `proxy` only at call time (after it is assigned below), so the const
+  // declaration order is safe.
+  const transaction = async <T>(fn: (tx: FakeDb) => Promise<T> | T): Promise<T> => {
+    const backup = new Map<ReturnType<typeof makeModel>, Row[]>();
+    for (const model of models.values()) {
+      backup.set(model, model.__store.map((r) => ({ ...r })));
+    }
+    try {
+      return await fn(proxy);
+    } catch (err) {
+      for (const model of models.values()) {
+        const rows = backup.get(model);
+        model.__store.length = 0;
+        if (rows) model.__store.push(...rows);
+      }
+      throw err;
+    }
+  };
+
+  const proxy: FakeDb = new Proxy({} as FakeDb, {
     get(_target, prop) {
       if (typeof prop !== "string") return undefined;
+      if (prop === "$transaction") return transaction;
       let model = models.get(prop);
       if (!model) {
         model = makeModel(prop);
@@ -164,6 +191,7 @@ export function makeFakeDb(): FakeDb {
       return model;
     },
   });
+  return proxy;
 }
 
 /** Seed a row directly into a model's store (bypasses `create`). */
