@@ -91,6 +91,28 @@ export const DomainEventType = {
   STUDENT_COURSE_INVALIDATED: "student_course.invalidated",
   STUDENT_COURSE_RESTORED: "student_course.restored",
 
+  // Transcript lifecycle — Academic Transcript Engine (Phase 0 declares these;
+  // emission is wired in a later phase). A transcript is GENERATED as a draft,
+  // ISSUED (number allocated, per D9), and may be SUPERSEDED by a regeneration,
+  // REVOKED, REGENERATED, or MARKED_STALE when upstream academic data changes.
+  TRANSCRIPT_GENERATED: "transcript.generated",
+  TRANSCRIPT_ISSUED: "transcript.issued",
+  TRANSCRIPT_SUPERSEDED: "transcript.superseded",
+  TRANSCRIPT_REVOKED: "transcript.revoked",
+  TRANSCRIPT_REGENERATED: "transcript.regenerated",
+  TRANSCRIPT_MARKED_STALE: "transcript.marked_stale",
+
+  // Promoted academic transitions — previously audit-only action strings, now
+  // promoted to real domain events so the transcript engine (and future
+  // subscribers) can react to genuine academic transitions. DECLARED ONLY in
+  // Phase 0: not emitted yet, and still written as auditLog actions by the
+  // existing grade/assessment/progression commands. Emission wiring (transition-
+  // only, on real state changes) lands in a later phase.
+  GRADE_UPDATED: "grade.updated",
+  ASSESSMENT_RESULT_INVALIDATED: "assessment_result.invalidated",
+  LEVEL_PROGRESSION_APPROVED: "level_progression.approved",
+  LEVEL_PROGRESSION_BLOCKED: "level_progression.blocked",
+
   // Refunds
   REFUND_REQUESTED: "refund.requested",
   REFUND_APPROVED: "refund.approved",
@@ -116,6 +138,7 @@ export const DomainAggregateType = {
   ASSESSMENT: "ASSESSMENT",
   BILLING_JOB: "BILLING_JOB",
   REFUND: "REFUND",
+  TRANSCRIPT: "TRANSCRIPT",
 } as const;
 
 export type DomainAggregateType = (typeof DomainAggregateType)[keyof typeof DomainAggregateType];

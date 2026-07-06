@@ -439,6 +439,13 @@ export const PERMISSIONS = {
 
   // Academic Progress & Transcripts
   TRANSCRIPTS_VIEW: "transcripts.view",
+  // Academic Transcript Engine (Phase 0) — lifecycle + self-service perms.
+  TRANSCRIPTS_VIEW_OWN: "transcripts.viewOwn",
+  TRANSCRIPTS_GENERATE: "transcripts.generate",
+  TRANSCRIPTS_ISSUE: "transcripts.issue",
+  TRANSCRIPTS_REVOKE: "transcripts.revoke",
+  TRANSCRIPTS_EXPORT: "transcripts.export",
+  TRANSCRIPTS_REQUEST: "transcripts.request",
 
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",
@@ -529,6 +536,11 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.ASSESSMENT_RESULTS_VIEW,
     PERMISSIONS.STUDENT_SUBJECT_PROGRESS_VIEW,
     PERMISSIONS.TRANSCRIPTS_VIEW,
+    // Transcript Engine: secretaries generate, export and request transcripts.
+    // ISSUE stays admin-only by default (granted via custom roles only).
+    PERMISSIONS.TRANSCRIPTS_GENERATE,
+    PERMISSIONS.TRANSCRIPTS_EXPORT,
+    PERMISSIONS.TRANSCRIPTS_REQUEST,
     PERMISSIONS.STUDENT_TIMELINE_VIEW,
     PERMISSIONS.STUDENT_TIMELINE_CREATE_NOTE,
     PERMISSIONS.CLASSROOMS_VIEW,
@@ -728,6 +740,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.ASSESSMENT_RESULTS_VIEW,
     PERMISSIONS.STUDENT_SUBJECT_PROGRESS_VIEW,
     PERMISSIONS.TRANSCRIPTS_VIEW,
+    // Transcript Engine: students view their OWN transcripts and request one.
+    PERMISSIONS.TRANSCRIPTS_VIEW_OWN,
+    PERMISSIONS.TRANSCRIPTS_REQUEST,
     PERMISSIONS.CLASSROOM_BOOKINGS_VIEW,
     PERMISSIONS.LESSONS_VIEW,
     PERMISSIONS.LESSON_PROGRESS_VIEW,
