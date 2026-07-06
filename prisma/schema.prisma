@@ -119,6 +119,15 @@ model Organization {
   subjectAttendanceSummaries StudentSubjectAttendanceSummary[]
   periodAttendanceSummaries  StudentPeriodAttendanceSummary[]
   transcriptNumberCounters   TranscriptNumberCounter[]
+  academicTranscripts        AcademicTranscript[]
+  academicTranscriptVersions AcademicTranscriptVersion[]
+  academicTranscriptLevels   AcademicTranscriptLevel[]
+  academicTranscriptSubjects AcademicTranscriptSubject[]
+  academicTranscriptAssessments AcademicTranscriptAssessment[]
+  academicTranscriptAttendances AcademicTranscriptAttendance[]
+  academicTranscriptEvents   AcademicTranscriptEvent[]
+  academicTranscriptExports  AcademicTranscriptExport[]
+  academicTranscriptRequests AcademicTranscriptRequest[]
 
   @@map("organizations")
 }
@@ -396,6 +405,8 @@ model Student {
   refunds                    Refund[]
   documents                  StudentDocument[]
   guardianLinks              GuardianStudent[]
+  academicTranscripts        AcademicTranscript[]
+  academicTranscriptRequests AcademicTranscriptRequest[]
 
   @@index([organizationId, branchId])
   @@map("students")
@@ -567,6 +578,8 @@ model Course {
   levelProgressionPolicies  LevelProgressionPolicy[]
   levelProgressionRequests  LevelProgressionRequest[]
   periodAttendanceSummaries StudentPeriodAttendanceSummary[]
+  academicTranscripts       AcademicTranscript[]
+  academicTranscriptRequests AcademicTranscriptRequest[]
 
   @@map("courses")
 }
@@ -1024,6 +1037,8 @@ model Enrollment {
   refunds                    Refund[]
   subjectAttendanceSummaries StudentSubjectAttendanceSummary[]
   periodAttendanceSummaries  StudentPeriodAttendanceSummary[]
+  academicTranscripts        AcademicTranscript[]
+  academicTranscriptRequests AcademicTranscriptRequest[]
 
   @@unique([organizationId, enrollmentNumber])
   @@index([organizationId, courseId], name: "enrollments_org_course_idx")
@@ -3100,4 +3115,302 @@ model TranscriptNumberCounter {
 
   @@unique([organizationId, year, transcriptType])
   @@map("transcript_number_counters")
+}
+
+// =============================================================================
+// ACADEMIC TRANSCRIPT ENGINE — Phase 1: data model
+// Entity models for academic transcripts (snapshots of a student's academic
+// record). Versions are immutable point-in-time snapshots; levels/subjects/
+// assessments/attendance are denormalized copies frozen at snapshot time.
+// Columns marked "POINTER" are intentionally plain String? references (NO FK)
+// so a transcript version survives deletion of the source row it was copied
+// from. All status/type columns are String (no native enums).
+// =============================================================================
+
+model AcademicTranscript {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  studentId           String
+  enrollmentId        String?
+  courseId            String?
+  // transcriptType: FULL_ACADEMIC_HISTORY | COURSE_TRANSCRIPT | LEVEL_TRANSCRIPT | TERM_REPORT | SUBJECT_REPORT | CERTIFICATE_SUPPORT
+  transcriptType      String
+  // POINTER — deliberately NOT a FK; survives source deletion
+  scopeCourseLevelId  String?
+  // POINTER — deliberately NOT a FK; survives source deletion
+  scopeAcademicTermId String?
+  // POINTER — deliberately NOT a FK; survives source deletion
+  scopeLevelSubjectId String?
+  // Nullable; filtered-unique per (organizationId, transcriptNumber) via migration only.
+  transcriptNumber    String?
+  // status: DRAFT | ISSUED | SUPERSEDED | REVOKED
+  status              String    @default("DRAFT")
+  currentVersionId    String?
+  needsRegeneration   Boolean   @default(false)
+  staleReason         String?   @db.NVarChar(Max)
+  staleDetectedAt     DateTime?
+  issuedAt            DateTime?
+  issuedBy            String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  organization   Organization                @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student        Student                     @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment     Enrollment?                 @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course         Course?                     @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  currentVersion AcademicTranscriptVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  versions       AcademicTranscriptVersion[] @relation("TranscriptVersions")
+  events         AcademicTranscriptEvent[]
+
+  @@index([organizationId, studentId])
+  @@index([organizationId, enrollmentId])
+  @@index([organizationId, courseId])
+  @@index([organizationId, status])
+  @@index([organizationId, transcriptType])
+  @@index([organizationId, needsRegeneration])
+  @@map("academic_transcripts")
+}
+
+model AcademicTranscriptVersion {
+  id              String    @id @default(cuid())
+  organizationId  String
+  transcriptId    String
+  versionNumber   Int
+  snapshotDate    DateTime
+  // status: DRAFT | ISSUED | SUPERSEDED | REVOKED
+  status          String    @default("DRAFT")
+  reason          String?   @db.NVarChar(Max)
+  generatedBy     String?
+  issuedBy        String?
+  issuedAt        DateTime?
+  supersededAt    DateTime?
+  revokedAt       DateTime?
+  revokedBy       String?
+  revokeReason    String?   @db.NVarChar(Max)
+  checksum        String?
+  studentSnapshot String    @db.NVarChar(Max)
+  courseSnapshot  String?   @db.NVarChar(Max)
+  createdAt       DateTime  @default(now())
+
+  organization      Organization                   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  transcript        AcademicTranscript             @relation("TranscriptVersions", fields: [transcriptId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  currentOf         AcademicTranscript[]           @relation("CurrentVersion")
+  levels            AcademicTranscriptLevel[]
+  subjects          AcademicTranscriptSubject[]
+  attendances       AcademicTranscriptAttendance[]
+  events            AcademicTranscriptEvent[]
+  exports           AcademicTranscriptExport[]
+  fulfilledRequests AcademicTranscriptRequest[]    @relation("FulfilledRequests")
+
+  @@unique([transcriptId, versionNumber])
+  @@index([organizationId, transcriptId])
+  @@index([organizationId, status])
+  @@index([organizationId, issuedAt])
+  @@index([organizationId, checksum])
+  @@map("academic_transcript_versions")
+}
+
+model AcademicTranscriptLevel {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  transcriptVersionId String
+  // POINTER — deliberately NOT a FK; survives source deletion
+  courseLevelId       String?
+  levelName           String
+  levelCode           String?
+  levelOrder          Int
+  finalGrade          Decimal?  @db.Decimal(5, 2)
+  // status: NOT_STARTED | IN_PROGRESS | PASSED | FAILED | RECOVERY_REQUIRED | ELIGIBLE_TO_PROGRESS | PROMOTED | PROMOTED_WITH_PENDING_SUBJECTS | BLOCKED | COMPLETED
+  status              String
+  completedAt         DateTime?
+  startedAt           DateTime?
+  earnedCredits       Int?
+  workloadHours       Int?
+  createdAt           DateTime  @default(now())
+
+  organization Organization               @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  version      AcademicTranscriptVersion  @relation(fields: [transcriptVersionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subjects     AcademicTranscriptSubject[]
+
+  @@index([organizationId, transcriptVersionId])
+  @@map("academic_transcript_levels")
+}
+
+model AcademicTranscriptSubject {
+  id                          String    @id @default(cuid())
+  organizationId              String
+  transcriptVersionId         String
+  transcriptLevelId           String
+  // POINTER — deliberately NOT a FK; survives source deletion
+  levelSubjectId              String?
+  // POINTER — deliberately NOT a FK; survives source deletion
+  subjectId                   String?
+  subjectName                 String
+  subjectCode                 String?
+  subjectOrder                Int
+  finalGrade                  Decimal?  @db.Decimal(5, 2)
+  // status: NOT_STARTED | IN_PROGRESS | PASSED | FAILED | RECOVERY_REQUIRED | INCOMPLETE | BLOCKED
+  status                      String
+  minimumPassingGrade         Decimal?  @db.Decimal(5, 2)
+  attendancePercentage        Decimal?  @db.Decimal(5, 2)
+  minimumAttendancePercentage Decimal?  @db.Decimal(5, 2)
+  completedAt                 DateTime?
+  // credits: copied UNCONDITIONALLY from LevelSubject.credits (identity, not earnedCredits, not conditional on pass)
+  credits                     Int?
+  workloadHours               Int?
+  isRequired                  Boolean   @default(true)
+  // recoveryStatus: copied label
+  recoveryStatus              String?
+  createdAt                   DateTime  @default(now())
+
+  organization Organization                   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  version      AcademicTranscriptVersion      @relation(fields: [transcriptVersionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  level        AcademicTranscriptLevel        @relation(fields: [transcriptLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessments  AcademicTranscriptAssessment[]
+  attendances  AcademicTranscriptAttendance[]
+
+  @@index([organizationId, transcriptVersionId])
+  @@index([organizationId, transcriptLevelId])
+  @@map("academic_transcript_subjects")
+}
+
+model AcademicTranscriptAssessment {
+  id                        String    @id @default(cuid())
+  organizationId            String
+  transcriptSubjectId       String
+  // POINTER — deliberately NOT a FK; survives source deletion
+  studentAssessmentResultId String?
+  // POINTER — deliberately NOT a FK; survives source deletion
+  assessmentComponentId     String?
+  // POINTER — deliberately NOT a FK; survives source deletion
+  assessmentEventId         String?
+  title                     String?
+  componentName             String
+  // componentType: TEST | QUIZ | EXAM | ASSIGNMENT | PROJECT | ORAL | PRACTICAL | PARTICIPATION | FINAL_EXAM | RECOVERY | OTHER
+  componentType             String?
+  // sourceType: CONTINUOUS | SCHEDULED_EVENT | RECOVERY
+  sourceType                String
+  grade                     Decimal   @db.Decimal(5, 2)
+  maxGrade                  Decimal   @db.Decimal(5, 2)
+  normalizedGrade           Decimal   @db.Decimal(5, 2)
+  // status: DRAFT | SUBMITTED | GRADED | CANCELLED
+  status                    String
+  gradedAt                  DateTime?
+  isRecovery                Boolean   @default(false)
+  recoveryAttemptNumber     Int?
+  createdAt                 DateTime  @default(now())
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject      AcademicTranscriptSubject @relation(fields: [transcriptSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, transcriptSubjectId])
+  @@map("academic_transcript_assessments")
+}
+
+model AcademicTranscriptAttendance {
+  id                          String    @id @default(cuid())
+  organizationId              String
+  transcriptVersionId         String
+  transcriptSubjectId         String?
+  // POINTER — deliberately NOT a FK; survives source deletion
+  levelSubjectId              String?
+  // POINTER — deliberately NOT a FK; survives source deletion
+  academicYearId              String?
+  // POINTER — deliberately NOT a FK; survives source deletion
+  academicTermId              String?
+  attendancePercentage        Decimal?  @db.Decimal(5, 2)
+  totalSessions               Int       @default(0)
+  totalPresentMinutes         Int       @default(0)
+  totalScheduledMinutes       Int       @default(0)
+  // status (subject): SUFFICIENT | AT_RISK | BELOW_REQUIRED | NOT_STARTED ; (period): GOOD | AT_RISK | BELOW_REQUIRED
+  status                      String
+  // POINTER — deliberately NOT a FK; survives source deletion
+  policyId                    String?
+  policyName                  String?
+  minimumAttendancePercentage Decimal?  @db.Decimal(5, 2)
+  calculatedAt                DateTime?
+  createdAt                   DateTime  @default(now())
+
+  organization Organization               @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  version      AcademicTranscriptVersion  @relation(fields: [transcriptVersionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject      AcademicTranscriptSubject? @relation(fields: [transcriptSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, transcriptVersionId])
+  @@index([organizationId, transcriptSubjectId])
+  @@map("academic_transcript_attendances")
+}
+
+model AcademicTranscriptEvent {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  transcriptId        String
+  transcriptVersionId String?
+  // eventType: transcript.generated | transcript.issued | transcript.superseded | transcript.revoked | transcript.regenerated | transcript.marked_stale | transcript.exported
+  eventType           String
+  previousStatus      String?
+  newStatus           String?
+  reason              String?  @db.NVarChar(Max)
+  actorId             String?
+  // metadata: JSON
+  metadata            String?  @db.NVarChar(Max)
+  createdAt           DateTime @default(now())
+
+  organization Organization               @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  transcript   AcademicTranscript         @relation(fields: [transcriptId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  version      AcademicTranscriptVersion? @relation(fields: [transcriptVersionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, transcriptId])
+  @@index([organizationId, createdAt])
+  @@map("academic_transcript_events")
+}
+
+model AcademicTranscriptExport {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  transcriptVersionId String
+  // exportType: PDF | EXCEL | API | MINISTRY
+  exportType          String
+  fileUrl             String?
+  fileChecksum        String?
+  // status: PENDING | READY | FAILED
+  status              String    @default("PENDING")
+  exportedBy          String?
+  exportedAt          DateTime?
+  createdAt           DateTime  @default(now())
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  version      AcademicTranscriptVersion @relation(fields: [transcriptVersionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, transcriptVersionId])
+  @@map("academic_transcript_exports")
+}
+
+model AcademicTranscriptRequest {
+  id                           String    @id @default(cuid())
+  organizationId               String
+  studentId                    String
+  enrollmentId                 String?
+  courseId                     String?
+  requestedBy                  String
+  // requestType: FULL_ACADEMIC_HISTORY | COURSE_TRANSCRIPT | LEVEL_TRANSCRIPT | TERM_REPORT | SUBJECT_REPORT | CERTIFICATE_SUPPORT
+  requestType                  String
+  // status: PENDING | APPROVED | REJECTED | FULFILLED | CANCELLED
+  status                       String    @default("PENDING")
+  reason                       String?   @db.NVarChar(Max)
+  reviewedBy                   String?
+  reviewedAt                   DateTime?
+  fulfilledTranscriptVersionId String?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+
+  organization     Organization               @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student          Student                    @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment       Enrollment?                @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course           Course?                    @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fulfilledVersion AcademicTranscriptVersion? @relation("FulfilledRequests", fields: [fulfilledTranscriptVersionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, studentId])
+  @@index([organizationId, status])
+  @@map("academic_transcript_requests")
 }
