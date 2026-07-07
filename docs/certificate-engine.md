@@ -1,0 +1,995 @@
+# Certificate Engine — Domain Model & Architecture
+
+- **Status:** **Architecture FROZEN — v1.0** (design complete; implementation not started)
+- **Date:** 2026-07-07
+- **Freeze governed by:** [ADR-002 — Certificate Engine Architecture](./adr/ADR-002-certificate-engine-architecture.md)
+- **Depends on (frozen):** [Academic Core v1.0 — ADR-001](./adr/ADR-001-academic-core-freeze.md), [Academic Transcript Engine](./academic-transcript-engine.md)
+- **Position:** Downstream consumer of the Transcript Engine. Consumes **issued transcript versions** only; never recalculates academic state.
+
+> **Binding rule (ADR-001):** *"Certificate and Diploma engines must consume the
+> Transcript, not the Grade or Attendance engines directly. The official record is
+> always read through the immutable, versioned snapshot."* This document is written
+> to honour that rule strictly. Any deviation is a design defect.
+
+> ## 🔒 Certificate Engine Status
+>
+> | | |
+> |---|---|
+> | **Architecture Freeze** | **YES** |
+> | **Version** | **v1.0** |
+> | **State** | Design Complete |
+> | **Implementation** | Not Started |
+> | **Open Decisions** | 0 (all resolved — see §28) |
+> | **Governed by** | [ADR-002](./adr/ADR-002-certificate-engine-architecture.md) |
+> | **Consumers** | Student Portal · Guardian Portal · Public Verification · PDF Export · Ministry Export |
+>
+> The architecture below is closed. Any structural change requires a **new ADR**
+> that supersedes or amends ADR-002; this design is not edited in place once frozen,
+> except for the corrections/clarifications recorded in this freeze pass.
+
+---
+
+## 1. Executive Summary
+
+The Certificate Engine is the **official certificate issuance layer**. It certifies
+facts that have already been **frozen and issued** on an `AcademicTranscriptVersion`.
+It does not decide academic outcomes — it decides, given (a) an *issued* transcript
+version and (b) a certificate policy, **whether a certificate may be issued**, and
+then produces an immutable, numbered, verifiable certificate record plus its export
+artifacts.
+
+Design commitments:
+
+- **Snapshot-over-recalculation.** The engine reads the transcript snapshot facts
+  (`status`, `completedAt`, subject statuses, `finalGrade`) that the Transcript
+  Engine already froze. It never re-runs a grade, attendance, subject, level, or
+  completion rule.
+- **Immutable references.** A certificate pins one `transcriptVersionId` +
+  `transcriptChecksum`. If the transcript is later superseded/revoked, the
+  certificate does **not** silently change — it is marked `STALE` (default) or
+  `SUSPENDED`/`REVOKED` per policy, and a new certificate requires a new issue.
+- **No certificate versioning (Option A).** The certificate is immutable once
+  issued; a correction is a *new* certificate. The transcript is already versioned;
+  double-versioning adds complexity with no regulatory benefit today.
+- **Same lifecycle discipline as the Transcript Engine.** `BaseCommand` mutations,
+  single transaction, conditional writes for concurrency, append-only events, audit
+  inside the transaction, domain events published only after commit, number
+  allocated only on issue, content-only checksum.
+- **New module:** `src/modules/certificates/`. **Zero changes to Academic Core** or
+  the Transcript Engine. Adds new Prisma models, new `PERMISSIONS`, new
+  `DomainEventType` entries, and one number-counter table.
+
+Certificate **types** supported: `COURSE_COMPLETION`, `LEVEL_COMPLETION`,
+`PARTICIPATION`, `ATTENDANCE`, `ACHIEVEMENT`, `PROFESSIONAL_TRAINING`,
+`DRIVING_SCHOOL`, `LANGUAGE_COURSE`, `IT_COURSE`, `DESIGN_COURSE`.
+
+---
+
+## 2. Core Principle (source of truth)
+
+```
+WRONG:  Certificate walks every subject and recomputes whether the student passed.
+CORRECT: Certificate loads an ISSUED AcademicTranscriptVersion + CertificatePolicy,
+         reads the frozen snapshot facts, checks the policy gates, and decides.
+```
+
+The Transcript Engine is the **official academic record source**. The Certificate
+Engine is a certification layer *on top of* that record.
+
+### Immutable domain rules (frozen — ADR-002)
+
+> **Rule C-1 — Certificate Engine consumes the Transcript, never Academic Core raw tables.**
+> All academic facts are read through an **issued** `AcademicTranscriptVersion`
+> snapshot. The engine never reads Grade/Attendance engines, `StudentAssessmentResult`,
+> `StudentSubjectProgress`, `StudentLevelProgress`, raw attendance, or
+> `StudentCourseProgress` directly.
+
+> **Rule C-2 — Administrative facts are evaluated externally and snapshot into the Certificate.**
+> Finance clearance, manual approval, and template selection are **not** academic
+> facts. They are evaluated at generation/issue time against external sources
+> (finance read-model, approver identity, template registry) and **frozen onto the
+> Certificate**. The Certificate never recalculates an administrative fact after issue.
+
+### What the Certificate Engine MAY read
+
+| Source | How | Why allowed |
+|---|---|---|
+| `AcademicTranscriptVersion` (ISSUED) | via a **read-only** transcript reader in `src/modules/transcripts/repositories` | The official record |
+| `AcademicTranscript` (root) | same | Number, status, currentVersion pointer |
+| Transcript snapshot child rows / `courseProgressSnapshot` | same | Frozen `status`, `completedAt`, subject statuses, grades |
+| `Organization` settings | org repo | Certificate display / clearance policy toggles |
+| `CertificatePolicy`, `CertificateTemplate` | own repos | Its own configuration |
+| Finance clearance **read model** (a boolean/flag) | finance read repo | Finance is **not** Academic Core; clearance is not an academic recalculation (Resolved Decision D-3; snapshot into Certificate per Rule C-2) |
+
+### What the Certificate Engine MUST NEVER read or call
+
+- Grade Engine, Attendance Engine (calculators, live calculation inputs)
+- `StudentAssessmentResult`, `StudentSubjectProgress`, `StudentLevelProgress`, raw attendance records
+- `StudentCourseProgress` **directly** — the completion facts it needs
+  (`status`, `completedAt`, `finalGrade`, `earnedCredits`) are **already frozen** on
+  the transcript's `courseProgressSnapshot`. Reading them from the snapshot is the
+  rule; reading `StudentCourseProgress` live is forbidden (would diverge from the
+  issued record).
+
+### What the Certificate Engine MUST NEVER compute
+
+final grade · subject status · level status · course completion · attendance
+percentage · eligibility by re-running academic rules.
+
+### Source-of-Truth table (frozen)
+
+Each concern has exactly one owner. Downstream layers copy the owner's output; they
+never recompute it.
+
+| Concern | Source of truth | Certificate Engine role |
+|---|---|---|
+| **Academic decision** (grades, statuses, completion, attendance) | **Transcript** (issued `AcademicTranscriptVersion` snapshot, itself sourced from the Academic Core) | Reads only — never recomputes |
+| **Administrative decision** (finance clearance, manual approval, template selection) | **Certificate** (snapshot of externally-evaluated facts, per Rule C-2) | Owns — evaluates externally, freezes onto the certificate |
+| **Rendering** (layout, language, images, seals) | **CertificateTemplate** | References by `templateId` |
+| **Verification** (public validity state) | **CertificateVerification projection** | Owns the projection; kept in sync by lifecycle commands |
+| **Public API** (external validity lookup) | **CertificateVerification projection** | Serves the minimal public shape only (§22) |
+
+---
+
+## 3. Relationship to Transcript
+
+```
+Organization 1───* AcademicTranscript 1───* AcademicTranscriptVersion (ISSUED)
+                                                     │  (pin: id + checksum)
+                                                     ▼
+                            Certificate *───1 CertificatePolicy
+                                 │  *───1 CertificateTemplate
+                                 ├── 1───1 CertificateVerification
+                                 ├── 1───* CertificateExport
+                                 ├── 1───* CertificateEvent   (append-only)
+                                 └── 0/1─* CertificateRequest (fulfilledCertificateId)
+```
+
+A certificate **references** (never owns):
+- `transcriptVersionId` — exact version (FK-by-id pointer, `NoAction`)
+- `transcriptNumber` — copied string (survives supersession/deletion)
+- `transcriptChecksum` — copied string (tamper/staleness anchor)
+
+A certificate **snapshots** into its own row (`contentSnapshot` JSON):
+- student identity (from `studentSnapshot`)
+- course identity (from `courseSnapshot`)
+- completion status + issue basis (from `courseProgressSnapshot` / level snapshot)
+
+**Staleness contract:** if the linked version becomes `SUPERSEDED`/`REVOKED`, or the
+parent transcript sets `needsRegeneration`, the certificate is marked `STALE`
+(default) or `SUSPENDED`/`REVOKED` per policy — **never silently updated, never
+silently revoked**. A new certificate requires a new issue against the new version.
+
+---
+
+## 4. Models
+
+New models (all in `src/modules/certificates/`, all `@@map` snake_case, all rows
+carry `organizationId`, all relations `onDelete: NoAction, onUpdate: NoAction`):
+
+1. `CertificatePolicy` — eligibility & issuing rules
+2. `CertificateTemplate` — visual/content template
+3. `Certificate` — root aggregate (immutable once issued)
+4. `CertificateEvent` — append-only history
+5. `CertificateExport` — PDF/API/Ministry artifacts
+6. `CertificateVerification` — public verification (1:1 with an issued certificate)
+7. `CertificateRequest` — request workflow (optional but recommended)
+8. `CertificateNumberCounter` — infra; per-(org, year) sequence (mirrors `TranscriptNumberCounter`)
+
+**No `CertificateVersion` model** (Option A — see §8).
+
+---
+
+## 5. CertificatePolicy
+
+**Purpose:** declares eligibility gates and issuing behaviour for a certificate
+type. **It never recalculates academic state** — every gate is a check against a
+fact already present on the transcript snapshot (or a non-academic finance flag).
+
+### Fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `String @id @default(cuid())` | |
+| `organizationId` | `String` | tenant scope |
+| `name` | `String` | PT-PT label at the UI layer |
+| `certificateType` | `String` | one of the `CertificateType` values |
+| `courseId` | `String?` | **POINTER** (not FK); when set, this is a per-course override |
+| `requiresIssuedTranscript` | `Boolean @default(true)` | almost always true |
+| `requiresCourseCompleted` | `Boolean @default(false)` | checks `courseProgressSnapshot.status` |
+| `requiresNoPendingSubjects` | `Boolean @default(false)` | checks required-subject statuses in snapshot |
+| `requiresFinancialClearance` | `Boolean @default(false)` | non-academic finance flag (D-3; result snapshot onto certificate) |
+| `requiresManualApproval` | `Boolean @default(false)` | gate → `PENDING_APPROVAL` |
+| `autoIssueOnTranscriptIssued` | `Boolean @default(false)` | event-driven auto-issue |
+| `validityMonths` | `Int?` | null = no expiry |
+| `status` | `String @default("ACTIVE")` | `ACTIVE` \| `INACTIVE` |
+| `createdAt / updatedAt / deletedAt` | timestamps | soft delete |
+
+### Resolution order (most specific wins)
+
+1. `(organizationId, certificateType, courseId = <course>)` — course override
+2. `(organizationId, certificateType, courseId = null)` — org default
+3. none found → eligibility fails with blocker `NO_POLICY_CONFIGURED`
+
+### Answers to the prompt's questions
+
+- **One default per type?** Yes — exactly one `ACTIVE` policy per
+  `(organizationId, certificateType)` with `courseId = null` (filtered unique).
+- **Override by course?** Yes — optional `(org, type, courseId)` override, at most one
+  active per triple.
+- **Override by organization?** Policy is *already* per-organization; no cross-org
+  inheritance (multi-tenant isolation).
+- **Auto vs manual?** Both. `autoIssueOnTranscriptIssued` + `requiresManualApproval`
+  are independent flags. Auto-issue only proceeds when the policy has zero manual
+  gates; otherwise the transcript-issued event creates a `DRAFT`/`PENDING_APPROVAL`.
+
+### Constraints & indexes
+
+- Filtered unique: org default `(organizationId, certificateType)` where `courseId IS NULL AND status='ACTIVE' AND deletedAt IS NULL`
+- Filtered unique: course override `(organizationId, certificateType, courseId)` where `status='ACTIVE' AND deletedAt IS NULL`
+- `@@index([organizationId, certificateType])`, `@@index([organizationId, courseId])`
+
+**Audit:** policy create/update/delete/status-change → `certificate_policy.changed` audit action (append-only).
+
+---
+
+## 6. CertificateTemplate
+
+**Purpose:** visual/content template used at render/export time. It carries **no
+academic logic** and is checksum-relevant only via `templateId`.
+
+### Fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `String @id @default(cuid())` | |
+| `organizationId` | `String` | |
+| `name` | `String` | |
+| `certificateType` | `String` | template applies to this type |
+| `courseId` | `String?` | **POINTER**; optional per-course template |
+| `language` | `String @default("pt-PT")` | multi-language support |
+| `layoutJson` | `String? @db.NVarChar(Max)` | structured layout (JSON) |
+| `templateHtml` | `String? @db.NVarChar(Max)` | optional raw HTML |
+| `backgroundImageUrl` | `String?` | asset (validated server-side) |
+| `signatureImageUrl` | `String?` | asset |
+| `sealImageUrl` | `String?` | asset |
+| `status` | `String @default("ACTIVE")` | `ACTIVE` \| `INACTIVE` |
+| `createdAt / updatedAt / deletedAt` | timestamps | soft delete |
+
+### Answers
+
+- **Per course template?** Yes — optional `courseId` override; resolution mirrors policy.
+- **Per certificate type?** Yes — required.
+- **Multi-language?** Yes — `language` column; resolve by requested language then org default.
+- **Digital signature?** Not now. `signatureImageUrl` is a *visual* signature. A
+  cryptographic org signature is a **later** phase layered on top of the content
+  checksum (§10, §20). No key material is modelled yet.
+
+### Indexes
+
+- Filtered unique per `(organizationId, certificateType, courseId, language)` where `status='ACTIVE' AND deletedAt IS NULL`
+- `@@index([organizationId, certificateType])`
+
+---
+
+## 7. Certificate (root aggregate)
+
+**Purpose:** the official certificate. **Immutable once ISSUED.**
+
+### Fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `String @id @default(cuid())` | |
+| `organizationId` | `String` | tenant scope |
+| `studentId` | `String` | FK (`NoAction`) |
+| `enrollmentId` | `String?` | FK (`NoAction`) |
+| `courseId` | `String?` | FK (`NoAction`) |
+| `transcriptVersionId` | `String` | **id pointer** to the exact issued version (`NoAction`, no cascade) |
+| `transcriptNumber` | `String` | copied (survives supersession) |
+| `transcriptChecksum` | `String` | copied — staleness/tamper anchor |
+| `policyId` | `String` | **POINTER**; policy applied at issue |
+| `templateId` | `String?` | **POINTER**; template used |
+| `certificateNumber` | `String?` | **null until issue**; filtered-unique per `(org, number)` |
+| `certificateType` | `String` | one of `CertificateType` |
+| `status` | `String @default("DRAFT")` | see state machine below |
+| `contentSnapshot` | `String @db.NVarChar(Max)` | frozen display facts (student/course/completion) as JSON |
+| `issueBasis` | `String? @db.NVarChar(Max)` | human/structured statement of what was certified |
+| `financialClearanceStatus` | `String?` | **snapshot** of the finance read-model result at eval time (e.g. `CLEARED` \| `NOT_CLEARED` \| `NOT_REQUIRED`); frozen, never recomputed (D-3, Rule C-2) |
+| `financialClearanceCheckedAt` | `DateTime?` | when the finance read-model was consulted |
+| `financialClearanceReference` | `String?` | optional finance reference (e.g. clearance/statement id); pointer, not FK |
+| `issuedAt` | `DateTime?` | |
+| `issuedBy` | `String?` | userId |
+| `approvedAt` | `DateTime?` | |
+| `approvedBy` | `String?` | |
+| `expiresAt` | `DateTime?` | issuedAt + `validityMonths` (null = perpetual) |
+| `suspendedAt` | `DateTime?` | |
+| `suspendedBy` | `String?` | |
+| `suspendReason` | `String? @db.NVarChar(Max)` | |
+| `revokedAt` | `DateTime?` | |
+| `revokedBy` | `String?` | |
+| `revokeReason` | `String? @db.NVarChar(Max)` | |
+| `staleDetectedAt` | `DateTime?` | |
+| `staleReason` | `String? @db.NVarChar(Max)` | e.g. `TRANSCRIPT_SUPERSEDED` |
+| `verificationCode` | `String?` | generated at draft; the public lookup key |
+| `verificationUrl` | `String?` | derived public URL |
+| `checksum` | `String?` | content checksum, set at issue (§20) |
+| `createdAt / updatedAt / deletedAt` | timestamps | soft delete; revoke ≠ delete |
+
+> **Note on `verificationCode`:** it is generated at draft time so a code exists for
+> the `CertificateVerification` row created on issue. It becomes *publicly resolvable*
+> only once the certificate is `ISSUED` (a `DRAFT` verification lookup returns
+> `NOT_FOUND`). See §11.
+
+### Status (state machine — frozen)
+
+`DRAFT` · `PENDING_APPROVAL` · `ISSUED` · `SUSPENDED` · `REVOKED` · `STALE`
+
+```
+DRAFT ─────────────► PENDING_APPROVAL ─────► ISSUED
+   │                                            │
+   └──────────────── (issue) ───────────────────┤
+                                                 │
+                        ┌────────────────────────┼───────────────────────┐
+                        ▼                         ▼                        ▼
+                    SUSPENDED ◄──────────────►  STALE                  REVOKED
+                        │        (policy)         │                    (terminal)
+                        └────► ISSUED ◄───────────┘
+                            (restore, if valid)
+```
+
+Transition semantics (frozen):
+
+- **`REVOKED` is terminal** — a revoked certificate never returns. Revocation
+  changes historical truth (the act is annulled) and is permanent.
+- **`STALE` is recoverable** — set only by the transcript-invalidation subscriber
+  (§18). It may return to `ISSUED` only by explicit reissue against a still-valid
+  transcript version, or be escalated to `SUSPENDED`/`REVOKED` per policy.
+- **`SUSPENDED` is recoverable** — may return to `ISSUED` via `RestoreCertificate`
+  when policy allows and the transcript is still valid.
+- **`ISSUED` may become `STALE`** — when its linked transcript version is
+  superseded/revoked (never silently regenerated, never silently re-issued).
+- **Expiry does NOT appear in this machine** — an expired certificate stays `ISSUED`
+  (D-6). Expiry is a *verification projection* concern only (§11, §18-note).
+
+### Rules
+
+- Issued certificate is **immutable** (only status-transition + stale/verification
+  bookkeeping columns may change; content columns are frozen).
+- Revocation never deletes.
+- `certificateNumber` assigned **only on issue** (never on draft, never reassigned).
+- References the **exact** transcript version; never follows transcript updates automatically.
+
+### Relationships
+
+`organization`, `student`, `enrollment?`, `course?`, `verification` (1:1),
+`exports` (1:*), `events` (1:*), `fulfilledRequests` (`CertificateRequest[]`).
+`transcriptVersionId` / `policyId` / `templateId` are **id pointers** — not Prisma
+relations that cascade — so a source deletion or transcript regeneration can never
+`NoAction`-block or mutate an issued certificate.
+
+### Indexes
+
+`@@index([organizationId, studentId])`, `([organizationId, enrollmentId])`,
+`([organizationId, transcriptVersionId])`, `([organizationId, status])`,
+`([organizationId, certificateType])`, `([organizationId, issuedAt])`,
+`([organizationId, expiresAt])` (expiry sweep).
+Filtered unique: `(organizationId, certificateNumber)` where `certificateNumber IS NOT NULL`.
+Filtered unique (duplicate prevention): `(organizationId, transcriptVersionId, certificateType)`
+where `status IN ('DRAFT','PENDING_APPROVAL','ISSUED','SUSPENDED') AND deletedAt IS NULL`.
+
+---
+
+## 8. Certificate Versioning — DECISION
+
+**Chosen: Option A — the certificate is immutable; a correction is a NEW certificate.**
+
+Rationale:
+- The transcript is already versioned; each certificate pins one transcript version.
+- A "corrected" certificate almost always means "the underlying record changed" →
+  that is a *new transcript version* → a *new certificate*, with the prior one
+  `REVOKED`/`STALE`. Superseding chains are represented by the `staleReason` +
+  events, not by an internal version tree.
+- Over-versioning the certificate duplicates the transcript's versioning with no
+  regulatory upside today.
+
+If a regulator later mandates certificate-internal versioning, that is a **new ADR**;
+`CertificateVersion` would then mirror `AcademicTranscriptVersion` exactly.
+
+---
+
+## 9. CertificateEvent (append-only history)
+
+### Events
+
+`certificate.generated` · `certificate.approved` · `certificate.issued` ·
+`certificate.revoked` · `certificate.suspended` · `certificate.restored` ·
+`certificate.marked_stale` · `certificate.exported` · `certificate.verified`
+
+### Fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `String @id @default(cuid())` | |
+| `organizationId` | `String` | |
+| `certificateId` | `String` | FK (`NoAction`) |
+| `eventType` | `String` | one of the above |
+| `previousStatus` | `String?` | |
+| `newStatus` | `String?` | |
+| `actorId` | `String?` | null for system/auto events |
+| `reason` | `String? @db.NVarChar(Max)` | |
+| `metadata` | `String? @db.NVarChar(Max)` | JSON (e.g. `{certificateNumber, checksum, transcriptVersionId}`) |
+| `createdAt` | `DateTime @default(now())` | |
+
+Indexes: `@@index([organizationId, certificateId])`, `@@index([organizationId, createdAt])`.
+Append-only — rows are never updated or deleted.
+
+---
+
+## 10. CertificateExport
+
+**Purpose:** track PDF/API/Ministry artifacts. Mirrors `AcademicTranscriptExport`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `String @id @default(cuid())` | |
+| `organizationId` | `String` | |
+| `certificateId` | `String` | FK (`NoAction`) |
+| `exportType` | `String` | `PDF` \| `API` \| `MINISTRY` |
+| `fileUrl` | `String?` | |
+| `fileChecksum` | `String?` | checksum of the *rendered file*, not the certificate content |
+| `status` | `String @default("PENDING")` | `PENDING` \| `READY` \| `FAILED` |
+| `exportedBy` | `String?` | |
+| `exportedAt` | `DateTime?` | |
+| `createdAt` | `DateTime @default(now())` | |
+
+Rules: exports may be produced only for an `ISSUED` certificate (a `STALE`/`SUSPENDED`
+certificate export is blocked or watermarked per policy). Index:
+`@@index([organizationId, certificateId])`.
+
+---
+
+## 11. CertificateVerification (public)
+
+**Purpose:** public verification surface. **1:1** with a certificate; created at issue.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `String @id @default(cuid())` | |
+| `organizationId` | `String` | |
+| `certificateId` | `String` | FK (`NoAction`), unique |
+| `verificationCode` | `String` | **globally unique** (not per-org — the public URL has no tenant context) |
+| `publicStatus` | `String` | `VALID` \| `REVOKED` \| `SUSPENDED` \| `EXPIRED` \| `NOT_FOUND` |
+| `verifiedAt` | `DateTime?` | first verification |
+| `verificationCount` | `Int @default(0)` | |
+| `lastVerifiedAt` | `DateTime?` | |
+| `createdAt / updatedAt` | timestamps | |
+
+`publicStatus` is a **projection** of the certificate status kept in sync by the
+lifecycle commands (issue → `VALID`; revoke → `REVOKED`; suspend → `SUSPENDED`;
+expiry sweep → `EXPIRED`). A `DRAFT`/`PENDING_APPROVAL` certificate has **no** public
+verification row (public lookup ⇒ `NOT_FOUND`).
+
+### Answers
+
+- **Public endpoint?** Yes — unauthenticated `GET /verify/[code]` (added to
+  `PUBLIC_PATHS` in `src/proxy.ts`). No tenant context in the URL — resolution is by
+  globally-unique code only.
+- **QR code?** Yes — the exported PDF embeds a QR to `verificationUrl`. QR content is
+  the public URL only, never PII.
+- **Rate limiting?** Yes — per-IP + per-code throttle on the public endpoint
+  (constant-time-ish behaviour; unknown codes cost the same as known ones to avoid
+  enumeration signals). `verificationCount`/`lastVerifiedAt` are updated
+  best-effort, out of the hot authorization path.
+- **Privacy-safe response?** Yes — see §22. Minimal fields only.
+
+Index: unique `(verificationCode)`; `@@index([organizationId, certificateId])`.
+
+---
+
+## 12. CertificateRequest (recommended — include)
+
+**Purpose:** student/guardian/admin request workflow feeding generation.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `String @id @default(cuid())` | |
+| `organizationId` | `String` | |
+| `studentId` | `String` | FK (`NoAction`) |
+| `enrollmentId` | `String?` | FK (`NoAction`) |
+| `courseId` | `String?` | FK (`NoAction`) |
+| `transcriptVersionId` | `String?` | **id pointer**; optional (may be resolved at review) |
+| `certificateType` | `String` | |
+| `requestedBy` | `String` | userId |
+| `status` | `String @default("PENDING")` | `PENDING` \| `APPROVED` \| `REJECTED` \| `FULFILLED` \| `CANCELLED` |
+| `reason` | `String? @db.NVarChar(Max)` | |
+| `reviewedBy` | `String?` | |
+| `reviewedAt` | `DateTime?` | |
+| `fulfilledCertificateId` | `String?` | **id pointer** to the resulting certificate |
+| `createdAt / updatedAt` | timestamps | |
+
+Indexes: `@@index([organizationId, studentId])`, `@@index([organizationId, status])`.
+Mirrors `AcademicTranscriptRequest` exactly.
+
+---
+
+## 13. Certificate Types — official vs informal
+
+```
+CertificateType (const object; values never translated):
+  COURSE_COMPLETION · LEVEL_COMPLETION · PARTICIPATION · ATTENDANCE ·
+  ACHIEVEMENT · PROFESSIONAL_TRAINING · DRIVING_SCHOOL · LANGUAGE_COURSE ·
+  IT_COURSE · DESIGN_COURSE
+```
+
+**Recommended classification** (a `classification` attribute in the type registry,
+not a DB enum — drives default policy gates and default numbering prefix):
+
+| Classification | Types | Default gates |
+|---|---|---|
+| **OFFICIAL** (certificate) | `COURSE_COMPLETION`, `LEVEL_COMPLETION`, `PROFESSIONAL_TRAINING`, `DRIVING_SCHOOL`, `LANGUAGE_COURSE`, `IT_COURSE`, `DESIGN_COURSE` | `requiresIssuedTranscript`, `requiresCourseCompleted` (or level-completed), no pending required subjects |
+| **STATEMENT** (informal / declaratório) | `PARTICIPATION`, `ATTENDANCE`, `ACHIEVEMENT` | `requiresIssuedTranscript` only; no completion gate |
+
+This is a **default** encoded in seed policies; an organization may tighten/relax via
+its own `CertificatePolicy` rows. Classification never bypasses the source-of-truth
+rule — a `PARTICIPATION` statement still reads its facts from an issued transcript.
+
+---
+
+## 14. Eligibility flow
+
+`EvaluateCertificateEligibilityCommand` (read-only; **no writes, no academic recompute**)
+
+**Input:** `{ transcriptVersionId, certificateType, courseId? }`
+
+**Flow (frozen — D-3):**
+1. **Load Transcript** — the `AcademicTranscriptVersion` (read-only transcript reader), tenant-scoped.
+2. **Load Policy** — resolve the `CertificatePolicy` (§5 resolution order); also load the parent `AcademicTranscript`.
+3. **Load Finance Read Model** — *optional*; consulted only when the policy sets
+   `requiresFinancialClearance`. This is a **non-academic** read (finance is not
+   Academic Core, Rule C-2). Its result is captured for snapshotting at generation.
+4. **Evaluate** — check each academic gate against **frozen snapshot facts only**,
+   and the administrative gates (finance/manual-approval) against the external results.
+5. **Return** `CertificateEligibilityDto`:
+   `{ eligible, blockers[], warnings[], transcriptVersionId, policyId, financialClearance }`
+   where `financialClearance = { status, checkedAt, reference? } | null`.
+
+No academic recalculation occurs in any step.
+
+**Blockers → the fact that produces them:**
+
+| Blocker | Derived from (frozen fact) |
+|---|---|
+| `NO_POLICY_CONFIGURED` | no active policy resolved |
+| `TRANSCRIPT_NOT_ISSUED` | `version.status !== ISSUED` |
+| `TRANSCRIPT_REVOKED` | `version.status === REVOKED` |
+| `TRANSCRIPT_SUPERSEDED` | `version.status === SUPERSEDED` (or root `needsRegeneration`) |
+| `COURSE_NOT_COMPLETED` | `courseProgressSnapshot.status !== COMPLETED` (policy gate) |
+| `PENDING_REQUIRED_SUBJECTS` | any snapshot subject `isRequired && status ∉ {PASSED, …terminal-pass}` (policy gate) |
+| `FINANCIAL_CLEARANCE_REQUIRED` | finance read-model clearance flag is false (policy gate; **non-academic**, D-3 — snapshot the result into the certificate per Rule C-2) |
+| `MANUAL_APPROVAL_REQUIRED` | policy `requiresManualApproval` (not a hard block — routes to `PENDING_APPROVAL`) |
+| `CERTIFICATE_ALREADY_ISSUED` | an active certificate exists for `(transcriptVersionId, certificateType)` |
+
+`MANUAL_APPROVAL_REQUIRED` is surfaced as a **warning/gate**, not a hard blocker: it
+means "eligible, but must pass approval before issue." All other blockers are hard.
+
+**No academic recalculation. No reads of Grade/Attendance/StudentAssessmentResult/
+StudentSubjectProgress/StudentLevelProgress.**
+
+---
+
+## 15. Generation flow
+
+`GenerateCertificateDraftCommand`
+
+1. Run eligibility (§14).
+2. If hard-blocked → abort with the blockers.
+3. If eligible and policy has no manual gate → create `Certificate (DRAFT)`.
+   If `requiresManualApproval` → create `Certificate (PENDING_APPROVAL)`.
+4. **Snapshot** the display facts from the transcript version into `contentSnapshot`
+   (student identity, course identity, completion status, issue basis) — copied
+   verbatim, never recomputed. Copy `transcriptNumber` + `transcriptChecksum`. Also
+   **snapshot the administrative facts** (Rule C-2): `financialClearanceStatus` /
+   `financialClearanceCheckedAt` / `financialClearanceReference` from the eligibility
+   result. These are frozen and never recomputed later.
+5. Generate `verificationCode` (not yet publicly resolvable).
+6. **Do not** assign `certificateNumber`. **Do not** compute `checksum` yet.
+7. Write `certificate.generated` event + audit (in-tx); publish domain event post-commit.
+
+---
+
+## 16. Issue flow
+
+`IssueCertificateCommand` — mirrors `IssueTranscriptCommand` structure exactly.
+
+Single `db.$transaction`:
+1. Load certificate; require `DRAFT` or `PENDING_APPROVAL` (conditional/guarded).
+2. **Re-check the transcript is still valid** in-tx: reload the version; require
+   `status === ISSUED` **and** `checksum === certificate.transcriptChecksum`. If the
+   transcript was superseded/revoked/regenerated since draft → abort with
+   `TRANSCRIPT_NO_LONGER_VALID` (do not issue a stale certificate).
+3. If `PENDING_APPROVAL`, require it was approved (or approve+issue in one authorized call).
+4. Allocate `certificateNumber` via `allocateCertificateNumber(tx, {org, year})`
+   (row-locked counter; §19) — first assignment only.
+5. Set `status = ISSUED`, `issuedAt`, `issuedBy`, `expiresAt` (if `validityMonths`).
+6. Compute and store `checksum` (§20).
+7. **Create the `CertificateVerification` row** (`publicStatus = VALID`).
+8. Write `certificate.issued` event + audit (in-tx).
+9. Publish domain event **after commit**.
+10. PDF/export is a **separate, later** action (`CertificateExport`), not part of issue.
+
+Concurrency: conditional writes (`WHERE status = 'DRAFT'/'PENDING_APPROVAL'`) with
+`count === 1` guards; the duplicate-prevention filtered index makes a concurrent
+double-issue for the same `(transcriptVersionId, certificateType)` fail at the DB.
+
+---
+
+## 17. Revoke / Suspend / Restore flows
+
+`RevokeCertificateCommand`
+- `ISSUED | SUSPENDED | STALE → REVOKED`; **reason required**; `REVOKED` is terminal.
+- Sets `revokedAt/By/Reason`; sets `CertificateVerification.publicStatus = REVOKED`.
+- Never deletes. Event `certificate.revoked` + audit; publish post-commit.
+
+`SuspendCertificateCommand`
+- `ISSUED → SUSPENDED`; **reason required**; `publicStatus = SUSPENDED`.
+- Restorable if policy allows.
+
+`RestoreCertificateCommand`
+- `SUSPENDED → ISSUED` (only if policy permits and transcript still valid);
+  `publicStatus = VALID`. Event `certificate.restored`.
+
+All follow the transcript command shape: single tx, conditional writes with count
+guards, audit in-tx, domain event post-commit.
+
+---
+
+## 18. Stale handling (event-driven)
+
+The engine **subscribes** to transcript domain events (it never polls or recomputes):
+
+- `transcript.superseded`
+- `transcript.revoked`
+- `transcript.marked_stale` (and root `needsRegeneration = true`)
+
+Handler `HandleTranscriptInvalidatedForCertificates`:
+1. Find `ISSUED`/`SUSPENDED` certificates whose `transcriptVersionId` = the affected version.
+2. For each, apply the policy's `onTranscriptInvalidated` behaviour:
+   - **default → `STALE`** (set `staleReason`, `staleDetectedAt`); certificate stays
+     auditable; `publicStatus` becomes `SUSPENDED` (safe default — "under review").
+   - policy may specify `SUSPEND` or (rarely) `REVOKE` for regulated types.
+3. Emit `certificate.marked_stale` (+ audit). **Never silently update content. Never
+   auto-revoke unless the policy explicitly says so.**
+
+A stale certificate is **not** re-pointed to the new transcript version — reissue is
+an explicit `Generate → Issue` against the new version, producing a *new* certificate.
+
+`onTranscriptInvalidated` policy attribute values: `MARK_STALE` (default) ·
+`SUSPEND` · `REVOKE`.
+
+> **Expiry sweep (D-6) — separate from staleness.** A scheduled job sets
+> `CertificateVerification.publicStatus = EXPIRED` when `expiresAt` has passed. The
+> certificate's own `status` **stays `ISSUED`** — the document was officially issued
+> and that historical truth does not change; only its *operational validity* lapses.
+> Expiry never enters the lifecycle state machine and never touches `Certificate.status`.
+
+---
+
+## 19. Numbering
+
+Format: **`CERT-YYYY-NNNNNN`** (6-digit zero-padded sequence).
+
+- Scoped to `(organizationId, year)` — **one shared sequence across all certificate
+  types** (type is *not* part of the counter key nor the visible number), matching
+  the transcript's per-org uniqueness model.
+- Allocated **only at issue**, inside the issue transaction, via a row-locked
+  `CertificateNumberCounter` (`@@unique([organizationId, year])`, `lastSeq Int`).
+  Gap-tolerant: a revoked/superseded/stale certificate still burns its sequence.
+- `allocateCertificateNumber(tx, {organizationId, year})` mirrors
+  `allocateTranscriptNumber` line-for-line (findUnique → increment, else create seeded at 1).
+- Counter rows are never deleted.
+
+> **Resolved (D-2):** the canonical format is `CERT-YYYY-NNNNNN` with a single
+> per-(org, year) counter — this is frozen. A *visible* type prefix (e.g.
+> `DRV-2026-000001`) is permitted **only** if a regulator requires it, and even then
+> the **counter key stays per-(org, year)** so numbers remain globally unique per
+> org. The counter is never keyed by type.
+
+---
+
+## 20. Checksum
+
+Content-only, via the existing `contentChecksum` (`@/shared/lib/checksum`) — the same
+canonicalization (sorted keys, Decimal/number normalization, Date→ISO, array order
+preserved). A dedicated `certificate-canonical-payload.service.ts` projects the
+checksummed content, mirroring `transcript-canonical-payload.service.ts`.
+
+**Checksummed content includes:**
+`certificateNumber`, `transcriptVersionId`, `transcriptChecksum`, student snapshot,
+course snapshot, `certificateType`, `issuedAt`, `policyId`, `templateId`.
+
+**Excluded from checksum** (envelope/transport): `verificationCount`, `lastVerifiedAt`,
+export rows, `updatedAt`, stale/suspend bookkeeping.
+
+**Decisions (frozen — D-7):**
+- **Generated once, on issue** — the checksum is computed in the `IssueCertificate`
+  transaction and stored on the row. It is **never recomputed** for an existing
+  certificate (an immutable certificate has immutable content; a change means a new
+  certificate).
+- **Content-only checksum now** — deterministic, no secret mixed in.
+- **Digital signature later** — a signed, tamper-evident digest (org key material) is
+  a separate future phase and must **not** reuse the content checksum as if it were a
+  signature (same discipline documented in `@/shared/lib/checksum`).
+
+Including `issuedAt` in the checksum makes each issued certificate's digest unique
+even for identical content — acceptable because the certificate is a point-in-time
+official act (unlike the transcript, whose checksum deliberately excludes timestamps
+to detect content equality across regenerations).
+
+---
+
+## 21. RBAC
+
+New `PERMISSIONS` (added to `@/server/auth/permissions`):
+
+```
+certificates.view · certificates.viewOwn · certificates.generate ·
+certificates.issue · certificates.revoke · certificates.suspend ·
+certificates.export · certificates.verify · certificates.request ·
+certificatePolicies.manage · certificateTemplates.manage
+```
+
+Role mapping (extends the existing `ROLE_PERMISSIONS` arrays; `certificates.verify`
+is effectively public via the unauthenticated endpoint but the permission exists for
+authenticated staff verification tooling):
+
+| Role | Permissions |
+|---|---|
+| `ORG_ADMIN` | all of the above |
+| `SECRETARY` | `view`, `generate`, `export`, `request`, `verify`; **`issue` only if org grants it via a custom role** (mirrors transcript `issue` staying admin-only by default) |
+| `STUDENT` | `viewOwn`, `request` |
+| `GUARDIAN` | linked-student certificates only (`viewOwn`-equivalent, gated by `GuardianStudent` visibility flags), `request` if allowed |
+| `TEACHER` | no issue/revoke/suspend; optional **scoped** `view` only (via `resolveDataAccessScope`) |
+| `SUPER_ADMIN` | tenant-safe admin (all, minus tenant-scoped guards enforced in repos) |
+
+Authorization always via `getUserPermissions` + `createAbility(perms).can(...)` in
+each command's `authorize()`. Never branch on raw role strings.
+
+---
+
+## 22. Security
+
+- `organizationId` comes from `ServiceContext` only — never from client input.
+- Every repository query scoped by `organizationId` (multi-tenant row-level isolation).
+- **Public verification is minimal and privacy-safe** — the response contains only:
+  - `certificateNumber`
+  - `status` (`VALID` \| `REVOKED` \| `SUSPENDED` \| `EXPIRED` \| `NOT_FOUND`)
+  - student **display name** (masked per org privacy setting, e.g. "João M.")
+  - `courseName`
+  - `issuedAt`
+  - `organizationName`
+- **Never expose transcript details, grades, subjects, attendance, IDs, or checksums
+  publicly.**
+- Rate-limit the public verification endpoint (per-IP + per-code); unknown codes
+  return `NOT_FOUND` with the same shape/latency profile to resist enumeration.
+- Revoked/suspended/stale certificates remain fully **auditable** (never deleted).
+- Upload assets (template images, exported PDFs) validated server-side (type/size/
+  ownership) and scoped to the tenant, per the security standard.
+- No stack traces / SQL / secrets in any error returned to a client (public or portal).
+
+---
+
+## 23. Domain Events
+
+New `DomainEventType` entries (dot-namespaced; values never translated) + a new
+`DomainAggregateType.CERTIFICATE`:
+
+```
+certificate.generated · certificate.approved · certificate.issued ·
+certificate.revoked · certificate.suspended · certificate.restored ·
+certificate.marked_stale · certificate.exported · certificate.verified
+```
+
+Published **only after transaction commit** (same as transcript commands).
+
+**Consumers (existing infrastructure):** notifications center, student timeline,
+audit, public verification projection, student portal, guardian portal.
+
+**Subscriptions (this engine as consumer):** `transcript.superseded`,
+`transcript.revoked`, `transcript.marked_stale` (→ stale handling, §18); optionally
+`transcript.issued` (→ auto-issue when `autoIssueOnTranscriptIssued`).
+
+---
+
+## 24. Audit
+
+Append-only `auditService.log(...)` calls **inside** each command's transaction for:
+generated · eligibility-evaluated (optional, low-noise) · approved · issued ·
+revoked · suspended · restored · exported · verified · marked-stale ·
+policy-changed · template-changed.
+
+`CertificateEvent` (§9) is the domain-level append-only history; `auditLog` is the
+cross-cutting audit trail. Both are written, mirroring the transcript engine.
+
+---
+
+## 25. DTOs
+
+Read from the **Certificate** aggregate (its frozen `contentSnapshot`), **never from
+the Transcript directly**:
+
+- `CertificateSummaryDto` — `{ id, certificateNumber, certificateType, status, studentName, courseName, issuedAt, expiresAt }`
+- `CertificateDetailDto` — summary + `{ policyId, templateId, transcriptNumber, verificationUrl, issueBasis, staleReason?, revokeReason?, events[] }` (no transcript internals)
+- `CertificateEligibilityDto` — `{ eligible, blockers[], warnings[], transcriptVersionId, policyId, financialClearance: { status, checkedAt, reference? } | null }`
+- `CertificateVerificationDto` — the minimal public shape (§22)
+- `CertificateExportDto` — `{ id, exportType, status, fileUrl?, exportedAt? }`
+- `CertificateRequestDto` — `{ id, studentId, certificateType, status, requestedBy, reviewedBy?, fulfilledCertificateId? }`
+
+---
+
+## 26. SQL Server constraints (per convention)
+
+- `certificateNumber` **nullable until issue**; **filtered** unique index
+  `(organizationId, certificateNumber) WHERE certificateNumber IS NOT NULL`
+  (nullable + unique on SQL Server requires a *filtered* index, authored in the
+  migration SQL — not a plain `@unique`).
+- `verificationCode` unique (global) — also a filtered unique index if left nullable
+  on the certificate; the `CertificateVerification.verificationCode` is `NOT NULL` unique.
+- **Filtered unique — one active certificate per `(org, transcriptVersionId, certificateType)`**
+  `WHERE status IN ('DRAFT','PENDING_APPROVAL','ISSUED','SUSPENDED') AND deletedAt IS NULL`.
+- Policy/template active-uniqueness via filtered indexes (§5, §6).
+- **No cascade from transcript** — `transcriptVersionId`/`policyId`/`templateId` are
+  id pointers, not cascading relations. Modelled Prisma relations use
+  `onDelete: NoAction, onUpdate: NoAction`.
+- Long text/JSON columns use `@db.NVarChar(Max)`; percentages/grades in snapshots use
+  `@db.Decimal(5,2)` if any are stored (mostly they live inside `contentSnapshot` JSON).
+- Migration authoring reminders (project gotchas): split `ALTER TABLE ADD COLUMN`
+  from same-batch references; use filtered indexes for nullable-unique.
+- Indexes as listed per model (§5–§12), all leading with `organizationId`.
+
+---
+
+## 27. Test plan
+
+Unit/integration (Vitest), mirroring the transcript module's fake-db + fixtures:
+
+1. Eligible issued transcript → generates certificate `DRAFT`.
+2. Transcript not issued → blocker `TRANSCRIPT_NOT_ISSUED`, no draft.
+3. Revoked transcript → blocker `TRANSCRIPT_REVOKED`.
+4. Superseded transcript → blocker `TRANSCRIPT_SUPERSEDED` (+ `needsRegeneration` path).
+5. Pending required subjects with `requiresNoPendingSubjects` → `PENDING_REQUIRED_SUBJECTS`.
+6. `certificateNumber` is null on draft; assigned only on issue; never reassigned.
+7. Issue creates exactly one `CertificateVerification` (`publicStatus = VALID`).
+8. Revoke sets `publicStatus = REVOKED`; certificate not deleted; auditable.
+9. Public verification response hides all sensitive data (no grades/subjects/IDs/checksum).
+10. Engine never recalculates grades (assert no grade computation; snapshot values copied verbatim).
+11. Engine never imports/reads Grade Engine or `StudentAssessmentResult` (architecture-guard test, like `architecture-guards.test.ts`).
+12. Certificate references the transcript **snapshot** (copied `transcriptNumber`/`transcriptChecksum`), not live progress.
+13. Transcript superseded → linked certificate marked `STALE` (default), `publicStatus = SUSPENDED`; not silently updated.
+14. Duplicate prevention: second active certificate for same `(transcriptVersionId, certificateType)` fails.
+15. Cross-tenant access blocked (org B cannot read/issue org A's certificate).
+16. Student sees own certificates only (`viewOwn`).
+17. Guardian sees linked-student certificates only (visibility flags).
+18. Issue permission enforced (`certificates.issue`); SECRETARY without grant → `AuthorizationError`.
+19. Revoke permission enforced (`certificates.revoke`).
+20. Checksum stable: same content → same digest; changing any checksummed field → different digest; excluded fields (verificationCount, updatedAt) → unchanged digest.
+21. Issue re-checks transcript validity in-tx: transcript superseded between draft and issue → `TRANSCRIPT_NO_LONGER_VALID`, no number burned incorrectly.
+22. Numbering: gap-tolerant, per-(org, year), concurrent issues serialize (no duplicate numbers).
+23. Financial clearance (D-3): `requiresFinancialClearance` policy consults the finance read-model; result is **snapshot** onto the certificate (`financialClearanceStatus`/`CheckedAt`) and is **not** re-read/recomputed after issue; finance-not-cleared → `FINANCIAL_CLEARANCE_REQUIRED` blocker.
+24. Expiry (D-6): after `expiresAt`, `CertificateVerification.publicStatus = EXPIRED` while `Certificate.status` **stays `ISSUED`** (no lifecycle transition).
+25. `REVOKED` is terminal (no restore path); `SUSPENDED`/`STALE` are restorable to `ISSUED` only when the transcript is still valid.
+
+---
+
+## 28. Resolved decisions (v1.0 freeze — 0 open)
+
+All previously-open decisions are now **closed and binding**. No architectural
+question remains unresolved.
+
+| # | Decision | Resolution (frozen) |
+|---|---|---|
+| **D-1** | Certificate-internal versioning | **Option A — immutable; a correction is a NEW certificate.** No `CertificateVersion` model. Revisit only under a regulatory mandate (new ADR). |
+| **D-2** | Visible type prefix in number | **`CERT-YYYY-NNNNNN`, single per-(org, year) counter.** A visible type prefix is permitted only under regulatory requirement, and even then the counter key stays per-(org, year). Never key the counter by type. |
+| **D-3** | Financial clearance source | **Consult a finance read-model at eligibility time and SNAPSHOT the result onto the certificate** (`financialClearanceStatus` / `financialClearanceCheckedAt` / `financialClearanceReference`). Finance is **not** an academic fact and must never enter Academic Core / Grade Engine / Transcript Engine. The certificate never recalculates finance later. (Rule C-2.) |
+| **D-4** | `onTranscriptInvalidated` default | **Default `MARK_STALE`** (`Certificate.status = STALE`, `publicStatus = SUSPENDED` — "under review"). Policy may specify `SUSPEND` or `REVOKE` for regulated types. Never silently regenerated, never silently re-issued. |
+| **D-5** | Auto-issue safety | `autoIssueOnTranscriptIssued` proceeds **only** when the policy has no manual/financial gate; otherwise it produces a `PENDING_APPROVAL`. Frozen. |
+| **D-6** | Expiry handling | **Expiry affects VERIFICATION ONLY.** `Certificate.status` stays `ISSUED`; a scheduled sweep sets `CertificateVerification.publicStatus = EXPIRED` when `expiresAt` passes. There is **no `ISSUED → EXPIRED` lifecycle transition** — issuance is historical truth; expiry is operational validity. |
+| **D-7** | Digital signature | **Content-only checksum, generated once on issue, never recomputed.** Cryptographic org signature is a later phase (key management out of scope for v1.0). |
+| **D-8** | `contentSnapshot` shape vs child tables | **One JSON `contentSnapshot` column on `Certificate`** (certificate is a leaf aggregate). Promote to child tables only if reporting later needs relational queries over certificate content (new ADR). |
+
+---
+
+## 29. Recommended implementation phases
+
+> *Design only — the phases below are the proposed build order for a future
+> implementation task, not work to start now.*
+
+- **Phase 0 — Foundation:** ✅ **IMPLEMENTED (2026-07-07)** — see *Phase 0
+  Implementation Notes* below.
+- **Phase 1 — Schema + migration:** 8 models + counter, filtered indexes, `NoAction`
+  relations. Hand-authored SQL for nullable-unique filtered indexes.
+- **Phase 2 — Repositories (tenant-safe) + read-only transcript reader:** all scoped
+  by `organizationId`; architecture-guard test forbidding Grade/Attendance imports.
+- **Phase 3 — Policy + template resolution + canonical payload/checksum service.**
+- **Phase 4 — `EvaluateCertificateEligibilityCommand`** (read-only, snapshot-fact gates).
+- **Phase 5 — `GenerateCertificateDraftCommand`** (snapshot, verification code, no number).
+- **Phase 6 — `IssueCertificateCommand`** (number allocation, checksum, verification
+  row, in-tx transcript re-check).
+- **Phase 7 — Revoke / Suspend / Restore + stale-handling event subscriber.**
+- **Phase 8 — Public verification endpoint** (rate-limited, minimal, added to `PUBLIC_PATHS`).
+- **Phase 9 — Export pipeline (`CertificateExport`, PDF + QR)** and portal/backoffice UI.
+- **Phase 10 — Auto-issue subscriber + `CertificateRequest` workflow.**
+
+---
+
+## 30. Source-of-truth rules (summary — binding)
+
+1. The Certificate Engine **certifies**; it never **calculates**.
+2. It reads **only issued transcript versions** + its own policy/template config
+   (+ a non-academic finance read-model, snapshot per D-3 / Rule C-2).
+3. It **never** reads Grade/Attendance engines, `StudentAssessmentResult`,
+   `StudentSubjectProgress`, `StudentLevelProgress`, raw attendance, or
+   `StudentCourseProgress` live.
+4. It **pins** one transcript version by id + checksum and **never** follows
+   transcript updates automatically.
+5. Numbers/checksums/events/audit follow the frozen Transcript Engine discipline.
+6. Any change to the Academic Core it depends on requires a **new ADR** — this engine
+   does not get to reach past the Core.
+
+---
+
+## 31. Phase 0 — Implementation Notes (2026-07-07)
+
+Phase 0 shipped **foundation contracts only**. No certificate business logic exists.
+
+**Delivered:**
+
+- **Domain events — declared only, not emitted, no handlers.** Added to
+  `src/server/events/event-types.ts`: `certificate.generated` · `.approved` ·
+  `.issued` · `.revoked` · `.suspended` · `.restored` · `.marked_stale` ·
+  `.exported` · `.verified`, plus `DomainAggregateType.CERTIFICATE`.
+- **Permissions — added to `src/server/auth/permissions.ts`** (`PERMISSIONS`):
+  `certificates.{view,viewOwn,generate,issue,revoke,suspend,export,verify,request}`,
+  `certificatePolicies.manage`, `certificateTemplates.manage`. Role mapping
+  (`ROLE_PERMISSIONS`, from which the seed derives): SUPER_ADMIN/ORG_ADMIN get all
+  automatically; SECRETARY gets `view/generate/export/request/verify` (**no**
+  issue/revoke/suspend/manage — those stay admin-only by default, mirroring
+  `transcripts.issue`); STUDENT gets `viewOwn/request`; TEACHER and GUARDIAN get
+  none (guardian linked-student visibility comes later). No existing role weakened.
+- **Constants — `src/modules/certificates/constants.ts`** (const objects, no DB
+  enums): `CertificateType`, `CertificateStatus`, `CertificatePolicyStatus`,
+  `CertificateTemplateStatus`, `CertificateRequestStatus`,
+  `CertificateVerificationPublicStatus`, `CertificateExportType`,
+  `CertificateExportStatus`, `CertificateEligibilityBlocker`,
+  `FinancialClearanceStatus`, `StaleReason` (+ `CERTIFICATE_NUMBER_PREFIX`,
+  `CERTIFICATE_CHECKSUM_VERSION`).
+- **Foundation Zod schemas — `schemas/certificate.schema.ts`**: enum-only validators
+  derived from the constants. **No** command/input schemas yet.
+- **Numbering — `lib/certificate-number.ts`** + the **`CertificateNumberCounter`**
+  Prisma model (the *only* model added in Phase 0): `formatCertificateNumber`
+  (`CERT-YYYY-NNNNNN`) and the transactional `allocateCertificateNumber`. Counter key
+  is `(organizationId, year)` with **no `certificateType`** (D-2) — it does not copy
+  the transcript engine's old type-scoping bug. **No command allocates yet.**
+- **Checksum contract — `lib/certificate-checksum.ts`**: `CertificateChecksumInput`
+  shape + `certificateContentChecksum`, delegating to the shared
+  `@/shared/lib/checksum`. Content-only, no PDF checksum, no digital signature (D-7).
+- **Types — `types/index.ts`**: `FinancialClearanceSnapshot`,
+  `CertificateEligibilityResult` contract shapes.
+- **Module entry — `index.ts`** re-exporting the above.
+
+**Tests (48, all passing):** constants (existence/values/no-duplicates) + events,
+numbering (format/pad/increment/per-org independence/first-alloc conflict/no-type-in-key),
+checksum (stability/field-sensitivity/date-normalization/null-preservation),
+permissions (admin-all/secretary/student/teacher/guardian), and **architecture guards**
+(no Grade Engine, no Attendance Engine, no Transcript write commands, no UI/React;
+and **only `CertificateNumberCounter`** exists among certificate Prisma models).
+
+**Explicitly NOT in Phase 0:** Certificate/Policy/Template/Event/Export/Verification/
+Request models · eligibility · commands · repositories · services · UI · PDF/export ·
+public verification endpoint. No Academic Core changes; no Transcript behaviour changes.
+
+**Validation:** `prisma validate` ✔ · `prisma generate` ✔ · `tsc --noEmit` ✔ (0
+errors) · `vitest run src/modules/certificates` ✔ (48/48) · `eslint` ✔. Full suite:
+2506 pass, 1 pre-existing unrelated failure (teacher-portal deadline ordering).
+
+**Ready for Phase 1: Certificate data model.**

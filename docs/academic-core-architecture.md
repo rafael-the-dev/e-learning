@@ -752,7 +752,7 @@ Level Progression hasn't produced; and so on down to Foundation.
 | Manual Progression Approval | ✔ | ✔ | ✔ | ✔ | request queue + review |
 | Course Completion Engine | ✔ | ✔ | ✔ | ✔ | stable `completedAt`; emits `student_course.completed` |
 | Transcript Engine | ✔ | ✔ | ✔ | ◑ | **Phases 0–5 implemented** and frozen v1.0; lifecycle (generate→issue→supersede→revoke) closed, 198 tests; Phase 6 portal/export pending |
-| Certificate Engine | ✘ | ✘ | ✘ | ✘ | future |
+| Certificate Engine | ✔ | ◑ | ◑ | ✘ | design frozen v1.0 ([ADR-002](./adr/ADR-002-certificate-engine-architecture.md)); **Phase 0 foundation only** — events declared, permissions added, constants/schemas/numbering/checksum contracts + `CertificateNumberCounter` table, 48 tests; no models/eligibility/commands/UI yet |
 | Diploma Engine | ✘ | ✘ | ✘ | ✘ | future |
 
 Legend: ✔ done · ◑ partial · ✘ not started.
