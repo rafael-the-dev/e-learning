@@ -48,6 +48,11 @@ function matchWhere(row: Row, where: WhereInput): boolean {
         if (!list.includes(row[key])) return false;
         continue;
       }
+      if ("notIn" in cond) {
+        const list = cond.notIn as unknown[];
+        if (list.includes(row[key])) return false;
+        continue;
+      }
       if ("not" in cond) {
         const nv = cond.not;
         if (nv === null) {
@@ -121,6 +126,7 @@ function makeModel(name: string): FakeModel & { __store: Row[]; __seed(row: Row)
     const row: Row = { ...data };
     if (row.id == null) row.id = `${name}-${++seq}`;
     if (!("createdAt" in row)) row.createdAt = FIXED_DATE;
+    if (!("updatedAt" in row)) row.updatedAt = FIXED_DATE;
     store.push(row);
     return row;
   };
@@ -144,7 +150,14 @@ function makeModel(name: string): FakeModel & { __store: Row[]; __seed(row: Row)
       let count = 0;
       for (const r of store) {
         if (matchWhere(r, where ?? {})) {
-          Object.assign(r, data);
+          for (const [key, val] of Object.entries(data)) {
+            if (isPlainObject(val) && ("increment" in val || "decrement" in val)) {
+              const current = typeof r[key] === "number" ? (r[key] as number) : 0;
+              r[key] = "increment" in val ? current + (val.increment as number) : current - (val.decrement as number);
+            } else {
+              r[key] = val;
+            }
+          }
           count += 1;
         }
       }
