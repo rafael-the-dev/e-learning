@@ -113,6 +113,24 @@ export const DomainEventType = {
   LEVEL_PROGRESSION_APPROVED: "level_progression.approved",
   LEVEL_PROGRESSION_BLOCKED: "level_progression.blocked",
 
+  // Certificate lifecycle — Certificate Engine (Phase 0 declares these; emission is
+  // wired in a later phase). The Certificate Engine is a downstream consumer of the
+  // Transcript Engine (ADR-002): it certifies frozen transcript facts and never
+  // recalculates academics. A certificate is GENERATED as a draft, optionally
+  // APPROVED, ISSUED (number allocated on issue), and may be SUSPENDED, RESTORED,
+  // REVOKED (terminal), MARKED_STALE (when the linked transcript version is
+  // superseded/revoked), EXPORTED, or VERIFIED. DECLARED ONLY in Phase 0 — not
+  // emitted yet, and no handlers are wired.
+  CERTIFICATE_GENERATED: "certificate.generated",
+  CERTIFICATE_APPROVED: "certificate.approved",
+  CERTIFICATE_ISSUED: "certificate.issued",
+  CERTIFICATE_REVOKED: "certificate.revoked",
+  CERTIFICATE_SUSPENDED: "certificate.suspended",
+  CERTIFICATE_RESTORED: "certificate.restored",
+  CERTIFICATE_MARKED_STALE: "certificate.marked_stale",
+  CERTIFICATE_EXPORTED: "certificate.exported",
+  CERTIFICATE_VERIFIED: "certificate.verified",
+
   // Refunds
   REFUND_REQUESTED: "refund.requested",
   REFUND_APPROVED: "refund.approved",
@@ -139,6 +157,7 @@ export const DomainAggregateType = {
   BILLING_JOB: "BILLING_JOB",
   REFUND: "REFUND",
   TRANSCRIPT: "TRANSCRIPT",
+  CERTIFICATE: "CERTIFICATE",
 } as const;
 
 export type DomainAggregateType = (typeof DomainAggregateType)[keyof typeof DomainAggregateType];

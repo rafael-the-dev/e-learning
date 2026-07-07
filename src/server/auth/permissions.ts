@@ -447,6 +447,22 @@ export const PERMISSIONS = {
   TRANSCRIPTS_EXPORT: "transcripts.export",
   TRANSCRIPTS_REQUEST: "transcripts.request",
 
+  // Certificate Engine (Phase 0) — issuance layer downstream of the Transcript
+  // Engine (ADR-002). Declared here so RBAC/seed derive from PERMISSIONS; no
+  // certificate logic exists yet. ISSUE/REVOKE/SUSPEND stay admin-only by default
+  // (granted to secretaries only via custom roles), mirroring TRANSCRIPTS_ISSUE.
+  CERTIFICATES_VIEW: "certificates.view",
+  CERTIFICATES_VIEW_OWN: "certificates.viewOwn",
+  CERTIFICATES_GENERATE: "certificates.generate",
+  CERTIFICATES_ISSUE: "certificates.issue",
+  CERTIFICATES_REVOKE: "certificates.revoke",
+  CERTIFICATES_SUSPEND: "certificates.suspend",
+  CERTIFICATES_EXPORT: "certificates.export",
+  CERTIFICATES_VERIFY: "certificates.verify",
+  CERTIFICATES_REQUEST: "certificates.request",
+  CERTIFICATE_POLICIES_MANAGE: "certificatePolicies.manage",
+  CERTIFICATE_TEMPLATES_MANAGE: "certificateTemplates.manage",
+
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",
   PREREQUISITES_VIEW: "prerequisites.view",
@@ -541,6 +557,14 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.TRANSCRIPTS_GENERATE,
     PERMISSIONS.TRANSCRIPTS_EXPORT,
     PERMISSIONS.TRANSCRIPTS_REQUEST,
+    // Certificate Engine: secretaries view, generate, export, request and verify.
+    // ISSUE/REVOKE/SUSPEND and policy/template management stay admin-only by
+    // default (granted via custom roles only), mirroring TRANSCRIPTS_ISSUE.
+    PERMISSIONS.CERTIFICATES_VIEW,
+    PERMISSIONS.CERTIFICATES_GENERATE,
+    PERMISSIONS.CERTIFICATES_EXPORT,
+    PERMISSIONS.CERTIFICATES_REQUEST,
+    PERMISSIONS.CERTIFICATES_VERIFY,
     PERMISSIONS.STUDENT_TIMELINE_VIEW,
     PERMISSIONS.STUDENT_TIMELINE_CREATE_NOTE,
     PERMISSIONS.CLASSROOMS_VIEW,
@@ -743,6 +767,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     // Transcript Engine: students view their OWN transcripts and request one.
     PERMISSIONS.TRANSCRIPTS_VIEW_OWN,
     PERMISSIONS.TRANSCRIPTS_REQUEST,
+    // Certificate Engine: students view their OWN certificates and request one.
+    PERMISSIONS.CERTIFICATES_VIEW_OWN,
+    PERMISSIONS.CERTIFICATES_REQUEST,
     PERMISSIONS.CLASSROOM_BOOKINGS_VIEW,
     PERMISSIONS.LESSONS_VIEW,
     PERMISSIONS.LESSON_PROGRESS_VIEW,

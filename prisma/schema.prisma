@@ -128,6 +128,7 @@ model Organization {
   academicTranscriptEvents   AcademicTranscriptEvent[]
   academicTranscriptExports  AcademicTranscriptExport[]
   academicTranscriptRequests AcademicTranscriptRequest[]
+  certificateNumberCounters  CertificateNumberCounter[]
 
   @@map("organizations")
 }
@@ -3116,6 +3117,30 @@ model TranscriptNumberCounter {
 
   @@unique([organizationId, year])
   @@map("transcript_number_counters")
+}
+
+// =============================================================================
+// CERTIFICATE ENGINE — Phase 0: numbering counter (ONLY model created in Phase 0)
+// -----------------------------------------------------------------------------
+// Gap-tolerant sequential number per (organization, year) for issued
+// certificates. Mirrors TranscriptNumberCounter. certificateType is NOT part of
+// the key: the number format `CERT-YYYY-NNNNNN` does not include the type, so a
+// single shared sequence keeps every issued number unique per organization+year.
+// Allocation happens only at ISSUE time (a later phase); Phase 0 ships the table
+// and the pure/allocator helpers, but no command allocates yet.
+// =============================================================================
+model CertificateNumberCounter {
+  id             String   @id @default(cuid())
+  organizationId String
+  year           Int
+  lastSeq        Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([organizationId, year])
+  @@map("certificate_number_counters")
 }
 
 // =============================================================================
