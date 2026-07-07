@@ -42,3 +42,7 @@ export interface CertificateEligibilityResult {
 // `../lib/certificate-checksum` and is re-exported from the module root
 // (`@/modules/certificates`). It is intentionally NOT re-exported here to avoid a
 // duplicate `export *` binding at the module root.
+
+// Transcript source DTOs — the read contract the Certificate Engine consumes in
+// place of the Transcript Engine's persistence model (Phase 2, Part A).
+export * from "./transcript-source";
