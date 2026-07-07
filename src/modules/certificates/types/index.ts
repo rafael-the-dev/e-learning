@@ -46,3 +46,11 @@ export interface CertificateEligibilityResult {
 // Transcript source DTOs — the read contract the Certificate Engine consumes in
 // place of the Transcript Engine's persistence model (Phase 2, Part A).
 export * from "./transcript-source";
+
+// Repository record & filter types — persistence-shaped types the Phase 2B
+// certificate-model repositories return and accept.
+export * from "./repository";
+
+// Eligibility source contract — the input/output of the Phase 3A read-aggregation
+// façade consumed by the future eligibility engine.
+export * from "./eligibility-source";
