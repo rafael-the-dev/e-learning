@@ -24,7 +24,7 @@ describe("formatTranscriptNumber", () => {
 });
 
 describe("allocateTranscriptNumber", () => {
-  const params = { organizationId: "org-1", year: 2026, transcriptType: "FULL" };
+  const params = { organizationId: "org-1", year: 2026 };
 
   // Minimal mocked tx exposing only the transcriptNumberCounter delegate used
   // by the allocator. Cast through unknown to satisfy PrismaClientOrTx.
@@ -70,7 +70,7 @@ describe("allocateTranscriptNumber", () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { organizationId: "org-1", year: 2026, transcriptType: "FULL", lastSeq: 1 },
+        data: { organizationId: "org-1", year: 2026, lastSeq: 1 },
       })
     );
     expect(update).not.toHaveBeenCalled();

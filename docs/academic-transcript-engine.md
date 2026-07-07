@@ -192,7 +192,7 @@ Not persisted (display-only) — **DTOs, never tables**: `GUARDIAN_SUMMARY`,
 | `revokedAt` | DateTime | yes | set on revocation |
 | `revokedBy` | String | yes | userId |
 | `revokeReason` | String (NVarChar Max) | yes | required when revoking |
-| `checksum` | String | yes | sha256 hex of canonical snapshot payload (§26); set on issue |
+| `checksum` | String | yes | sha256 hex of canonical snapshot payload (§26); computed once at generation, frozen (never recomputed) at issue |
 | `studentSnapshot` | String (NVarChar Max) JSON | no | frozen student identity (name, code, dob, idNumber) |
 | `courseSnapshot` | String (NVarChar Max) JSON | yes | frozen course identity (name, code, category) |
 | `createdAt` | DateTime | no | standard |
@@ -374,7 +374,8 @@ Transitions & guards:
 - `∅ → DRAFT` — `GenerateTranscriptSnapshotCommand`. Requires `transcripts.generate`.
 - `DRAFT → DRAFT` — regeneration overwrites/creates a fresh DRAFT (a DRAFT is
   **discardable and re-computable**; not immutable).
-- `DRAFT → ISSUED` — `IssueTranscriptCommand`. Freezes rows, computes `checksum`, sets
+- `DRAFT → ISSUED` — `IssueTranscriptCommand`. Freezes the version (the `checksum` was
+  computed at generation and is carried over UNCHANGED — issue never recomputes it), sets
   `issuedAt`/`issuedBy`, supersedes the prior `ISSUED` version (if any), updates
   `AcademicTranscript.currentVersionId`. Requires `transcripts.issue`.
 - `ISSUED → SUPERSEDED` — side-effect of issuing a newer version. Never a direct action.
@@ -390,6 +391,15 @@ Terminal states: `REVOKED` (cannot leave). `SUPERSEDED` can only go to `REVOKED`
 `SUPERSEDED` is **not** used at root (root stays `ISSUED` while any version is current)
 → `REVOKED` (all versions revoked). Root staleness is orthogonal
 (`needsRegeneration` flag), it does **not** change `status`.
+
+**`REVOKED` is not terminal at the root and is not a delete.** A fully-revoked root
+retains all its (REVOKED) versions and its assigned `transcriptNumber`; it can return to
+`ISSUED` **only** by generating a **new** `DRAFT` version and officially issuing it
+(`DRAFT → ISSUED`). That issue flips `root.status` back to `ISSUED`, points
+`currentVersionId` at the new version, and clears the stale flags; the previously-REVOKED
+versions **remain REVOKED** (none is ever reactivated) and the existing `transcriptNumber`
+is **not** reassigned. `SUPERSEDED` and `REVOKED` versions can never be re-issued directly —
+only a `DRAFT` can be issued (§9).
 
 ### 5.3 `AcademicTranscriptRequest.status`
 
@@ -502,12 +512,18 @@ Follows `BaseCommand.run()` → `validate()` → `authorize()` → `execute()`
 
 - `authorize()`: `PERMISSIONS.TRANSCRIPTS_ISSUE`.
 - `execute()` in a transaction:
-  1. Load target `DRAFT` version; assert it is `DRAFT` and belongs to org (`BusinessRuleError` otherwise).
-  2. Recompute checksum from stored child rows and confirm it matches the stored DRAFT checksum (integrity gate before freezing).
-  3. Set `status = ISSUED`, `issuedAt`, `issuedBy`, freeze checksum.
+  1. Load target `DRAFT` version; assert it is `DRAFT` and belongs to org (`BusinessRuleError` otherwise). Only a `DRAFT` is ever issuable — a `SUPERSEDED` or `REVOKED` version can **never** be re-issued directly (no `SUPERSEDED → ISSUED`, no `REVOKED → ISSUED`); the sole way forward is a new `DRAFT`. When the root is itself `REVOKED`, issuing a new `DRAFT` flips it back to `ISSUED` (see §5.2): `currentVersionId` moves to the new version, stale flags clear, prior versions stay `REVOKED`, and the existing `transcriptNumber` is preserved.
+  2. Assert integrity preconditions: snapshot child rows exist and a `checksum` is present. The checksum was computed once at generation and is **carried over UNCHANGED** — issue does **not** recompute or re-verify it (snapshot child rows are append-only and cannot have changed). See *Future work* below.
+  3. Set `status = ISSUED`, `issuedAt`, `issuedBy` (checksum untouched).
   4. If a prior `ISSUED` version exists: set it `SUPERSEDED`, `supersededAt`.
   5. Update `AcademicTranscript.currentVersionId`, `status = ISSUED`, `issuedAt`/`issuedBy` (first issue), clear `needsRegeneration`/`staleReason`/`staleDetectedAt`.
   6. Audit `transcript.issued` (+ `transcript.superseded` for the prior version); emit both events post-commit.
+
+> **Future work (not implemented).** A defence-in-depth integrity gate that recomputes the
+> checksum from the stored child rows and compares it to the persisted value before freezing
+> could be added (Phase 6+). It is intentionally omitted today because snapshot child rows
+> are append-only (the repositories expose no update/delete), so a stored checksum cannot
+> drift from its rows through the application.
 - **After issue:** the only permitted mutations are `revoke`, `supersede` (by newer
   issue), `export`, and `mark stale` (root flag). No snapshot mutation. Ever.
 
@@ -533,8 +549,22 @@ When academic data changes after issuance:
 - Applies to an `ISSUED` or `SUPERSEDED` version.
 - Sets `revokedAt`, `revokedBy`, `revokeReason`, `status = REVOKED`.
 - **Never deletes** any row. If the revoked version was `current`, clear
-  `AcademicTranscript.currentVersionId` (or point it to the newest non-revoked issued
-  version, per policy — see Open Decisions).
+  `AcademicTranscript.currentVersionId` and flag the root for regeneration (D3, Option B):
+  `needsRegeneration = true`, `staleReason = CURRENT_VERSION_REVOKED`, `staleDetectedAt =
+  now`. It does **not** auto-point at a previous version — **`currentVersionId` stays `null`
+  until a new version is officially issued.**
+- **Root status consistency (D3).** After the version is revoked, count the transcript's
+  remaining non-`REVOKED` versions. If **none** remain, `AcademicTranscript.status` becomes
+  `REVOKED` — regardless of whether the revoked version was the current one. If any active
+  version remains (e.g. a surviving `SUPERSEDED` version), the root `status` is left
+  unchanged. This is the only path that flips the root to `REVOKED`.
+- **Guarded root write (M1).** The all-versions-revoked status flip is an **optimistic
+  conditional write**: it applies only if the root still holds the status observed in-tx
+  (`expectStatus`) — and, for a non-current last-active revoke, only if the observed
+  `currentVersionId` is unchanged. A concurrent transition (e.g. a re-issue) makes the guard
+  match 0 rows, and the whole revoke transaction rolls back with a `BusinessRuleError` — no
+  event, no audit, no `AcademicTranscriptEvent` (the current-version clear was already
+  guarded the same way in Sprint 5A).
 - Audit + `transcript.revoked` event.
 
 ---
@@ -839,10 +869,14 @@ dedicated org-setting flag (second source of truth alongside RBAC).
 
 **D9 — Transcript number → `TRN-{YYYY}-{NNNNNN}` (e.g. `TRN-2026-000001`).**
 Sequence per `(organizationId, year)`, resets annually, **assigned at first issue** (not
-at DRAFT). Unique per org via filtered unique index. Concurrency-safe via a
-`TranscriptNumberCounter(organizationId, year, lastSeq)` row incremented
-(`SET lastSeq = lastSeq + 1`) inside the issue transaction (row-lock serializes). Naive
-`max+1` rejected (race).
+at DRAFT). The sequence is **shared across all transcript types** — the type is *not* part
+of the counter key nor the number, so a number is globally unique per organization (this
+is what the per-org `transcriptNumber` filtered unique index enforces). A per-type counter
+is **wrong**: with a type-less format two types would both start at `TRN-{YYYY}-000001` and
+collide on that unique index (Phase-5 fix C1). Unique per org via filtered unique index.
+Concurrency-safe via a `TranscriptNumberCounter(organizationId, year, lastSeq)` row
+incremented (`SET lastSeq = lastSeq + 1`) inside the issue transaction (row-lock
+serializes). Naive `max+1` rejected (race).
 
 ### 19.1 Schema corrections folded in by the review
 
@@ -890,8 +924,9 @@ at DRAFT). Unique per org via filtered unique index. Concurrency-safe via a
   persists the Phase-3 payload as a DRAFT version + immutable snapshot rows in ONE
   transaction. **Deferred to Phase 5+:** audit + `transcript.generated` event; the
   auto-DRAFT handler on `student_course.completed` (D7).
-- **Phase 5 — Issue / Supersede / Revoke.** `IssueTranscriptCommand`,
-  `RegenerateTranscriptCommand` (+ diff), `RevokeTranscriptCommand`; stale-detection
+- **Phase 5 — Issue / Supersede / Revoke.** ✅ **IMPLEMENTED** (see §20.3):
+  `IssueTranscriptCommand` (supersedes the prior current on issue), `RevokeTranscriptCommand`.
+  **Deferred to a later phase:** `RegenerateTranscriptCommand` (+ diff), the stale-detection
   handler + reconciliation safety-net job (D2/D3).
 - **Phase 6 — Portal + Export.** Read models + management UI under `(org)`; live portal
   DTOs for `/student` and `/guardian` (labelled non-official, visibility-flag gated,
@@ -1017,6 +1052,119 @@ certificate/diploma modules, React/Next, and any `eventPublisher`/`auditService`
 persistence order + immutability #9/#13, root reuse + versions #10–#12, rollback #6/#15,
 guards #19/#20 + import guards). The in-memory fake DB gained real `$transaction` rollback
 semantics for these tests. Full transcript module 129/129; tsc/eslint/prisma validate green.
+
+---
+
+### 20.3 Phase 5 implementation notes (as built)
+
+Two `BaseCommand` lifecycle commands under `src/modules/transcripts/commands/`. Both do
+their reads + writes inside ONE `db.$transaction` (so the status transition is race-safe)
+and publish domain events **only after commit** (`eventPublisher.publish`); nothing is
+published if the transaction rolls back. Neither touches snapshot child rows, recomputes the
+checksum, rebuilds the snapshot, or reads Academic Core.
+
+**`IssueTranscriptCommand`** (`transcripts.issue`) — `DRAFT → ISSUED`:
+1. Load version (must be `DRAFT`, else `BusinessRuleError`); load root; assert snapshot rows
+   exist (`findLevelSnapshotsByVersionId`) and a checksum is present.
+2. Supersede the prior current `ISSUED` version if any (`ISSUED → SUPERSEDED`, `supersededAt`)
+   **before** issuing the new one (the DB enforces one `ISSUED` per transcript) — with its
+   own `transcript.superseded` event + audit + `AcademicTranscriptEvent`.
+3. Allocate the **root** `transcriptNumber` only on first issue (`allocateTranscriptNumber`,
+   `TRN-YYYY-NNNNNN`, single sequence per `(organizationId, year)` shared across all
+   transcript types — D9); never reassigned if already set. Rolls back with the transaction.
+4. `markVersionIssued` (`issuedAt`/`issuedBy`; **checksum unchanged**).
+5. Root metadata: `status = ISSUED`, `currentVersionId = version.id`, `issuedAt`/`issuedBy`
+   set if null, clear `needsRegeneration`/`staleReason`/`staleDetectedAt`.
+6. `transcript.issued` event + audit + `AcademicTranscriptEvent`. Events publish
+   post-commit in order `superseded → issued`.
+
+**`RevokeTranscriptCommand`** (`transcripts.revoke`) — `ISSUED|SUPERSEDED → REVOKED`
+(terminal; `reason` required):
+- `markVersionRevoked` (`revokedAt`/`revokedBy`/`revokeReason`). Never deletes anything.
+- If the revoked version was the root's current version (D3): `currentVersionId = null`,
+  `needsRegeneration = true`, `staleReason = CURRENT_VERSION_REVOKED`, `staleDetectedAt =
+  now`. It does **not** auto-point at a previous version — `currentVersionId` stays `null`
+  until a new version is officially issued.
+- **Root status (D3, Sprint 5B).** After `markVersionRevoked`, the command calls
+  `countActiveVersions` (non-`REVOKED` count, org-scoped, read-only). When it reaches 0 the
+  root `status` is set to `REVOKED` — whether or not the revoked version was current. The
+  current-version clear (above) and the all-revoked status flip are independent effects
+  folded into a single guarded root update; if neither applies (a non-current revoke that is
+  not the last active version), root metadata is left completely unchanged.
+- **Guarded all-revoked flip (M1).** Both root effects are now optimistically guarded: the
+  current-version clear pins `expectCurrentVersionId = version.id` (Sprint 5A) and the
+  all-revoked status flip pins `expectStatus` = the status read in-tx (plus, for a
+  non-current last-active revoke, the observed `currentVersionId`). A lost guard (`count`
+  ≠ 1) throws `BusinessRuleError` and rolls the whole transaction back — no event, no audit,
+  no `AcademicTranscriptEvent`.
+- `transcript.revoked` event + audit + `AcademicTranscriptEvent`.
+
+**Status transitions** are enforced in the commands (never repositories): allowed
+`DRAFT→ISSUED`, `ISSUED→SUPERSEDED`, `ISSUED→REVOKED`, `SUPERSEDED→REVOKED`; everything else
+(re-issue, un-supersede, anything out of `REVOKED`, `DRAFT→REVOKED/SUPERSEDED`) is rejected.
+Errors: `NotFoundError` (missing/cross-tenant version), `BusinessRuleError` (wrong source
+status), `ValidationError` (missing revoke reason), `AuthorizationError`.
+
+**Concurrency — conditional lifecycle writes (Sprint 5A, fixes review H1).** The
+in-transaction read of a version's status is only advisory; the actual transition is an
+**atomic conditional write**. Each `mark*` repository setter includes the EXPECTED source
+status in its `updateMany` WHERE, so the transition applies only while the row is still in
+that state:
+
+- `markVersionIssued` — `WHERE status = 'DRAFT'`
+- `markVersionSuperseded` — `WHERE status = 'ISSUED'`
+- `markVersionRevoked` — `WHERE status IN ('ISSUED','SUPERSEDED')`
+
+The command inspects the returned `count` and throws `BusinessRuleError` when it is not
+exactly 1 ("Transcript version is no longer in DRAFT state." / "Current transcript version
+could not be superseded." / "Transcript version is no longer revocable."). This closes the
+read-check-write window: two concurrent transactions that both read the same `DRAFT`
+version cannot both issue it — the loser's conditional update matches 0 rows and its whole
+transaction rolls back. The root metadata update is likewise guarded (optimistic
+concurrency): the `transcriptNumber` is assigned with `WHERE transcriptNumber IS NULL` and
+the pointer move with `WHERE currentVersionId = <expected>`, so **an issued
+`transcriptNumber` can never be overwritten** and a losing issue aborts with "Transcript
+number was already assigned by another transaction." Because every conditional write, event
+row, audit row, and counter increment live in the same transaction, a lost race leaves **no
+partial state and publishes no domain event**. Duplicate issue/revoke attempts (sequential
+*or* racing) therefore fail safely with no duplicate event/audit/number. The transition
+RULES stay in the commands; repositories only refuse to persist when the precondition no
+longer holds.
+
+**Events (post-commit only)** carry `organizationId`, transcript/version ids, student/
+enrollment/course, `transcriptType`, `transcriptNumber`, previous/new status, `actorId`,
+`reason`, the relevant timestamp, and `checksum`. **Immutability guard:** issue/revoke only
+mutate `AcademicTranscript` + `AcademicTranscriptVersion` metadata, `AcademicTranscriptEvent`,
+`AuditLog`, and `TranscriptNumberCounter` — never a Level/Subject/Assessment/Attendance row.
+
+**Tests:** 63 (34 issue + 26 revoke + 3 numbering) covering issue/supersede/revoke, numbering
+allocate-once + rollback-safety, stale flags, events-after-commit + none-on-rollback, audit
++ transcript-event rows, cross-tenant + permission denials, transition guards, snapshot
+immutability + no-delete, static architecture guards (no Snapshot Builder / PDF / export
+/ UI / academic-engine imports; no snapshot-child writes), the Sprint 5A conditional-write
+concurrency suite (lost-race count-0 → abort + rollback for issue/supersede/revoke, root
+number-guard, no-duplicate on repeated issue/revoke), the Sprint 5B root-status
+consistency suite (single-version revoke → root REVOKED; current revoke leaves root ISSUED
+while a SUPERSEDED survives; last-active revoke → root REVOKED; non-current revoke leaves
+root untouched), and the C1 numbering suite that drives Issue with the **real**
+`allocateTranscriptNumber` (not mocked) and proves two different transcript types issued in
+the same org/year get sequential, non-colliding numbers (`TRN-2026-000001` / `TRN-2026-000002`),
+plus counter rollback-on-failure and number-stability on repeated issue. Also the M1 suite
+(non-current last-active revoke → root REVOKED; lost root-status guard → abort + rollback,
+no event/audit/transcript-event), the L1 suite (fully-REVOKED root re-issued via a new DRAFT
+→ root ISSUED, pointer moves, stale flags clear, old version stays REVOKED, number
+unchanged), and the L2 test (`SUPERSEDED → ISSUED` rejected with `BusinessRuleError`, nothing
+mutated). Repository-level guard + `countActiveVersions` tests remain. Full transcript module
+198/198; tsc 0, eslint clean, prisma validate.
+
+> **Fix C1 (numbering scope).** `TranscriptNumberCounter` was re-keyed from
+> `(organizationId, year, transcriptType)` to `(organizationId, year)` (column dropped,
+> unique constraint re-created — migration `20260707120000_transcript_number_counter_org_year`);
+> `allocateTranscriptNumber` no longer takes/uses `transcriptType`. This aligns the counter
+> with D9 and with the type-less `TRN-YYYY-NNNNNN` format so numbers are globally unique per
+> organization. Previously a per-type counter restarted at 1 for each type, so the second
+> transcript type issued in an org+year collided with the first on the per-org
+> `transcriptNumber` unique index and could never be issued.
 
 ---
 

@@ -37,3 +37,17 @@ export const generateTranscriptSnapshotSchema = z.object({
 });
 
 export type GenerateTranscriptSnapshotSchema = z.infer<typeof generateTranscriptSnapshotSchema>;
+
+// ─── Phase 5: official lifecycle ─────────────────────────────────────────────
+
+export const issueTranscriptSchema = z.object({
+  transcriptVersionId: z.string().min(1, "A versão do histórico é obrigatória"),
+  reason: z.string().max(2000).nullish(),
+});
+export type IssueTranscriptSchema = z.infer<typeof issueTranscriptSchema>;
+
+export const revokeTranscriptSchema = z.object({
+  transcriptVersionId: z.string().min(1, "A versão do histórico é obrigatória"),
+  reason: z.string().min(1, "O motivo da revogação é obrigatório").max(2000),
+});
+export type RevokeTranscriptSchema = z.infer<typeof revokeTranscriptSchema>;

@@ -194,6 +194,35 @@ describe("academic-transcript.repository — writes are tenant-scoped (never by 
     expect(row.currentVersionId).toBe("ver-1");
   });
 
+  it("updateTranscriptMetadata optimistic guards refuse the write when the row moved (Sprint 5A)", async () => {
+    const row = seedTranscript({ status: "DRAFT", transcriptNumber: null, currentVersionId: null });
+    const id = row.id as string;
+
+    // expectTranscriptNumberNull: matches while the number is null.
+    const first = await updateTranscriptMetadata(
+      { id, organizationId: ORG_A, transcriptNumber: "TRN-2026-000001", expectTranscriptNumberNull: true },
+      asClient(db)
+    );
+    expect(first.count).toBe(1);
+    expect(row.transcriptNumber).toBe("TRN-2026-000001");
+
+    // A second guarded assignment must lose the race (number no longer null).
+    const second = await updateTranscriptMetadata(
+      { id, organizationId: ORG_A, transcriptNumber: "TRN-2026-000002", expectTranscriptNumberNull: true },
+      asClient(db)
+    );
+    expect(second.count).toBe(0);
+    expect(row.transcriptNumber).toBe("TRN-2026-000001"); // never overwritten
+
+    // expectCurrentVersionId: matches only the expected pointer value.
+    const wrongExpectation = await updateTranscriptMetadata(
+      { id, organizationId: ORG_A, currentVersionId: "v-2", expectCurrentVersionId: "v-1" },
+      asClient(db)
+    );
+    expect(wrongExpectation.count).toBe(0);
+    expect(row.currentVersionId).toBeNull(); // untouched
+  });
+
   it("markTranscriptStale sets the stale flags, scoped by org", async () => {
     const row = seedTranscript();
     const id = row.id as string;

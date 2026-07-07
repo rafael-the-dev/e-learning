@@ -18,6 +18,20 @@ export const TranscriptType = {
 } as const;
 export type TranscriptType = (typeof TranscriptType)[keyof typeof TranscriptType];
 
+/** Lifecycle status shared by the root `AcademicTranscript` and each
+ *  `AcademicTranscriptVersion`. Transitions are enforced in the Phase-5
+ *  commands, never in repositories. */
+export const TranscriptStatus = {
+  DRAFT: "DRAFT",
+  ISSUED: "ISSUED",
+  SUPERSEDED: "SUPERSEDED",
+  REVOKED: "REVOKED",
+} as const;
+export type TranscriptStatus = (typeof TranscriptStatus)[keyof typeof TranscriptStatus];
+
+/** Root `staleReason` set when the current issued version is revoked (D3). */
+export const STALE_REASON_CURRENT_VERSION_REVOKED = "CURRENT_VERSION_REVOKED";
+
 /** Snapshot detail level — controls whether component-level assessment rows are
  *  included. Not a separate model, just an input flag (§12 of the design). */
 export const TranscriptDetailLevel = {

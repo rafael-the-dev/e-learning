@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { asClient, makeFakeDb, seed, type FakeDb } from "./_fake-db";
 import {
   createVersion,
+  countActiveVersions,
   findCurrentIssuedVersion,
   findLatestVersion,
   findVersionById,
@@ -161,5 +162,70 @@ describe("academic-transcript-version.repository — metadata writes are org-sco
     expect(res.count).toBe(1);
     expect(v.checksum).toBe("cs-1");
     expect(v.status).toBe("DRAFT"); // not passed → untouched
+  });
+});
+
+describe("academic-transcript-version.repository — conditional lifecycle guards (Sprint 5A)", () => {
+  it("markVersionIssued is a no-op (count 0) when the version is not DRAFT", async () => {
+    const v = seedVersion({ status: "ISSUED", issuedAt: new Date("2026-01-01"), issuedBy: "u-0" });
+    const res = await markVersionIssued(
+      { id: v.id as string, organizationId: ORG_A, issuedAt: new Date("2026-02-02"), issuedBy: "u-9" },
+      asClient(db)
+    );
+    expect(res.count).toBe(0);
+    expect(v.issuedBy).toBe("u-0"); // untouched
+  });
+
+  it("markVersionSuperseded is a no-op (count 0) when the version is not ISSUED", async () => {
+    const v = seedVersion({ status: "SUPERSEDED", supersededAt: new Date("2026-01-01") });
+    const res = await markVersionSuperseded(
+      { id: v.id as string, organizationId: ORG_A, supersededAt: new Date("2026-02-02") },
+      asClient(db)
+    );
+    expect(res.count).toBe(0);
+  });
+
+  it("countActiveVersions counts only non-REVOKED versions, scoped by org (Sprint 5B)", async () => {
+    seedVersion({ versionNumber: 1, status: "SUPERSEDED" });
+    seedVersion({ versionNumber: 2, status: "ISSUED" });
+    seedVersion({ versionNumber: 3, status: "REVOKED", revokedBy: "u-0" });
+    seedVersion({ versionNumber: 4, status: "DRAFT" });
+    // another org's version for the same transcriptId must not be counted
+    seedVersion({ versionNumber: 1, status: "ISSUED", organizationId: ORG_B });
+
+    expect(await countActiveVersions({ transcriptId: T1, organizationId: ORG_A }, asClient(db))).toBe(3);
+
+    seed(db, "academicTranscriptVersion", {
+      organizationId: ORG_A, transcriptId: "transcript-other", versionNumber: 1, snapshotDate: new Date(),
+      status: "ISSUED", studentSnapshot: "{}",
+    });
+    // still 3 — the extra active version belongs to a different transcript
+    expect(await countActiveVersions({ transcriptId: T1, organizationId: ORG_A }, asClient(db))).toBe(3);
+  });
+
+  it("countActiveVersions returns 0 once every version is REVOKED (Sprint 5B)", async () => {
+    seedVersion({ versionNumber: 1, status: "REVOKED", revokedBy: "u-0" });
+    seedVersion({ versionNumber: 2, status: "REVOKED", revokedBy: "u-0" });
+    expect(await countActiveVersions({ transcriptId: T1, organizationId: ORG_A }, asClient(db))).toBe(0);
+  });
+
+  it("markVersionRevoked is a no-op (count 0) for a DRAFT and for an already REVOKED version", async () => {
+    const draft = seedVersion({ versionNumber: 1, status: "DRAFT" });
+    const revoked = seedVersion({ versionNumber: 2, status: "REVOKED", revokedBy: "u-0" });
+    const at = new Date("2026-03-03");
+
+    const draftRes = await markVersionRevoked(
+      { id: draft.id as string, organizationId: ORG_A, revokedAt: at, revokedBy: "u-9", revokeReason: "x" },
+      asClient(db)
+    );
+    expect(draftRes.count).toBe(0);
+    expect(draft.status).toBe("DRAFT");
+
+    const revokedRes = await markVersionRevoked(
+      { id: revoked.id as string, organizationId: ORG_A, revokedAt: at, revokedBy: "u-9", revokeReason: "x" },
+      asClient(db)
+    );
+    expect(revokedRes.count).toBe(0);
+    expect(revoked.revokedBy).toBe("u-0"); // untouched
   });
 });

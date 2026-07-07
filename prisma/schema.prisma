@@ -3098,22 +3098,23 @@ model StudentDocument {
 // ACADEMIC TRANSCRIPT ENGINE
 // =============================================================================
 
-// Per-(organization, year, transcriptType) sequence counter for human-facing
-// transcript numbers (TRN-{year}-{seq}). The number is allocated at ISSUE time
-// (per D9); counter rows are never deleted, so revoked/superseded transcripts
+// Per-(organization, year) sequence counter for human-facing transcript numbers
+// (TRN-{year}-{seq}). One shared sequence per organization+year across ALL
+// transcript types (per D9), so a number is globally unique per organization
+// (matching `AcademicTranscript`'s per-org unique index). The number is allocated
+// at ISSUE time; counter rows are never deleted, so revoked/superseded transcripts
 // still consume their sequence value.
 model TranscriptNumberCounter {
   id             String   @id @default(cuid())
   organizationId String
   year           Int
-  transcriptType String
   lastSeq        Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@unique([organizationId, year, transcriptType])
+  @@unique([organizationId, year])
   @@map("transcript_number_counters")
 }
 
