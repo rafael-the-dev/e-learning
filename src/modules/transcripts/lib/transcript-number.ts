@@ -3,8 +3,11 @@ import type { PrismaClientOrTx } from "@/server/db";
 // =============================================================================
 // TRANSCRIPT NUMBER ALLOCATION
 // -----------------------------------------------------------------------------
-// Human-facing, gap-tolerant sequential number per (organization, year,
-// transcriptType). Format: TRN-{year}-{seq zero-padded to 6}.
+// Human-facing, gap-tolerant sequential number per (organization, year).
+// Format: TRN-{year}-{seq zero-padded to 6}. ONE shared sequence per
+// organization+year across all transcript types (per D9) — the type is NOT part
+// of the counter key nor the number, so every issued number is globally unique
+// per organization (matching `AcademicTranscript`'s per-org unique index).
 //
 // Per decision D9, the number is assigned at ISSUE time (never for a DRAFT):
 // only `allocateTranscriptNumber` bumps the counter, and callers must invoke it
@@ -24,7 +27,6 @@ export function formatTranscriptNumber(year: number, seq: number): string {
 export interface AllocateTranscriptNumberParams {
   organizationId: string;
   year: number;
-  transcriptType: string;
 }
 
 /**
@@ -32,20 +34,20 @@ export interface AllocateTranscriptNumberParams {
  * the counter bump and the transcript write commit atomically.
  *
  * Concurrency: the `update` acquires a row lock on the unique
- * (organizationId, year, transcriptType) counter row, which serializes
- * concurrent allocations for that scope within their transactions — no two
- * issues can read the same `lastSeq`. The first allocation for a scope has no
- * row yet, so we fall back to creating it seeded at `lastSeq = 1`.
+ * (organizationId, year) counter row, which serializes concurrent allocations
+ * for that scope within their transactions — no two issues can read the same
+ * `lastSeq`. The first allocation for a scope has no row yet, so we fall back to
+ * creating it seeded at `lastSeq = 1`.
  */
 export async function allocateTranscriptNumber(
   tx: PrismaClientOrTx,
   params: AllocateTranscriptNumberParams
 ): Promise<string> {
-  const { organizationId, year, transcriptType } = params;
+  const { organizationId, year } = params;
 
   const existing = await tx.transcriptNumberCounter.findUnique({
     where: {
-      organizationId_year_transcriptType: { organizationId, year, transcriptType },
+      organizationId_year: { organizationId, year },
     },
     select: { id: true },
   });
@@ -53,7 +55,7 @@ export async function allocateTranscriptNumber(
   if (existing) {
     const updated = await tx.transcriptNumberCounter.update({
       where: {
-        organizationId_year_transcriptType: { organizationId, year, transcriptType },
+        organizationId_year: { organizationId, year },
       },
       data: { lastSeq: { increment: 1 } },
       select: { lastSeq: true },
@@ -62,7 +64,7 @@ export async function allocateTranscriptNumber(
   }
 
   const created = await tx.transcriptNumberCounter.create({
-    data: { organizationId, year, transcriptType, lastSeq: 1 },
+    data: { organizationId, year, lastSeq: 1 },
     select: { lastSeq: true },
   });
   return formatTranscriptNumber(year, created.lastSeq);

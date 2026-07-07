@@ -9,11 +9,14 @@
 // asserting the shape of the query.
 //
 // Supported surface (all the repos use): create / findFirst / findMany / count /
-// updateMany, with equality + `{ in: [...] }` where-matching, top-level scalar
-// orderBy (single or array, asc/desc), and skip/take. `select` is intentionally
-// ignored — stored rows carry every field and the repo mappers pick what they
-// need. Nested-relation `select`/`orderBy` (used only by the source repo) is a
-// no-op here; those tests assert verbatim pass-through and org-scoping, not order.
+// updateMany, plus findUnique / update (compound-unique `where` selectors like
+// `{ organizationId_year: { … } }` are flattened to equality conditions), with
+// equality + `{ in: [...] }` where-matching, `{ increment }`/`{ decrement }` in
+// `data`, top-level scalar orderBy (single or array, asc/desc), and skip/take.
+// `select` is intentionally ignored — stored rows carry every field and the repo
+// mappers pick what they need. Nested-relation `select`/`orderBy` (used only by
+// the source repo) is a no-op here; those tests assert verbatim pass-through and
+// org-scoping, not order.
 // =============================================================================
 
 import type { PrismaClientOrTx } from "@/server/db";
@@ -49,6 +52,17 @@ function matchWhere(row: Row, where: WhereInput): boolean {
         if (!list.includes(row[key])) return false;
         continue;
       }
+      if ("not" in cond) {
+        // `{ not: X }` matches rows where the column !== X (`{ not: null }`
+        // matches non-null rows).
+        const nv = cond.not;
+        if (nv === null) {
+          if (row[key] == null) return false;
+        } else if (row[key] === nv) {
+          return false;
+        }
+        continue;
+      }
       // Nested relation filter — not used by these repos; treat as a no-op.
       continue;
     }
@@ -56,6 +70,36 @@ function matchWhere(row: Row, where: WhereInput): boolean {
     if (row[key] !== cond) return false;
   }
   return true;
+}
+
+/** Flatten a findUnique/update `where` into plain equality conditions. A
+ *  compound-unique selector (e.g. `{ organizationId_year: { organizationId, year } }`)
+ *  is a plain object with no query operator — spread its inner fields. Scalars,
+ *  Dates, and operator objects (`{ in }`, `{ not }`) pass through unchanged. */
+function flattenUniqueWhere(where: WhereInput): WhereInput {
+  const out: WhereInput = {};
+  for (const [key, val] of Object.entries(where ?? {})) {
+    if (isPlainObject(val) && !("in" in val) && !("not" in val)) {
+      for (const [k, v] of Object.entries(val)) out[k] = v;
+    } else {
+      out[key] = val;
+    }
+  }
+  return out;
+}
+
+/** Apply a Prisma `data` payload to a row in place, honouring atomic
+ *  `{ increment }`/`{ decrement }` number operators; everything else is a set. */
+function applyData(row: Row, data: Row): void {
+  for (const [key, val] of Object.entries(data)) {
+    if (isPlainObject(val) && ("increment" in val || "decrement" in val)) {
+      const current = typeof row[key] === "number" ? (row[key] as number) : 0;
+      if ("increment" in val) row[key] = current + (val.increment as number);
+      else row[key] = current - (val.decrement as number);
+    } else {
+      row[key] = val;
+    }
+  }
 }
 
 function scalarOrderSpecs(orderBy: unknown): Array<[string, "asc" | "desc"]> {
@@ -95,6 +139,7 @@ function applyOrder(rows: Row[], orderBy: unknown): Row[] {
 interface FakeModel {
   create(args: { data: Row; select?: unknown }): Promise<Row>;
   findFirst(args: { where?: WhereInput; select?: unknown; orderBy?: unknown }): Promise<Row | null>;
+  findUnique(args: { where: WhereInput; select?: unknown }): Promise<Row | null>;
   findMany(args: {
     where?: WhereInput;
     select?: unknown;
@@ -103,6 +148,7 @@ interface FakeModel {
     take?: number;
   }): Promise<Row[]>;
   count(args: { where?: WhereInput }): Promise<number>;
+  update(args: { where: WhereInput; data: Row; select?: unknown }): Promise<Row>;
   updateMany(args: { where?: WhereInput; data: Row }): Promise<{ count: number }>;
 }
 
@@ -127,6 +173,11 @@ function makeModel(name: string): FakeModel & { __store: Row[]; __seed(row: Row)
       const matched = applyOrder(store.filter((r) => matchWhere(r, where ?? {})), orderBy);
       return matched.length ? { ...matched[0] } : null;
     },
+    findUnique: async ({ where }) => {
+      const flat = flattenUniqueWhere(where);
+      const match = store.find((r) => matchWhere(r, flat));
+      return match ? { ...match } : null;
+    },
     findMany: async ({ where, orderBy, skip, take }) => {
       let matched = applyOrder(store.filter((r) => matchWhere(r, where ?? {})), orderBy);
       if (typeof skip === "number") matched = matched.slice(skip);
@@ -134,11 +185,18 @@ function makeModel(name: string): FakeModel & { __store: Row[]; __seed(row: Row)
       return matched.map((r) => ({ ...r }));
     },
     count: async ({ where }) => store.filter((r) => matchWhere(r, where ?? {})).length,
+    update: async ({ where, data }) => {
+      const flat = flattenUniqueWhere(where);
+      const row = store.find((r) => matchWhere(r, flat));
+      if (!row) throw new Error(`fake ${name}.update: record not found`);
+      applyData(row, data);
+      return { ...row };
+    },
     updateMany: async ({ where, data }) => {
       let count = 0;
       for (const r of store) {
         if (matchWhere(r, where ?? {})) {
-          Object.assign(r, data);
+          applyData(r, data);
           count += 1;
         }
       }

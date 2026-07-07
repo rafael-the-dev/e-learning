@@ -9,8 +9,15 @@ import type { TranscriptVersionRecord } from "@/modules/transcripts/types";
 // metadata columns; they NEVER touch snapshot child rows (levels/subjects/
 // assessments/attendance) — child immutability lives in the snapshot repo,
 // which exposes no update/delete. The lifecycle orchestration (which version to
-// issue/supersede/revoke, checksum verification) belongs to commands later;
-// the mark* helpers here are thin, unconditional column setters.
+// issue/supersede/revoke, checksum verification) belongs to commands.
+//
+// The mark* helpers are conditional column setters: each `updateMany` WHERE
+// includes the EXPECTED source status, so the transition only applies when the
+// row is still in that state. This makes the command's read-check-write atomic
+// at the DB level — a concurrent transition loses the race and the setter
+// returns `{ count: 0 }` (the command interprets that and aborts). Repositories
+// still own no transition RULES; they only refuse to write when the precondition
+// no longer holds (H1, Sprint 5A).
 // =============================================================================
 
 export const versionSelect = {
@@ -113,6 +120,23 @@ export async function findLatestVersion(
   return row ? toVersionRecord(row) : null;
 }
 
+/** Count the versions of a transcript that are NOT revoked (any of DRAFT /
+ *  ISSUED / SUPERSEDED). Read-only, org-scoped, no business logic — the revoke
+ *  command uses it to decide whether the root has become fully revoked. */
+export async function countActiveVersions(
+  params: VersionsByTranscriptParams,
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  return db.academicTranscriptVersion.count({
+    where: {
+      transcriptId: params.transcriptId,
+      organizationId: params.organizationId,
+      status: { not: "REVOKED" },
+    },
+  });
+}
+
 export async function listVersionsByTranscript(
   params: VersionsByTranscriptParams,
   client?: PrismaClientOrTx
@@ -207,15 +231,17 @@ export interface MarkVersionIssuedParams {
   checksum?: string | null;
 }
 
-/** Thin column setter — sets status/issuedAt/issuedBy (+checksum). No guard,
- *  no supersession chain; the command decides *whether* to call this. */
+/** Conditional column setter — promotes a DRAFT version to ISSUED. The WHERE
+ *  requires `status = 'DRAFT'`, so a version already transitioned by a concurrent
+ *  transaction is NOT re-issued and `count` comes back 0. The command decides
+ *  *whether* to call this and how to interpret a losing race. */
 export async function markVersionIssued(
   params: MarkVersionIssuedParams,
   client?: PrismaClientOrTx
 ): Promise<{ count: number }> {
   const db = client ?? (await getDb());
   const res = await db.academicTranscriptVersion.updateMany({
-    where: { id: params.id, organizationId: params.organizationId },
+    where: { id: params.id, organizationId: params.organizationId, status: "DRAFT" },
     data: {
       status: "ISSUED",
       issuedAt: params.issuedAt,
@@ -232,13 +258,16 @@ export interface MarkVersionSupersededParams {
   supersededAt: Date;
 }
 
+/** Conditional column setter — supersedes an ISSUED version. The WHERE requires
+ *  `status = 'ISSUED'`, so only the (at most one) current issued version can be
+ *  superseded; a concurrent supersede/revoke leaves `count` 0. */
 export async function markVersionSuperseded(
   params: MarkVersionSupersededParams,
   client?: PrismaClientOrTx
 ): Promise<{ count: number }> {
   const db = client ?? (await getDb());
   const res = await db.academicTranscriptVersion.updateMany({
-    where: { id: params.id, organizationId: params.organizationId },
+    where: { id: params.id, organizationId: params.organizationId, status: "ISSUED" },
     data: { status: "SUPERSEDED", supersededAt: params.supersededAt },
   });
   return { count: res.count };
@@ -252,13 +281,21 @@ export interface MarkVersionRevokedParams {
   revokeReason?: string | null;
 }
 
+/** Conditional column setter — revokes a version. The WHERE requires the current
+ *  status to be ISSUED or SUPERSEDED (the only revocable states), so a DRAFT or
+ *  an already-REVOKED version yields `count` 0 and a concurrent double-revoke
+ *  cannot apply twice. */
 export async function markVersionRevoked(
   params: MarkVersionRevokedParams,
   client?: PrismaClientOrTx
 ): Promise<{ count: number }> {
   const db = client ?? (await getDb());
   const res = await db.academicTranscriptVersion.updateMany({
-    where: { id: params.id, organizationId: params.organizationId },
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      status: { in: ["ISSUED", "SUPERSEDED"] },
+    },
     data: {
       status: "REVOKED",
       revokedAt: params.revokedAt,

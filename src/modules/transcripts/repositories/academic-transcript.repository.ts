@@ -245,11 +245,21 @@ export interface UpdateTranscriptMetadataParams {
   staleDetectedAt?: Date | null;
   issuedAt?: Date | null;
   issuedBy?: string | null;
+  /** Optimistic-concurrency guards — added to the WHERE, never written. When a
+   *  guard is present the update applies only if the row still matches it, so a
+   *  concurrent transaction that already changed the column loses the race
+   *  (`count` 0). Used by the issue command to ensure a transcript number is
+   *  never overwritten once assigned, and by the revoke command to guard the
+   *  root-status flip (all-versions-revoked) against a concurrent transition. */
+  expectCurrentVersionId?: string | null;
+  expectTranscriptNumberNull?: boolean;
+  expectStatus?: string;
 }
 
 /** Scoped metadata update. Uses `updateMany` so the `organizationId` is part of
- *  the WHERE — an id from another tenant matches 0 rows. Returns the affected
- *  row count (never updates by id alone). */
+ *  the WHERE — an id from another tenant matches 0 rows. Optional `expect*`
+ *  guards add the expected current value to the WHERE (optimistic concurrency).
+ *  Returns the affected row count (never updates by id alone). */
 export async function updateTranscriptMetadata(
   params: UpdateTranscriptMetadataParams,
   client?: PrismaClientOrTx
@@ -265,10 +275,21 @@ export async function updateTranscriptMetadata(
   if ("issuedAt" in params) data.issuedAt = params.issuedAt ?? null;
   if ("issuedBy" in params) data.issuedBy = params.issuedBy ?? null;
 
-  const res = await db.academicTranscript.updateMany({
-    where: { id: params.id, organizationId: params.organizationId },
-    data,
-  });
+  const where: Record<string, unknown> = {
+    id: params.id,
+    organizationId: params.organizationId,
+  };
+  if ("expectCurrentVersionId" in params) {
+    where.currentVersionId = params.expectCurrentVersionId ?? null;
+  }
+  if (params.expectTranscriptNumberNull) {
+    where.transcriptNumber = null;
+  }
+  if ("expectStatus" in params) {
+    where.status = params.expectStatus;
+  }
+
+  const res = await db.academicTranscript.updateMany({ where, data });
   return { count: res.count };
 }
 
