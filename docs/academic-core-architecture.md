@@ -26,10 +26,53 @@ event names are grounded in the current codebase (`prisma/schema.prisma`,
 [auth-context.md](auth-context.md) ·
 [teacher-access-scope.md](teacher-access-scope.md).
 
+**Governance:** [ADR-001 — Academic Core Architecture Freeze v1.0](adr/ADR-001-academic-core-freeze.md).
+
+---
+
+## Academic Core Status
+
+> **Freeze banner — authoritative.** This section records the architectural freeze of the
+> Academic Core. The decision itself is recorded in
+> [ADR-001 — Academic Core Architecture Freeze v1.0](adr/ADR-001-academic-core-freeze.md).
+> Where older sections below still label the Transcript Engine as *designed* or *future*,
+> the **Core Engine Status Matrix** here and ADR-001 are authoritative and supersede them.
+
+- **Architecture Freeze:** YES
+- **Freeze Version:** v1.0
+- **Freeze Date:** 2026-07-07
+- **Freeze Scope:**
+  - Grade Engine
+  - Recovery Lifecycle
+  - Attendance Engine
+  - Subject Eligibility Engine
+  - Level Progression Engine
+  - Course Completion Engine
+  - Academic Transcript Engine
+- **Rule:** All future academic features must **consume** the Academic Core. No future
+  module may bypass or reimplement academic logic (grades, attendance interpretation,
+  progression, completion, or official snapshots).
+
+### Core Engine Status Matrix
+
+| Engine | Architecture | Implementation | Tests | Production readiness | Official source document |
+|---|---|---|---|---|---|
+| Grade Engine | Frozen v1.0 | Implemented | Passing | Ready | [grade-engine.md](grade-engine.md) |
+| Recovery Lifecycle | Frozen v1.0 | Implemented (within the grade cascade) | Passing | Ready | [grade-engine.md](grade-engine.md) |
+| Attendance Engine | Frozen v1.0 | Implemented (phases 1–5) | Passing | Ready — academic impact gated off by default | [attendance-engine.md](attendance-engine.md) |
+| Subject Eligibility Engine | Frozen v1.0 | Implemented | Passing | Ready | [academic-progression.md](academic-progression.md) |
+| Level Progression Engine | Frozen v1.0 | Implemented | Passing | Ready | [academic-progression.md](academic-progression.md) |
+| Course Completion Engine | Frozen v1.0 | Implemented | Passing | Ready | [course-completion-engine.md](course-completion-engine.md) |
+| Academic Transcript Engine | Frozen v1.0 | Implemented (Phases 0–5) | Passing (198 module tests) | Ready — Phase 5 lifecycle closed; Phase 6 portal/export pending | [academic-transcript-engine.md](academic-transcript-engine.md) |
+
+Legend: *Frozen v1.0* = architecture is closed and governed by ADR-001; any structural
+change requires a new ADR (§21).
+
 ---
 
 ## Table of Contents
 
+0. Academic Core Status (freeze banner + Core Engine Status Matrix)
 1. Purpose
 2. Academic Core vision
 3. Domain principles
@@ -198,7 +241,7 @@ flowchart TD
   SLP --> CCE["Course Completion Engine"]
   CCE --> SCP["StudentCourseProgress<br/><i>course status + completedAt — SoT</i>"]
 
-  SCP --> TRANS["Transcript Engine (designed)<br/>snapshots, never recomputes"]
+  SCP --> TRANS["Transcript Engine (frozen v1.0)<br/>snapshots, never recomputes"]
   TRANS --> CERT["Certificate Engine (future)"]
   CERT --> DIP["Diploma Engine (future)"]
 
@@ -300,14 +343,14 @@ one-screen summary.
 - **Consumers:** (future) Transcript/Certificate, alumni/CRM/analytics, portals.
 - **Status:** Implemented. See [course-completion-engine.md](course-completion-engine.md).
 
-### 5.10 Transcript Engine — designed, not implemented
+### 5.10 Transcript Engine — implemented (Phases 0–5), frozen v1.0
 - **Purpose:** produce official, versioned, immutable academic records by **snapshotting** the Core's outputs. Never recalculates.
 - **Input:** `StudentCourseProgress`, `StudentLevelProgress`, `StudentSubjectProgress`, `StudentAssessmentResult`, attendance summaries, plus frozen identity (names/codes).
 - **Output:** `AcademicTranscript` + immutable `AcademicTranscriptVersion` snapshots (checksum-sealed).
 - **Source of truth:** the **official document** (a frozen snapshot), never the live state.
-- **Side effects:** transcript lifecycle events + staleness marking.
+- **Side effects:** transcript lifecycle events (`transcript.generated` / `.issued` / `.superseded` / `.revoked`) + staleness marking.
 - **Consumers:** portals, exports, (future) Certificate Engine.
-- **Status:** **Designed only.** See [academic-transcript-engine.md](academic-transcript-engine.md). Governing rule: *append-only certification engine; never mutates issued history*.
+- **Status:** **Implemented through Phase 5** (generate → issue → supersede → revoke lifecycle; 198 module tests passing) and **frozen v1.0**; Phase 6 (portal + export) pending. See [academic-transcript-engine.md](academic-transcript-engine.md). Governing rule: *append-only certification engine; never mutates issued history*.
 
 ### 5.11 Certificate Engine — future
 - **Purpose:** issue certificates that **consume** an issued Transcript + certificate eligibility (course completed, required subjects passed, attendance satisfied where enforced, optional financial clearance).
@@ -343,8 +386,8 @@ they do not recompute.
 | Progression (promotion) | `StudentLevelProgress` + `Enrollment.currentLevelId` | Level Progression Engine | portals | ✔ |
 | Course status / completion | `StudentCourseProgress.status`/`completedAt` | Course Completion Engine | Transcript, Certificate, analytics | ✔ |
 | Certificate eligibility | *(decision)* future CertificateEligibilityEngine | future | Certificate Engine | ✔ |
-| Transcript (official record) | `AcademicTranscriptVersion` (future) | Transcript Engine | Certificate, exports, portals | ✔ (snapshot, never recomputed) |
-| Transcript snapshot rows | `AcademicTranscript*` child rows (future) | Transcript Engine | exports | ✔ |
+| Transcript (official record) | `AcademicTranscriptVersion` (v1.0) | Transcript Engine | Certificate, exports, portals | ✔ (snapshot, never recomputed) |
+| Transcript snapshot rows | `AcademicTranscript*` child rows (v1.0) | Transcript Engine | exports | ✔ |
 | Certificate snapshot | future | Certificate Engine | Diploma, exports | ✔ |
 
 ---
@@ -479,7 +522,7 @@ recompute.
 | `StudentSubjectAttendanceSummary` | attendance records + policy | Attendance Engine | `recalculate-attendance-summaries` command | ✔ |
 | `StudentPeriodAttendanceSummary` | attendance records + calendar | Attendance Engine | `recalculate-period-attendance-summaries` command | ✔ |
 | (gated) attendance academic impact | summaries + thresholds | Attendance Engine | `recalculate-attendance-academic-impact` command | ✔ |
-| Transcript snapshot (future) | all progress + attendance + identity | Transcript Engine | regenerate as a **new version** (old stays) | **✘ once ISSUED** (immutable) |
+| Transcript snapshot (v1.0) | all progress + attendance + identity | Transcript Engine | regenerate as a **new version** (old stays) | **✘ once ISSUED** (immutable) |
 | Certificate snapshot (future) | transcript | Certificate Engine | new version | ✘ once issued |
 
 > **Nuance:** the *progress tables* (`StudentSubjectProgress`, `StudentLevelProgress`,
@@ -500,7 +543,7 @@ are by id only.
 | **Enrollment** | the operational spine of one student's journey through one course; `StudentCourseProgress` is 1:1 (`enrollmentId @unique`); level/subject progress hang off it | one course progress per enrollment; `currentLevelId` only advances via Level Progression |
 | **Assessment** | an assessment event, its components' results, its publication | results belong to exactly one assessment; publication is a state transition |
 | **AttendanceSession** | the session and its attendance records | records belong to one session; summaries are derived, never edited directly |
-| **AcademicTranscript** (future) | its versions + snapshot child rows | one current ISSUED version; issued versions immutable; version numbers unique per root |
+| **AcademicTranscript** (v1.0) | its versions + snapshot child rows | one current ISSUED version; issued versions immutable; version numbers unique per root |
 | **Certificate** (future) | its issued document | consumes a transcript version; immutable once issued |
 
 **Why these boundaries:** they keep each transaction small and its invariants local. The
@@ -525,7 +568,7 @@ flowchart TD
   ELIG["Subject Eligibility / Prerequisites"]
   LVL["Level Progression (+ Manual Approval)"]
   CCE["Course Completion Engine"]
-  TRANS["Transcript Engine (designed)"]
+  TRANS["Transcript Engine (frozen v1.0)"]
   CERT["Certificate Engine (future)"]
   DIP["Diploma Engine (future)"]
   CONS["Consumers: Portals · Student/Teacher 360 · Timeline · Notifications · Reports"]
@@ -708,7 +751,7 @@ Level Progression hasn't produced; and so on down to Foundation.
 | Level Progression Engine | ✔ | ✔ | ✔ | ✔ | `level_progression.*` audit-only |
 | Manual Progression Approval | ✔ | ✔ | ✔ | ✔ | request queue + review |
 | Course Completion Engine | ✔ | ✔ | ✔ | ✔ | stable `completedAt`; emits `student_course.completed` |
-| Transcript Engine | ✔ | ✘ | ✘ | ✘ | **designed only** — decisions closed, awaiting Phase 0 |
+| Transcript Engine | ✔ | ✔ | ✔ | ◑ | **Phases 0–5 implemented** and frozen v1.0; lifecycle (generate→issue→supersede→revoke) closed, 198 tests; Phase 6 portal/export pending |
 | Certificate Engine | ✘ | ✘ | ✘ | ✘ | future |
 | Diploma Engine | ✘ | ✘ | ✘ | ✘ | future |
 
@@ -757,6 +800,8 @@ design defect, not a feature.
 15. **Dependencies flow downward only. No circular dependencies** between engines.
 16. **Every query is tenant-scoped by `organizationId` from the auth context.** Never from input.
 17. **Every mutation authorizes on the server.** Default deny.
+18. **Any structural change to the Academic Core requires a new ADR.** The architecture is frozen at v1.0 (see [ADR-001](adr/ADR-001-academic-core-freeze.md)); structural changes are governed decisions, not silent edits.
+19. **Consumers such as Certificate Engine, Diploma Engine, Student Portal, Guardian Portal, PDF Export and Public Verification must consume official Core outputs, not raw calculation inputs.** They read approved read models and official snapshots (issued Transcript versions), never live grade/attendance/progress state, and never recompute academic logic.
 
 ---
 
