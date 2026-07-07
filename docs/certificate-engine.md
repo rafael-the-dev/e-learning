@@ -94,9 +94,9 @@ Engine is a certification layer *on top of* that record.
 
 | Source | How | Why allowed |
 |---|---|---|
-| `AcademicTranscriptVersion` (ISSUED) | via a **read-only** transcript reader in `src/modules/transcripts/repositories` | The official record |
-| `AcademicTranscript` (root) | same | Number, status, currentVersion pointer |
-| Transcript snapshot child rows / `courseProgressSnapshot` | same | Frozen `status`, `completedAt`, subject statuses, grades |
+| `AcademicTranscriptVersion` (ISSUED) | ONLY via `CertificateTranscriptSourceRepository` (the ACL, §3a) | The official record |
+| `AcademicTranscript` (root) | same ACL | Number, status, currentVersion pointer |
+| Transcript snapshot child rows / `courseProgressSnapshot` | same ACL | Frozen `status`, `completedAt`, subject statuses, grades |
 | `Organization` settings | org repo | Certificate display / clearance policy toggles |
 | `CertificatePolicy`, `CertificateTemplate` | own repos | Its own configuration |
 | Finance clearance **read model** (a boolean/flag) | finance read repo | Finance is **not** Academic Core; clearance is not an academic recalculation (Resolved Decision D-3; snapshot into Certificate per Rule C-2) |
@@ -160,6 +160,44 @@ aggregate — D-8):
 parent transcript sets `needsRegeneration`, the certificate is marked `STALE`
 (default) or `SUSPENDED`/`REVOKED` per policy — **never silently updated, never
 silently revoked**. A new certificate requires a new issue against the new version.
+
+### 3a. `CertificateTranscriptSourceRepository` — the Anti-Corruption Layer (ACL)
+
+**Role.** The single, read-only adapter through which the Certificate Engine reads
+the Transcript Engine. It is the **only** component in the engine permitted to name
+a transcript table; **everything else consumes the DTOs it returns**
+(`TranscriptCertificateSourceDto`, `TranscriptVersionSummaryDto`). This is a
+textbook Anti-Corruption Layer: the certificate side never learns the transcript's
+internal schema.
+
+- **Location:** `src/modules/certificates/repositories/certificate-transcript-source.repository.ts`.
+- **May read (read-only):** `AcademicTranscript`, `AcademicTranscriptVersion`,
+  `AcademicTranscriptLevel`, `AcademicTranscriptSubject`,
+  `AcademicTranscriptAssessment`, `AcademicTranscriptAttendance`.
+- **Returns:** Certificate DTOs only — never a Prisma entity, relation, or column
+  layout. It copies snapshot facts **verbatim**; it never calculates a grade,
+  attendance, completion, or eligibility, and derives no field.
+- **Tenant-scoped:** every query carries `organizationId` and uses
+  `findFirst`/`findMany`/`count` — never `findUnique(id)`.
+- **Transaction-aware:** every method takes an optional `client?: PrismaClientOrTx`
+  and falls back to `getDb()` (same convention as the transcript repositories).
+- **Returns `null`, never throws** for a missing/again-scoped transcript. Commands
+  decide what a `null` means — the ACL raises no domain/validation/authorization error.
+
+**Methods (Part A):**
+
+| Method | Returns | Rule |
+|---|---|---|
+| `findIssuedTranscriptVersionForCertificate({ organizationId, transcriptVersionId })` | `TranscriptCertificateSourceDto \| null` | ISSUED versions only; complete snapshot; deterministic child ordering; single aggregate load, no N+1 |
+| `findTranscriptVersionSummary({ organizationId, transcriptVersionId })` | `TranscriptVersionSummaryDto \| null` | Lightweight metadata (`transcriptVersionId`, `transcriptNumber`, `checksum`, `status`, `issuedAt`, `studentId`, `courseId`); any status |
+| `existsIssuedTranscript({ organizationId, transcriptVersionId })` | `boolean` | Tenant-scoped `count > 0` for an ISSUED version |
+
+**Storage detail the ACL absorbs:** the transcript version persists course identity
+and course progress together in one JSON column (`{ course, courseProgress }`). The
+ACL parses that envelope and surfaces the two halves as the separate
+`courseSnapshot` / `courseProgressSnapshot` DTO fields — copied verbatim. **If the
+Transcript Engine's schema ever changes, only this repository changes**; the DTO
+contract keeps every downstream certificate component untouched.
 
 ---
 
@@ -939,6 +977,10 @@ question remains unresolved.
   Implementation Notes* below.
 - **Phase 2 — Repositories (tenant-safe) + read-only transcript reader:** all scoped
   by `organizationId`; architecture-guard test forbidding Grade/Attendance imports.
+  - **Part A — `CertificateTranscriptSourceRepository` (the ACL):** ✅ **IMPLEMENTED
+    (2026-07-07)** — see §3a and *Phase 2, Part A Implementation Notes* below.
+  - **Part B — certificate-model repositories** (policy/template/certificate/event/
+    export/verification/request): not started.
 - **Phase 3 — Policy + template resolution + canonical payload/checksum service.**
 - **Phase 4 — `EvaluateCertificateEligibilityCommand`** (read-only, snapshot-fact gates).
 - **Phase 5 — `GenerateCertificateDraftCommand`** (snapshot, verification code, no number).
@@ -1107,3 +1149,43 @@ errors) · `vitest run src/modules/certificates` ✔ (50/50) · `eslint` ✔. Mi
 authored but **not applied** to a live DB in this phase.
 
 **Ready for Phase 2: Repositories (tenant-safe) + read-only transcript reader.**
+
+---
+
+## 33. Phase 2, Part A — Implementation Notes (2026-07-07)
+
+Part A shipped **only** the Transcript read adapter — the Anti-Corruption Layer
+(§3a). No certificate-model repositories, eligibility, commands, events, audit,
+lifecycle, PDF, verification, or UI. **No schema changes, no migrations.**
+
+**Delivered:**
+
+- **`CertificateTranscriptSourceRepository`** —
+  `src/modules/certificates/repositories/certificate-transcript-source.repository.ts`.
+  The only certificate-side component that names a transcript table. Read-only,
+  tenant-scoped (`findFirst`/`findMany`/`count`, never `findUnique(id)`),
+  transaction-aware (`client ?? getDb()`). Three methods:
+  `findIssuedTranscriptVersionForCertificate` (ISSUED-only complete snapshot),
+  `findTranscriptVersionSummary` (lightweight metadata, any status),
+  `existsIssuedTranscript` (boolean). Returns `null` for missing/out-of-tenant/
+  non-ISSUED — never throws; commands decide.
+- **DTOs** — `src/modules/certificates/types/transcript-source.ts`:
+  `TranscriptCertificateSourceDto` (+ level/subject/assessment/attendance row DTOs)
+  and `TranscriptVersionSummaryDto`. These are the ONLY transcript-derived shapes the
+  rest of the engine sees; no Prisma entity/relation/column leaks. Snapshot facts are
+  copied verbatim (Decimal→number only); course identity/progress are un-nested from
+  the transcript's `{ course, courseProgress }` JSON envelope into the separate
+  `courseSnapshot` / `courseProgressSnapshot` fields.
+- **Behavioural tests** (22) — status gating (ISSUED found; DRAFT/REVOKED/SUPERSEDED
+  ignored), wrong-org → null, immutable snapshot, copy-exact checksum/number/student/
+  course/progress, deterministic child ordering, transaction-client acceptance,
+  DTO-only shape, and no persistence-key leakage; plus summary/exists behaviour.
+- **Architecture guards** (10) — no Grade Engine, no Attendance Engine, no course
+  completion, no certificate model repositories/commands, no event publisher, no
+  audit service, no React/UI; and read-only enforcement (no `create/update/delete/
+  upsert` calls, no raw SQL, no write-shaped export name).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates`
+✔ (82/82; +32) · `eslint` ✔. No schema/migration change.
+
+**Ready for Phase 2, Part B: certificate-model repositories (tenant-safe).**
