@@ -6,11 +6,14 @@
 //   • schemas       — enum-only Zod validators derived from the constants
 //   • lib           — certificate numbering + content-checksum helpers
 //   • types         — eligibility/finance/checksum contracts + transcript source DTOs
-//   • repositories  — Phase 2, Part A: the Transcript source adapter (ACL) only
+//   • repositories  — Phase 2: the Transcript source ACL (A) + the seven
+//                     certificate-model repositories (B), persistence-only
+//   • services      — Phase 3A: the eligibility read-aggregation façade
+//                     (`CertificateEligibilitySource`) — loads facts, decides nothing
 //
-// Still absent: certificate-model repositories, services, commands, eligibility,
-// UI, PDF/export, public verification. The engine NEVER reads Grade/Attendance raw
-// tables and NEVER recalculates academic facts; all transcript reads go through
+// Still absent: the eligibility engine itself, commands, lifecycle, UI, PDF/export,
+// public verification. The engine NEVER reads Grade/Attendance raw tables and NEVER
+// recalculates academic facts; all transcript reads go through
 // `CertificateTranscriptSourceRepository`, the single Anti-Corruption Layer.
 // =============================================================================
 
@@ -20,3 +23,4 @@ export * from "./lib/certificate-number";
 export * from "./lib/certificate-checksum";
 export * from "./types";
 export * from "./repositories";
+export * from "./services";

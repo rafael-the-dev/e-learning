@@ -636,6 +636,38 @@ means "eligible, but must pass approval before issue." All other blockers are ha
 **No academic recalculation. No reads of Grade/Attendance/StudentAssessmentResult/
 StudentSubjectProgress/StudentLevelProgress.**
 
+### 14a. `CertificateEligibilitySource` — read-aggregation façade (ACL)
+
+**Role.** The **single dependency** of the eligibility engine. It aggregates every
+fact eligibility needs into one `CertificateEligibilityFacts` DTO so the engine
+knows nothing about Prisma, the transcript schema, repositories, finance, or
+org-settings storage. It is an Anti-Corruption + read-aggregation layer that
+**loads facts and decides nothing** — there is no `eligible` flag anywhere in its
+output.
+
+- **Location:** `src/modules/certificates/services/certificate-eligibility-source.service.ts`
+  (`loadCertificateEligibilityFacts`).
+- **May read (only):** the Certificate **Policy** repository and the Transcript
+  **source ACL** (§3a). No other repository, no transcript table, no other engine.
+- **Input** `CertificateEligibilitySourceInput`: `organizationId`, `studentId`,
+  `certificateType`, optional `transcriptVersionId` / `courseId` / `policyId`.
+- **Output** `CertificateEligibilityFacts`: `{ policy, transcript, financialClearance,
+  administrative, metadata }`.
+  - `policy` — copied policy gates/settings, or `null`. **Read-only resolution:**
+    explicit `policyId` loads exactly that policy (no fallback); otherwise a
+    `courseId` override, then the org-default active policy. It never evaluates a policy.
+  - `transcript` — the ACL DTO (§3a) for the pinned version, or `null` when absent/
+    not found.
+  - `financialClearance` — **`null` in Phase 3A** (finance integration is a future
+    phase; the `FinancialClearanceFacts` interface is fixed now so the façade
+    contract will not change).
+  - `administrative` — **`{}` in Phase 3A** (future: disciplinary actions, org
+    restrictions, external registries).
+  - `metadata` — `{ loadedAt, sourceVersion }`.
+- **Never throws for "not found"** (missing policy/transcript → `null`); repository
+  errors propagate unchanged. **Never writes.** Accepts an optional
+  `client?: PrismaClientOrTx`, passed straight through to the repositories.
+
 ---
 
 ## 15. Generation flow
@@ -980,8 +1012,13 @@ question remains unresolved.
   - **Part A — `CertificateTranscriptSourceRepository` (the ACL):** ✅ **IMPLEMENTED
     (2026-07-07)** — see §3a and *Phase 2, Part A Implementation Notes* below.
   - **Part B — certificate-model repositories** (policy/template/certificate/event/
-    export/verification/request): not started.
-- **Phase 3 — Policy + template resolution + canonical payload/checksum service.**
+    export/verification/request): ✅ **IMPLEMENTED (2026-07-07)** — see *Phase 2, Part B
+    Implementation Notes* below.
+- **Phase 3 — Eligibility source + policy/template resolution + canonical payload/checksum service.**
+  - **Part A — `CertificateEligibilitySource` (read-aggregation façade):** ✅ **IMPLEMENTED
+    (2026-07-07)** — see §14a and *Phase 3, Part A Implementation Notes* below.
+  - **Part B — `CertificateEligibilityEngine`** (evaluates the façade's facts against
+    the policy gates): not started.
 - **Phase 4 — `EvaluateCertificateEligibilityCommand`** (read-only, snapshot-fact gates).
 - **Phase 5 — `GenerateCertificateDraftCommand`** (snapshot, verification code, no number).
 - **Phase 6 — `IssueCertificateCommand`** (number allocation, checksum, verification
@@ -1189,3 +1226,102 @@ lifecycle, PDF, verification, or UI. **No schema changes, no migrations.**
 ✔ (82/82; +32) · `eslint` ✔. No schema/migration change.
 
 **Ready for Phase 2, Part B: certificate-model repositories (tenant-safe).**
+
+---
+
+## 34. Phase 2, Part B — Implementation Notes (2026-07-07)
+
+Part B shipped the **certificate-model repositories** — tenant-safe, **persistence
+only**. No eligibility, commands, services, lifecycle transitions, generation,
+issue/revoke/suspend/restore, event publishing, audit, checksum, number allocation,
+PDF/export rendering, public-verification logic, UI/API, or Transcript reads (those
+stay behind the ACL, §3a). **No schema changes, no migrations.**
+
+**Repositories added** (`src/modules/certificates/repositories/`):
+`certificate-policy`, `certificate-template`, `certificate`, `certificate-event`,
+`certificate-export`, `certificate-verification`, `certificate-request`. Records &
+filter types live in `src/modules/certificates/types/repository.ts` (no Prisma type
+leaks; JSON snapshot columns carried as raw `string`).
+
+**Global rules honoured:**
+
+- **Tenant-scoped everywhere.** Every query includes `organizationId` and uses
+  `findFirst` / `findMany` / `count` / `updateMany` — never `findUnique(id)`,
+  `update(id)`, or `delete(id)`. Writes match `{ id, organizationId }`, so a foreign
+  tenant's row yields `count: 0`.
+- **No hard delete.** Soft delete only sets `deletedAt` (guarded to still-live rows;
+  `softDeleteDraftCertificate` additionally restricts to `status = DRAFT`). Lists hide
+  soft-deleted rows unless `includeDeleted` is set.
+- **Transaction-aware.** Every method takes an optional `client?: PrismaClientOrTx`
+  and falls back to `getDb()`.
+- **Persistence only.** No lifecycle-transition *decisions*: `findDefaultActivePolicy`
+  / `findCourseOverridePolicy` (and the template equivalents) are simple lookups
+  mirroring the filtered-unique indexes; `findExistingActiveCertificate` matches the
+  `certificates_active_per_transcript_type_key` predicate (active excludes REVOKED and
+  STALE among live rows); `markCertificateStale` is a focused column setter with no
+  source-status rule; update methods set only the columns they are given (a command
+  supplies any number/checksum/status value — the repository computes none).
+- **Event repository is append-only** — CREATE + READ only, no update/delete.
+- **`findCertificateDetailById`** assembles the certificate + its append-only events,
+  exports, and 1:1 verification via separate org-scoped reads (no Prisma relation
+  include), keeping every child tenant-scoped.
+
+**Tests (43 new)** across the seven repositories: tenant isolation (find/update/list
+scoped), policy/template default + course-override lookups and soft-delete hiding,
+certificate create / find-by-number / find-by-verification-code /
+findExistingActiveCertificate (REVOKED+STALE excluded) / DRAFT-only soft delete /
+detail assembly, append-only events ordered by `createdAt`, export status updates,
+verification create/find/increment/status, and request status/soft-delete/list. Plus
+**architecture guards** (tests 37–42): model repos read no Transcript table and never
+import the ACL; no repository imports Grade/Attendance/course-completion/event-publisher/
+audit/checksum/number-allocator/React; the ACL stays read-only; no repository hard-deletes;
+the event repository is append-only; and no repository defines an
+`issue/revoke/suspend/restore/approveCertificate` lifecycle helper.
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `prisma validate` ✔ ·
+`vitest run src/modules/certificates` ✔ (125/125; +43) · `eslint` ✔. No schema or
+migration change.
+
+**Ready for Phase 3: Certificate Eligibility Engine.**
+
+---
+
+## 35. Phase 3, Part A — Implementation Notes (2026-07-07)
+
+Part A shipped `CertificateEligibilitySource` — the **read-aggregation façade** (§14a)
+the future `CertificateEligibilityEngine` will depend on. It is a loader, not a
+decider: NO eligibility rules, NO grade/attendance/completion calculation, NO policy
+evaluation, NO generation/issue/lifecycle, NO events, NO audit, NO checksum, NO
+numbering, NO template selection, NO PDF/verification/UI. **No writes. No schema
+changes, no migrations.**
+
+**Delivered:**
+
+- **Service** — `src/modules/certificates/services/certificate-eligibility-source.service.ts`
+  (`loadCertificateEligibilityFacts` + `CERTIFICATE_ELIGIBILITY_SOURCE_VERSION`) and
+  `services/index.ts`. Depends on **exactly two** sources: the Certificate Policy
+  repository and the Transcript source ACL. Loads are sequential (transaction-safe);
+  the returned fact set is frozen.
+- **Contract** — `src/modules/certificates/types/eligibility-source.ts`:
+  `CertificateEligibilitySourceInput`, `CertificateEligibilityFacts`,
+  `CertificatePolicyFacts`, `FinancialClearanceFacts` (interface fixed now; value
+  `null` this phase), `AdministrativeFacts` (`{}` this phase), and the metadata type.
+  No `eligible` flag, no derived field.
+- **Read-only policy resolution:** explicit `policyId` → that policy only (no
+  fallback); else `courseId` override → org-default active. Missing policy/transcript
+  → `null` (never throws); repository errors propagate.
+
+**Tests (29):** 15 behavioural — explicit/override/default policy resolution,
+policy-null when nothing resolves or an explicit id misses, transcript loaded through
+the ACL, transcript-null when absent/not-found, transaction-client pass-through,
+finance `null` + administrative `{}`, metadata populated, no derived verdict, frozen
+DTO, policy facts expose only declared fields, and repository failures propagate —
+plus 14 **architecture guards** (tests 16–23): imports only the Policy repo + the
+Transcript ACL; no Grade/Attendance/course-completion/transcript-Prisma/event-publisher/
+audit/command/PDF/storage/React imports; no DB writes/raw SQL; no write-shaped or
+lifecycle export.
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates`
+✔ (154/154; +29) · `eslint` ✔. No schema or migration change.
+
+**Ready for Phase 3B: `CertificateEligibilityEngine` (evaluates these facts).**
