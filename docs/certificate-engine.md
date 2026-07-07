@@ -150,10 +150,11 @@ A certificate **references** (never owns):
 - `transcriptNumber` — copied string (survives supersession/deletion)
 - `transcriptChecksum` — copied string (tamper/staleness anchor)
 
-A certificate **snapshots** into its own row (`contentSnapshot` JSON):
-- student identity (from `studentSnapshot`)
-- course identity (from `courseSnapshot`)
-- completion status + issue basis (from `courseProgressSnapshot` / level snapshot)
+A certificate **snapshots** into its own row (three JSON columns on the leaf
+aggregate — D-8):
+- `studentSnapshot` — student identity
+- `courseSnapshot?` — course identity (null for course-less types)
+- `issueBasisSnapshot` — completion status + issue basis (from `courseProgressSnapshot` / level snapshot)
 
 **Staleness contract:** if the linked version becomes `SUPERSEDED`/`REVOKED`, or the
 parent transcript sets `needsRegeneration`, the certificate is marked `STALE`
@@ -194,15 +195,16 @@ fact already present on the transcript snapshot (or a non-academic finance flag)
 | `organizationId` | `String` | tenant scope |
 | `name` | `String` | PT-PT label at the UI layer |
 | `certificateType` | `String` | one of the `CertificateType` values |
-| `courseId` | `String?` | **POINTER** (not FK); when set, this is a per-course override |
+| `courseId` | `String?` | `NoAction` FK relation to `Course` (config integrity); when set, this is a per-course override |
 | `requiresIssuedTranscript` | `Boolean @default(true)` | almost always true |
-| `requiresCourseCompleted` | `Boolean @default(false)` | checks `courseProgressSnapshot.status` |
-| `requiresNoPendingSubjects` | `Boolean @default(false)` | checks required-subject statuses in snapshot |
+| `requiresCourseCompleted` | `Boolean @default(true)` | checks `courseProgressSnapshot.status` (deny-by-default) |
+| `requiresNoPendingSubjects` | `Boolean @default(true)` | checks required-subject statuses in snapshot (deny-by-default) |
 | `requiresFinancialClearance` | `Boolean @default(false)` | non-academic finance flag (D-3; result snapshot onto certificate) |
 | `requiresManualApproval` | `Boolean @default(false)` | gate → `PENDING_APPROVAL` |
 | `autoIssueOnTranscriptIssued` | `Boolean @default(false)` | event-driven auto-issue |
+| `staleAction` | `String @default("MARK_STALE")` | `MARK_STALE` \| `SUSPEND` \| `REVOKE` (behaviour when the linked transcript is invalidated) |
 | `validityMonths` | `Int?` | null = no expiry |
-| `status` | `String @default("ACTIVE")` | `ACTIVE` \| `INACTIVE` |
+| `status` | `String @default("ACTIVE")` | `ACTIVE` \| `INACTIVE` \| `ARCHIVED` |
 | `createdAt / updatedAt / deletedAt` | timestamps | soft delete |
 
 ### Resolution order (most specific wins)
@@ -225,9 +227,9 @@ fact already present on the transcript snapshot (or a non-academic finance flag)
 
 ### Constraints & indexes
 
-- Filtered unique: org default `(organizationId, certificateType)` where `courseId IS NULL AND status='ACTIVE' AND deletedAt IS NULL`
-- Filtered unique: course override `(organizationId, certificateType, courseId)` where `status='ACTIVE' AND deletedAt IS NULL`
-- `@@index([organizationId, certificateType])`, `@@index([organizationId, courseId])`
+- Filtered unique (`certificate_policies_org_default_active_key`): org default `(organizationId, certificateType)` where `courseId IS NULL AND status='ACTIVE' AND deletedAt IS NULL`
+- Filtered unique (`certificate_policies_org_course_override_active_key`): course override `(organizationId, certificateType, courseId)` where `courseId IS NOT NULL AND status='ACTIVE' AND deletedAt IS NULL`
+- `@@index([organizationId, certificateType])`, `@@index([organizationId, courseId])`, `@@index([organizationId, status])`, `@@index([organizationId, deletedAt])`
 
 **Audit:** policy create/update/delete/status-change → `certificate_policy.changed` audit action (append-only).
 
@@ -246,14 +248,14 @@ academic logic** and is checksum-relevant only via `templateId`.
 | `organizationId` | `String` | |
 | `name` | `String` | |
 | `certificateType` | `String` | template applies to this type |
-| `courseId` | `String?` | **POINTER**; optional per-course template |
+| `courseId` | `String?` | `NoAction` FK relation to `Course`; optional per-course template |
 | `language` | `String @default("pt-PT")` | multi-language support |
-| `layoutJson` | `String? @db.NVarChar(Max)` | structured layout (JSON) |
+| `layoutJson` | `String @db.NVarChar(Max)` | structured layout (JSON); required |
 | `templateHtml` | `String? @db.NVarChar(Max)` | optional raw HTML |
 | `backgroundImageUrl` | `String?` | asset (validated server-side) |
 | `signatureImageUrl` | `String?` | asset |
 | `sealImageUrl` | `String?` | asset |
-| `status` | `String @default("ACTIVE")` | `ACTIVE` \| `INACTIVE` |
+| `status` | `String @default("ACTIVE")` | `ACTIVE` \| `INACTIVE` \| `ARCHIVED` |
 | `createdAt / updatedAt / deletedAt` | timestamps | soft delete |
 
 ### Answers
@@ -267,8 +269,9 @@ academic logic** and is checksum-relevant only via `templateId`.
 
 ### Indexes
 
-- Filtered unique per `(organizationId, certificateType, courseId, language)` where `status='ACTIVE' AND deletedAt IS NULL`
-- `@@index([organizationId, certificateType])`
+- Filtered unique (`certificate_templates_org_default_active_key`): org default `(organizationId, certificateType, language)` where `courseId IS NULL AND status='ACTIVE' AND deletedAt IS NULL`
+- Filtered unique (`certificate_templates_org_course_override_active_key`): course override `(organizationId, certificateType, courseId, language)` where `courseId IS NOT NULL AND status='ACTIVE' AND deletedAt IS NULL`
+- `@@index([organizationId, certificateType])`, `@@index([organizationId, courseId])`, `@@index([organizationId, status])`, `@@index([organizationId, deletedAt])`
 
 ---
 
@@ -288,20 +291,19 @@ academic logic** and is checksum-relevant only via `templateId`.
 | `transcriptVersionId` | `String` | **id pointer** to the exact issued version (`NoAction`, no cascade) |
 | `transcriptNumber` | `String` | copied (survives supersession) |
 | `transcriptChecksum` | `String` | copied — staleness/tamper anchor |
-| `policyId` | `String` | **POINTER**; policy applied at issue |
-| `templateId` | `String?` | **POINTER**; template used |
+| `certificatePolicyId` | `String?` | **POINTER**; policy applied at issue |
+| `certificateTemplateId` | `String?` | **POINTER**; template used |
 | `certificateNumber` | `String?` | **null until issue**; filtered-unique per `(org, number)` |
 | `certificateType` | `String` | one of `CertificateType` |
 | `status` | `String @default("DRAFT")` | see state machine below |
-| `contentSnapshot` | `String @db.NVarChar(Max)` | frozen display facts (student/course/completion) as JSON |
-| `issueBasis` | `String? @db.NVarChar(Max)` | human/structured statement of what was certified |
-| `financialClearanceStatus` | `String?` | **snapshot** of the finance read-model result at eval time (e.g. `CLEARED` \| `NOT_CLEARED` \| `NOT_REQUIRED`); frozen, never recomputed (D-3, Rule C-2) |
+| `studentSnapshot` | `String @db.NVarChar(Max)` | frozen student-identity display facts as JSON |
+| `courseSnapshot` | `String? @db.NVarChar(Max)` | frozen course-identity display facts as JSON (null for course-less types) |
+| `issueBasisSnapshot` | `String @db.NVarChar(Max)` | frozen structured statement of what was certified (completion status / issue basis) as JSON |
+| `financialClearanceStatus` | `String @default("NOT_REQUIRED")` | **snapshot** of the finance read-model result at eval time (`NOT_REQUIRED` \| `CLEARED` \| `NOT_CLEARED` \| `UNKNOWN`); frozen, never recomputed (D-3, Rule C-2) |
 | `financialClearanceCheckedAt` | `DateTime?` | when the finance read-model was consulted |
 | `financialClearanceReference` | `String?` | optional finance reference (e.g. clearance/statement id); pointer, not FK |
 | `issuedAt` | `DateTime?` | |
 | `issuedBy` | `String?` | userId |
-| `approvedAt` | `DateTime?` | |
-| `approvedBy` | `String?` | |
 | `expiresAt` | `DateTime?` | issuedAt + `validityMonths` (null = perpetual) |
 | `suspendedAt` | `DateTime?` | |
 | `suspendedBy` | `String?` | |
@@ -310,11 +312,23 @@ academic logic** and is checksum-relevant only via `templateId`.
 | `revokedBy` | `String?` | |
 | `revokeReason` | `String? @db.NVarChar(Max)` | |
 | `staleDetectedAt` | `DateTime?` | |
-| `staleReason` | `String? @db.NVarChar(Max)` | e.g. `TRANSCRIPT_SUPERSEDED` |
+| `staleReason` | `String?` | one of `StaleReason` (e.g. `TRANSCRIPT_SUPERSEDED`) |
 | `verificationCode` | `String?` | generated at draft; the public lookup key |
 | `verificationUrl` | `String?` | derived public URL |
 | `checksum` | `String?` | content checksum, set at issue (§20) |
 | `createdAt / updatedAt / deletedAt` | timestamps | soft delete; revoke ≠ delete |
+
+> **No `approvedAt`/`approvedBy` columns.** Approval provenance is **not** stored as
+> columns on `Certificate`; it is recorded append-only via `CertificateEvent`
+> (`certificate.approved`, with `actorId` + `createdAt`). A later
+> `PENDING_APPROVAL → ISSUED` command will require an approval event (or a policy
+> rule that waives manual approval) before issuing — the timestamp/actor of approval
+> is read from that event, never from the certificate row.
+
+> **Note on the frozen snapshot columns.** Display facts are frozen into **three**
+> JSON columns — `studentSnapshot`, `courseSnapshot?`, `issueBasisSnapshot` — copied
+> verbatim from the issued transcript version at generation and never recomputed
+> (D-8). They remain columns on the leaf `Certificate` aggregate (no child tables).
 
 > **Note on `verificationCode`:** it is generated at draft time so a code exists for
 > the `CertificateVerification` row created on issue. It becomes *publicly resolvable*
@@ -362,21 +376,27 @@ Transition semantics (frozen):
 
 ### Relationships
 
-`organization`, `student`, `enrollment?`, `course?`, `verification` (1:1),
-`exports` (1:*), `events` (1:*), `fulfilledRequests` (`CertificateRequest[]`).
-`transcriptVersionId` / `policyId` / `templateId` are **id pointers** — not Prisma
-relations that cascade — so a source deletion or transcript regeneration can never
-`NoAction`-block or mutate an issued certificate.
+`organization`, `student`, `enrollment?`, `course?`, `policy?`
+(`certificatePolicyId`), `template?` (`certificateTemplateId`), `verification` (1:1),
+`exports` (1:*), `events` (1:*), `requestsFulfilled` (`CertificateRequest[]`).
+`transcriptVersionId` is a pure **id pointer** — **no** Prisma relation, no cascade —
+so a transcript supersession/regeneration/deletion can never `NoAction`-block or
+mutate an issued certificate. `certificatePolicyId` / `certificateTemplateId` are
+modelled as `NoAction` relations (config referential integrity, distinct from the
+transcript snapshot pointer).
 
 ### Indexes
 
 `@@index([organizationId, studentId])`, `([organizationId, enrollmentId])`,
-`([organizationId, transcriptVersionId])`, `([organizationId, status])`,
-`([organizationId, certificateType])`, `([organizationId, issuedAt])`,
-`([organizationId, expiresAt])` (expiry sweep).
-Filtered unique: `(organizationId, certificateNumber)` where `certificateNumber IS NOT NULL`.
+`([organizationId, courseId])`, `([organizationId, transcriptVersionId])`,
+`([organizationId, certificateType])`, `([organizationId, status])`,
+`([organizationId, issuedAt])`, `([organizationId, expiresAt])` (expiry sweep),
+`([organizationId, deletedAt])`.
+Filtered unique: `(organizationId, certificateNumber)` where `certificateNumber IS NOT NULL AND deletedAt IS NULL`.
+Filtered unique: `(verificationCode)` (global) where `verificationCode IS NOT NULL AND deletedAt IS NULL`.
 Filtered unique (duplicate prevention): `(organizationId, transcriptVersionId, certificateType)`
-where `status IN ('DRAFT','PENDING_APPROVAL','ISSUED','SUSPENDED') AND deletedAt IS NULL`.
+where the certificate is active — logically `status IN ('DRAFT','PENDING_APPROVAL','ISSUED','SUSPENDED') AND deletedAt IS NULL`,
+authored in SQL Server as `status <> 'REVOKED' AND status <> 'STALE' AND deletedAt IS NULL` (filtered predicates cannot use `IN`), so a reissue after revoke/stale is allowed.
 
 ---
 
@@ -459,10 +479,10 @@ certificate export is blocked or watermarked per policy). Index:
 | `organizationId` | `String` | |
 | `certificateId` | `String` | FK (`NoAction`), unique |
 | `verificationCode` | `String` | **globally unique** (not per-org — the public URL has no tenant context) |
-| `publicStatus` | `String` | `VALID` \| `REVOKED` \| `SUSPENDED` \| `EXPIRED` \| `NOT_FOUND` |
-| `verifiedAt` | `DateTime?` | first verification |
+| `publicStatus` | `String @default("VALID")` | `VALID` \| `REVOKED` \| `SUSPENDED` \| `EXPIRED` \| `NOT_FOUND` |
 | `verificationCount` | `Int @default(0)` | |
 | `lastVerifiedAt` | `DateTime?` | |
+| `expiresAt` | `DateTime?` | operational-validity end (copied from the certificate); drives the expiry sweep (D-6) |
 | `createdAt / updatedAt` | timestamps | |
 
 `publicStatus` is a **projection** of the certificate status kept in sync by the
@@ -483,7 +503,9 @@ verification row (public lookup ⇒ `NOT_FOUND`).
   best-effort, out of the hot authorization path.
 - **Privacy-safe response?** Yes — see §22. Minimal fields only.
 
-Index: unique `(verificationCode)`; `@@index([organizationId, certificateId])`.
+Indexes: unique `(certificateId)`, unique `(verificationCode)`;
+`@@index([organizationId, publicStatus])`, `@@index([organizationId, lastVerifiedAt])`,
+`@@index([organizationId, expiresAt])` (expiry sweep).
 
 ---
 
@@ -586,9 +608,10 @@ StudentSubjectProgress/StudentLevelProgress.**
 2. If hard-blocked → abort with the blockers.
 3. If eligible and policy has no manual gate → create `Certificate (DRAFT)`.
    If `requiresManualApproval` → create `Certificate (PENDING_APPROVAL)`.
-4. **Snapshot** the display facts from the transcript version into `contentSnapshot`
-   (student identity, course identity, completion status, issue basis) — copied
-   verbatim, never recomputed. Copy `transcriptNumber` + `transcriptChecksum`. Also
+4. **Snapshot** the display facts from the transcript version into the three snapshot
+   columns — `studentSnapshot` (student identity), `courseSnapshot` (course identity),
+   `issueBasisSnapshot` (completion status + issue basis) — copied verbatim, never
+   recomputed. Copy `transcriptNumber` + `transcriptChecksum`. Also
    **snapshot the administrative facts** (Rule C-2): `financialClearanceStatus` /
    `financialClearanceCheckedAt` / `financialClearanceReference` from the eligibility
    result. These are frozen and never recomputed later.
@@ -705,8 +728,9 @@ preserved). A dedicated `certificate-canonical-payload.service.ts` projects the
 checksummed content, mirroring `transcript-canonical-payload.service.ts`.
 
 **Checksummed content includes:**
-`certificateNumber`, `transcriptVersionId`, `transcriptChecksum`, student snapshot,
-course snapshot, `certificateType`, `issuedAt`, `policyId`, `templateId`.
+`certificateNumber`, `transcriptVersionId`, `transcriptChecksum`, `studentSnapshot`,
+`courseSnapshot`, `issueBasisSnapshot`, `certificateType`, `issuedAt`,
+`certificatePolicyId`, `certificateTemplateId`.
 
 **Excluded from checksum** (envelope/transport): `verificationCount`, `lastVerifiedAt`,
 export rows, `updatedAt`, stale/suspend bookkeeping.
@@ -815,11 +839,12 @@ cross-cutting audit trail. Both are written, mirroring the transcript engine.
 
 ## 25. DTOs
 
-Read from the **Certificate** aggregate (its frozen `contentSnapshot`), **never from
-the Transcript directly**:
+Read from the **Certificate** aggregate (its frozen `studentSnapshot` /
+`courseSnapshot` / `issueBasisSnapshot` columns), **never from the Transcript
+directly**:
 
 - `CertificateSummaryDto` — `{ id, certificateNumber, certificateType, status, studentName, courseName, issuedAt, expiresAt }`
-- `CertificateDetailDto` — summary + `{ policyId, templateId, transcriptNumber, verificationUrl, issueBasis, staleReason?, revokeReason?, events[] }` (no transcript internals)
+- `CertificateDetailDto` — summary + `{ certificatePolicyId, certificateTemplateId, transcriptNumber, verificationUrl, issueBasis, staleReason?, revokeReason?, events[] }` (`issueBasis` projected from `issueBasisSnapshot`; no transcript internals)
 - `CertificateEligibilityDto` — `{ eligible, blockers[], warnings[], transcriptVersionId, policyId, financialClearance: { status, checkedAt, reference? } | null }`
 - `CertificateVerificationDto` — the minimal public shape (§22)
 - `CertificateExportDto` — `{ id, exportType, status, fileUrl?, exportedAt? }`
@@ -836,13 +861,17 @@ the Transcript directly**:
 - `verificationCode` unique (global) — also a filtered unique index if left nullable
   on the certificate; the `CertificateVerification.verificationCode` is `NOT NULL` unique.
 - **Filtered unique — one active certificate per `(org, transcriptVersionId, certificateType)`**
-  `WHERE status IN ('DRAFT','PENDING_APPROVAL','ISSUED','SUSPENDED') AND deletedAt IS NULL`.
-- Policy/template active-uniqueness via filtered indexes (§5, §6).
-- **No cascade from transcript** — `transcriptVersionId`/`policyId`/`templateId` are
-  id pointers, not cascading relations. Modelled Prisma relations use
-  `onDelete: NoAction, onUpdate: NoAction`.
+  logically `WHERE status IN ('DRAFT','PENDING_APPROVAL','ISSUED','SUSPENDED') AND deletedAt IS NULL`;
+  authored as `status <> 'REVOKED' AND status <> 'STALE' AND deletedAt IS NULL` (SQL Server
+  filtered predicates cannot use `IN`), so reissue after revoke/stale is allowed.
+- Policy/template active-uniqueness via filtered indexes (§5, §6): **org-default**
+  (`courseId IS NULL`) **and per-course-override** (`courseId IS NOT NULL`) variants,
+  so the "most specific wins" resolution can never match two active rows at either level.
+- **No cascade from transcript** — `transcriptVersionId` is a pure id pointer (no
+  relation). `certificatePolicyId`/`certificateTemplateId` are modelled relations for
+  config integrity. All modelled Prisma relations use `onDelete: NoAction, onUpdate: NoAction`.
 - Long text/JSON columns use `@db.NVarChar(Max)`; percentages/grades in snapshots use
-  `@db.Decimal(5,2)` if any are stored (mostly they live inside `contentSnapshot` JSON).
+  `@db.Decimal(5,2)` if any are stored (mostly they live inside the JSON snapshot columns).
 - Migration authoring reminders (project gotchas): split `ALTER TABLE ADD COLUMN`
   from same-batch references; use filtered indexes for nullable-unique.
 - Indexes as listed per model (§5–§12), all leading with `organizationId`.
@@ -895,7 +924,7 @@ question remains unresolved.
 | **D-5** | Auto-issue safety | `autoIssueOnTranscriptIssued` proceeds **only** when the policy has no manual/financial gate; otherwise it produces a `PENDING_APPROVAL`. Frozen. |
 | **D-6** | Expiry handling | **Expiry affects VERIFICATION ONLY.** `Certificate.status` stays `ISSUED`; a scheduled sweep sets `CertificateVerification.publicStatus = EXPIRED` when `expiresAt` passes. There is **no `ISSUED → EXPIRED` lifecycle transition** — issuance is historical truth; expiry is operational validity. |
 | **D-7** | Digital signature | **Content-only checksum, generated once on issue, never recomputed.** Cryptographic org signature is a later phase (key management out of scope for v1.0). |
-| **D-8** | `contentSnapshot` shape vs child tables | **One JSON `contentSnapshot` column on `Certificate`** (certificate is a leaf aggregate). Promote to child tables only if reporting later needs relational queries over certificate content (new ADR). |
+| **D-8** | Snapshot shape vs child tables | **JSON snapshot columns on the leaf `Certificate` aggregate — no child tables.** Implemented (Phase 1) as **three** columns: `studentSnapshot` (`NVarChar(Max)`, required), `courseSnapshot` (`NVarChar(Max)`, nullable), `issueBasisSnapshot` (`NVarChar(Max)`, required). This refines the original single-`contentSnapshot` sketch into three purpose-scoped JSON columns while preserving the binding intent (leaf aggregate, no child tables, frozen at generation, never recomputed). Promote to child tables only if reporting later needs relational queries over certificate content (new ADR). |
 
 ---
 
@@ -1017,36 +1046,64 @@ or audit logic. No Academic Core or Transcript behaviour changes.
   deletion of the version and never follows transcript updates. No Certificate model
   references any Grade/Attendance/StudentProgress table (enforced by an
   architecture-guard test).
+- **Three JSON snapshot columns, not one (D-8, refined).** Display facts are frozen
+  into `studentSnapshot` (`NVarChar(Max)`, required), `courseSnapshot`
+  (`NVarChar(Max)`, nullable), and `issueBasisSnapshot` (`NVarChar(Max)`, required) —
+  purpose-scoped JSON columns on the leaf `Certificate` aggregate. This refines the
+  original single-`contentSnapshot` sketch while preserving D-8's binding intent (leaf
+  aggregate, no child tables, frozen at generation, never recomputed). D-8, §7, and
+  §25 updated to match.
+- **No `approvedAt`/`approvedBy` columns (M2 review decision).** Approval provenance is
+  recorded **append-only via `CertificateEvent`** (`certificate.approved`, carrying
+  `actorId` + `createdAt`), never as columns on `Certificate`. A later
+  `PENDING_APPROVAL → ISSUED` command will require an approval event (or a policy rule
+  that waives manual approval); the timestamp/actor of approval is read from that
+  event. §7 updated to remove the columns and document this.
 - **Administrative snapshot fields (D-3):** `financialClearanceStatus`
   (default `NOT_REQUIRED`), `financialClearanceCheckedAt`, `financialClearanceReference`
   live on `Certificate` — frozen at generation, never recomputed.
 - **Expiry via verification projection (D-6):** `Certificate.expiresAt` records the
-  operational-validity end; `CertificateVerification.publicStatus` may become
-  `EXPIRED` while `Certificate.status` stays `ISSUED`. Expiry is not a lifecycle
-  status.
+  operational-validity end (indexed `([organizationId, expiresAt])`);
+  `CertificateVerification.expiresAt` mirrors it (also indexed) and drives the sweep
+  that sets `publicStatus = EXPIRED` while `Certificate.status` stays `ISSUED`. Expiry
+  is not a lifecycle status.
 - **Course-config relations:** `CertificatePolicy.courseId` and
   `CertificateTemplate.courseId` are FK relations to `Course` (with back-relations)
   for the optional per-course override — config referential integrity (distinct from
   the snapshot pointer used for the transcript).
+- **Template `language` default is `pt-PT`** (L1), matching the project locale
+  convention and the template default/override filtered-unique indexes that group by
+  `language`.
 - **`CertificateVerification` is 1:1** with `Certificate` (`certificateId @unique`),
   with a globally-unique `verificationCode @unique`.
 
 **Migration** `prisma/migrations/20260707130000_certificate_engine_models/`
-(hand-finished SQL Server, `BEGIN TRY / BEGIN TRAN`, tables → FKs → indexes). Five
-**filtered UNIQUE** indexes are migration-only (Prisma cannot express them — expected
-introspection drift):
-`certificate_policies_org_default_active_key` (one ACTIVE org-default policy per
-type, `courseId IS NULL`), `certificate_templates_org_default_active_key` (per
-type+language), `certificates_org_certificate_number_key` (number unique per org
-among live numbered rows), `certificates_verification_code_key` (global, live rows),
+(hand-finished SQL Server, `BEGIN TRY / BEGIN TRAN`, tables → indexes → FKs → filtered
+UNIQUE indexes). **Seven** **filtered UNIQUE** indexes are migration-only (Prisma
+cannot express them — expected introspection drift):
+`certificate_policies_org_default_active_key` (one ACTIVE org-default policy per type,
+`courseId IS NULL`), `certificate_policies_org_course_override_active_key` (one ACTIVE
+per-course-override policy per `(org, type, courseId)`, `courseId IS NOT NULL` — H1
+fix), `certificate_templates_org_default_active_key` (per type+language,
+`courseId IS NULL`), `certificate_templates_org_course_override_active_key` (per
+`(org, type, courseId, language)`, `courseId IS NOT NULL` — H1 fix),
+`certificates_org_certificate_number_key` (number unique per org among live numbered
+rows), `certificates_verification_code_key` (global, live rows),
 `certificates_active_per_transcript_type_key` (one active certificate per
 `(org, transcriptVersionId, certificateType)` — active excludes `REVOKED` and
 `STALE`, expressed as `status <> 'REVOKED' AND status <> 'STALE'` since SQL Server
-filtered predicates cannot use `IN`, so a reissue after revoke/stale is allowed).
+filtered predicates cannot use `IN`, so a reissue after revoke/stale is allowed). The
+two course-override indexes guarantee the §5/§6 "most specific wins" resolution can
+never match two active rows.
+
+**Review fixes applied (Phase 1 re-review):** H1 (course-override filtered-unique
+indexes added), M1 (snapshot columns documented — D-8/§7/§25), M2 (approval via
+`CertificateEvent`; no `approvedAt`/`approvedBy`), L1 (template `language` → `pt-PT`),
+L4 (`([organizationId, expiresAt])` indexes on `Certificate` and
+`CertificateVerification`). No business logic added.
 
 **Validation:** `prisma validate` ✔ · `prisma generate` ✔ · `tsc --noEmit` ✔ (0
-errors) · `vitest run src/modules/certificates` ✔ (50/50; +2 schema guards) ·
-`eslint` ✔. Full suite: 2508 pass, 1 pre-existing unrelated failure (teacher-portal
-deadline ordering). Migration authored but **not applied** to a live DB in this phase.
+errors) · `vitest run src/modules/certificates` ✔ (50/50) · `eslint` ✔. Migration
+authored but **not applied** to a live DB in this phase.
 
 **Ready for Phase 2: Repositories (tenant-safe) + read-only transcript reader.**

@@ -3169,7 +3169,9 @@ model CertificateNumberCounter {
 // Several UNIQUE indexes are FILTERED (partial) and therefore MIGRATION-ONLY —
 // Prisma cannot express them, so they are NOT declared with @@unique here:
 //   • certificate_policies_org_default_active_key
+//   • certificate_policies_org_course_override_active_key
 //   • certificate_templates_org_default_active_key
+//   • certificate_templates_org_course_override_active_key
 //   • certificates_org_certificate_number_key
 //   • certificates_verification_code_key
 //   • certificates_active_per_transcript_type_key
@@ -3217,7 +3219,7 @@ model CertificateTemplate {
   certificateType    String
   // Optional per-course override; null = organization default for this type/language.
   courseId           String?
-  language           String    @default("pt")
+  language           String    @default("pt-PT")
   layoutJson         String    @db.NVarChar(Max)
   templateHtml       String?   @db.NVarChar(Max)
   backgroundImageUrl String?
@@ -3309,6 +3311,7 @@ model Certificate {
   @@index([organizationId, certificateType])
   @@index([organizationId, status])
   @@index([organizationId, issuedAt])
+  @@index([organizationId, expiresAt])
   @@index([organizationId, deletedAt])
   @@map("certificates")
 }
@@ -3379,6 +3382,7 @@ model CertificateVerification {
 
   @@index([organizationId, publicStatus])
   @@index([organizationId, lastVerifiedAt])
+  @@index([organizationId, expiresAt])
   @@map("certificate_verifications")
 }
 
