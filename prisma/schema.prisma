@@ -129,6 +129,13 @@ model Organization {
   academicTranscriptExports  AcademicTranscriptExport[]
   academicTranscriptRequests AcademicTranscriptRequest[]
   certificateNumberCounters  CertificateNumberCounter[]
+  certificatePolicies        CertificatePolicy[]
+  certificateTemplates       CertificateTemplate[]
+  certificates               Certificate[]
+  certificateEvents          CertificateEvent[]
+  certificateExports         CertificateExport[]
+  certificateVerifications   CertificateVerification[]
+  certificateRequests        CertificateRequest[]
 
   @@map("organizations")
 }
@@ -408,6 +415,8 @@ model Student {
   guardianLinks              GuardianStudent[]
   academicTranscripts        AcademicTranscript[]
   academicTranscriptRequests AcademicTranscriptRequest[]
+  certificates               Certificate[]
+  certificateRequests        CertificateRequest[]
 
   @@index([organizationId, branchId])
   @@map("students")
@@ -581,6 +590,9 @@ model Course {
   periodAttendanceSummaries StudentPeriodAttendanceSummary[]
   academicTranscripts       AcademicTranscript[]
   academicTranscriptRequests AcademicTranscriptRequest[]
+  certificatePolicies       CertificatePolicy[]
+  certificateTemplates      CertificateTemplate[]
+  certificates              Certificate[]
 
   @@map("courses")
 }
@@ -1040,6 +1052,7 @@ model Enrollment {
   periodAttendanceSummaries  StudentPeriodAttendanceSummary[]
   academicTranscripts        AcademicTranscript[]
   academicTranscriptRequests AcademicTranscriptRequest[]
+  certificates               Certificate[]
 
   @@unique([organizationId, enrollmentNumber])
   @@index([organizationId, courseId], name: "enrollments_org_course_idx")
@@ -3141,6 +3154,264 @@ model CertificateNumberCounter {
 
   @@unique([organizationId, year])
   @@map("certificate_number_counters")
+}
+
+// =============================================================================
+// CERTIFICATE ENGINE — Phase 1: data model
+// -----------------------------------------------------------------------------
+// Downstream consumer of the Academic Transcript Engine (ADR-002). Every model is
+// organization-scoped; all relations use onDelete/onUpdate NoAction. The transcript
+// reference is a POINTER (transcriptVersionId String — NO Prisma relation) plus the
+// copied transcriptNumber/transcriptChecksum, so a certificate survives transcript
+// supersession/deletion and never follows transcript updates automatically. The
+// engine NEVER references Grade/Attendance/StudentProgress raw tables.
+//
+// Several UNIQUE indexes are FILTERED (partial) and therefore MIGRATION-ONLY —
+// Prisma cannot express them, so they are NOT declared with @@unique here:
+//   • certificate_policies_org_default_active_key
+//   • certificate_templates_org_default_active_key
+//   • certificates_org_certificate_number_key
+//   • certificates_verification_code_key
+//   • certificates_active_per_transcript_type_key
+// =============================================================================
+
+model CertificatePolicy {
+  id                          String    @id @default(cuid())
+  organizationId              String
+  name                        String
+  // certificateType: see CertificateType const object (COURSE_COMPLETION | LEVEL_COMPLETION | PARTICIPATION | ATTENDANCE | ACHIEVEMENT | PROFESSIONAL_TRAINING | DRIVING_SCHOOL | LANGUAGE_COURSE | IT_COURSE | DESIGN_COURSE)
+  certificateType             String
+  // Optional per-course override; null = organization default for this type.
+  courseId                    String?
+  requiresIssuedTranscript    Boolean   @default(true)
+  requiresCourseCompleted     Boolean   @default(true)
+  requiresNoPendingSubjects   Boolean   @default(true)
+  requiresFinancialClearance  Boolean   @default(false)
+  requiresManualApproval      Boolean   @default(false)
+  autoIssueOnTranscriptIssued Boolean   @default(false)
+  // staleAction: MARK_STALE | SUSPEND | REVOKE (behaviour when the linked transcript is invalidated)
+  staleAction                 String    @default("MARK_STALE")
+  validityMonths              Int?
+  // status: ACTIVE | INACTIVE | ARCHIVED
+  status                      String    @default("ACTIVE")
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+  deletedAt                   DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course       Course?       @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  certificates Certificate[]
+
+  @@index([organizationId, certificateType])
+  @@index([organizationId, courseId])
+  @@index([organizationId, status])
+  @@index([organizationId, deletedAt])
+  @@map("certificate_policies")
+}
+
+model CertificateTemplate {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  name               String
+  // certificateType: see CertificateType const object.
+  certificateType    String
+  // Optional per-course override; null = organization default for this type/language.
+  courseId           String?
+  language           String    @default("pt")
+  layoutJson         String    @db.NVarChar(Max)
+  templateHtml       String?   @db.NVarChar(Max)
+  backgroundImageUrl String?
+  signatureImageUrl  String?
+  sealImageUrl       String?
+  // status: ACTIVE | INACTIVE | ARCHIVED
+  status             String    @default("ACTIVE")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course       Course?       @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  certificates Certificate[]
+
+  @@index([organizationId, certificateType])
+  @@index([organizationId, courseId])
+  @@index([organizationId, status])
+  @@index([organizationId, deletedAt])
+  @@map("certificate_templates")
+}
+
+model Certificate {
+  id                          String    @id @default(cuid())
+  organizationId              String
+  studentId                   String
+  enrollmentId                String?
+  courseId                    String?
+  // POINTER to the exact issued AcademicTranscriptVersion — deliberately NOT a FK
+  // (survives supersession/deletion; the certificate never follows transcript updates).
+  transcriptVersionId         String
+  // Copied from the transcript at generation (survive supersession).
+  transcriptNumber            String
+  transcriptChecksum          String
+  certificatePolicyId         String?
+  certificateTemplateId       String?
+  // Nullable until issue; filtered-unique per (organizationId, certificateNumber) via migration only.
+  certificateNumber           String?
+  // certificateType: see CertificateType const object.
+  certificateType             String
+  // status: DRAFT | PENDING_APPROVAL | ISSUED | SUSPENDED | REVOKED | STALE
+  status                      String    @default("DRAFT")
+  // Frozen display snapshots (JSON). Never re-read live after generation.
+  studentSnapshot             String    @db.NVarChar(Max)
+  courseSnapshot              String?   @db.NVarChar(Max)
+  issueBasisSnapshot          String    @db.NVarChar(Max)
+  // Snapshot of the NON-ACADEMIC finance clearance check (D-3); never recomputed.
+  // financialClearanceStatus: NOT_REQUIRED | CLEARED | NOT_CLEARED | UNKNOWN
+  financialClearanceStatus    String    @default("NOT_REQUIRED")
+  financialClearanceCheckedAt DateTime?
+  financialClearanceReference String?
+  // Public lookup key; filtered-unique via migration only. Nullable until generated.
+  verificationCode            String?
+  verificationUrl             String?
+  // Content checksum, set once at issue (never recomputed).
+  checksum                    String?
+  issuedAt                    DateTime?
+  issuedBy                    String?
+  revokedAt                   DateTime?
+  revokedBy                   String?
+  revokeReason                String?   @db.NVarChar(Max)
+  suspendedAt                 DateTime?
+  suspendedBy                 String?
+  suspendReason               String?   @db.NVarChar(Max)
+  staleDetectedAt             DateTime?
+  // staleReason: see StaleReason const object (TRANSCRIPT_SUPERSEDED | TRANSCRIPT_REVOKED | TRANSCRIPT_MARKED_STALE | POLICY_CHANGED | TEMPLATE_CHANGED)
+  staleReason                 String?
+  // Operational validity end; expiry surfaces on the verification projection, NOT on status (D-6).
+  expiresAt                   DateTime?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+  deletedAt                   DateTime?
+
+  organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student           Student                 @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment        Enrollment?             @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course            Course?                 @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  policy            CertificatePolicy?      @relation(fields: [certificatePolicyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  template          CertificateTemplate?    @relation(fields: [certificateTemplateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events            CertificateEvent[]
+  exports           CertificateExport[]
+  verification      CertificateVerification?
+  requestsFulfilled CertificateRequest[]    @relation("FulfilledCertificate")
+
+  @@index([organizationId, studentId])
+  @@index([organizationId, enrollmentId])
+  @@index([organizationId, courseId])
+  @@index([organizationId, transcriptVersionId])
+  @@index([organizationId, certificateType])
+  @@index([organizationId, status])
+  @@index([organizationId, issuedAt])
+  @@index([organizationId, deletedAt])
+  @@map("certificates")
+}
+
+model CertificateEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  certificateId  String
+  // eventType: certificate.generated | certificate.approved | certificate.issued | certificate.revoked | certificate.suspended | certificate.restored | certificate.marked_stale | certificate.exported | certificate.verified
+  eventType      String
+  previousStatus String?
+  newStatus      String?
+  actorId        String?
+  reason         String?  @db.NVarChar(Max)
+  metadata       String?  @db.NVarChar(Max)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  certificate  Certificate  @relation(fields: [certificateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, certificateId])
+  @@index([organizationId, eventType])
+  @@index([organizationId, createdAt])
+  @@map("certificate_events")
+}
+
+model CertificateExport {
+  id             String    @id @default(cuid())
+  organizationId String
+  certificateId  String
+  // exportType: PDF | API | MINISTRY
+  exportType     String
+  fileUrl        String?
+  fileChecksum   String?
+  exportedBy     String?
+  exportedAt     DateTime?
+  // status: PENDING | READY | FAILED
+  status         String    @default("PENDING")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  certificate  Certificate  @relation(fields: [certificateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, certificateId])
+  @@index([organizationId, exportType])
+  @@index([organizationId, status])
+  @@index([organizationId, exportedAt])
+  @@map("certificate_exports")
+}
+
+model CertificateVerification {
+  id                String    @id @default(cuid())
+  organizationId    String
+  certificateId     String    @unique
+  verificationCode  String    @unique
+  // publicStatus: VALID | REVOKED | SUSPENDED | EXPIRED | NOT_FOUND
+  // May become EXPIRED while Certificate.status stays ISSUED (D-6).
+  publicStatus      String    @default("VALID")
+  verificationCount Int       @default(0)
+  lastVerifiedAt    DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  certificate  Certificate  @relation(fields: [certificateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, publicStatus])
+  @@index([organizationId, lastVerifiedAt])
+  @@map("certificate_verifications")
+}
+
+model CertificateRequest {
+  id                     String    @id @default(cuid())
+  organizationId         String
+  studentId              String
+  // Optional POINTER; may be resolved at review time.
+  transcriptVersionId    String?
+  // certificateType: see CertificateType const object.
+  certificateType        String
+  requestedBy            String
+  // status: PENDING | APPROVED | REJECTED | FULFILLED | CANCELLED
+  status                 String    @default("PENDING")
+  reason                 String?   @db.NVarChar(Max)
+  reviewedBy             String?
+  reviewedAt             DateTime?
+  fulfilledCertificateId String?
+  createdAt              DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt              DateTime?
+
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student              Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fulfilledCertificate Certificate? @relation("FulfilledCertificate", fields: [fulfilledCertificateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, studentId])
+  @@index([organizationId, transcriptVersionId])
+  @@index([organizationId, certificateType])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, deletedAt])
+  @@map("certificate_requests")
 }
 
 // =============================================================================

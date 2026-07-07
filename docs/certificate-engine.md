@@ -906,8 +906,8 @@ question remains unresolved.
 
 - **Phase 0 — Foundation:** ✅ **IMPLEMENTED (2026-07-07)** — see *Phase 0
   Implementation Notes* below.
-- **Phase 1 — Schema + migration:** 8 models + counter, filtered indexes, `NoAction`
-  relations. Hand-authored SQL for nullable-unique filtered indexes.
+- **Phase 1 — Schema + migration:** ✅ **IMPLEMENTED (2026-07-07)** — see *Phase 1
+  Implementation Notes* below.
 - **Phase 2 — Repositories (tenant-safe) + read-only transcript reader:** all scoped
   by `organizationId`; architecture-guard test forbidding Grade/Attendance imports.
 - **Phase 3 — Policy + template resolution + canonical payload/checksum service.**
@@ -993,3 +993,60 @@ errors) · `vitest run src/modules/certificates` ✔ (48/48) · `eslint` ✔. Fu
 2506 pass, 1 pre-existing unrelated failure (teacher-portal deadline ordering).
 
 **Ready for Phase 1: Certificate data model.**
+
+---
+
+## 32. Phase 1 — Implementation Notes (2026-07-07)
+
+Phase 1 shipped the **data model only** (schema + migration). No repositories,
+services, commands, eligibility, lifecycle logic, UI, API routes, event handlers,
+or audit logic. No Academic Core or Transcript behaviour changes.
+
+**Models added** (`prisma/schema.prisma`, all `@@map` snake_case, all rows carry
+`organizationId`, all relations `onDelete: NoAction, onUpdate: NoAction`):
+`CertificatePolicy`, `CertificateTemplate`, `Certificate`, `CertificateEvent`,
+`CertificateExport`, `CertificateVerification`, `CertificateRequest`.
+`CertificateNumberCounter` from Phase 0 is unchanged.
+
+**Key modelling decisions (as frozen):**
+
+- **Transcript is a POINTER, not a FK.** `Certificate.transcriptVersionId` (and
+  `CertificateRequest.transcriptVersionId`) is a plain `String` column with **no**
+  Prisma relation to `AcademicTranscriptVersion`, plus copied
+  `transcriptNumber`/`transcriptChecksum`. A certificate survives supersession/
+  deletion of the version and never follows transcript updates. No Certificate model
+  references any Grade/Attendance/StudentProgress table (enforced by an
+  architecture-guard test).
+- **Administrative snapshot fields (D-3):** `financialClearanceStatus`
+  (default `NOT_REQUIRED`), `financialClearanceCheckedAt`, `financialClearanceReference`
+  live on `Certificate` — frozen at generation, never recomputed.
+- **Expiry via verification projection (D-6):** `Certificate.expiresAt` records the
+  operational-validity end; `CertificateVerification.publicStatus` may become
+  `EXPIRED` while `Certificate.status` stays `ISSUED`. Expiry is not a lifecycle
+  status.
+- **Course-config relations:** `CertificatePolicy.courseId` and
+  `CertificateTemplate.courseId` are FK relations to `Course` (with back-relations)
+  for the optional per-course override — config referential integrity (distinct from
+  the snapshot pointer used for the transcript).
+- **`CertificateVerification` is 1:1** with `Certificate` (`certificateId @unique`),
+  with a globally-unique `verificationCode @unique`.
+
+**Migration** `prisma/migrations/20260707130000_certificate_engine_models/`
+(hand-finished SQL Server, `BEGIN TRY / BEGIN TRAN`, tables → FKs → indexes). Five
+**filtered UNIQUE** indexes are migration-only (Prisma cannot express them — expected
+introspection drift):
+`certificate_policies_org_default_active_key` (one ACTIVE org-default policy per
+type, `courseId IS NULL`), `certificate_templates_org_default_active_key` (per
+type+language), `certificates_org_certificate_number_key` (number unique per org
+among live numbered rows), `certificates_verification_code_key` (global, live rows),
+`certificates_active_per_transcript_type_key` (one active certificate per
+`(org, transcriptVersionId, certificateType)` — active excludes `REVOKED` and
+`STALE`, expressed as `status <> 'REVOKED' AND status <> 'STALE'` since SQL Server
+filtered predicates cannot use `IN`, so a reissue after revoke/stale is allowed).
+
+**Validation:** `prisma validate` ✔ · `prisma generate` ✔ · `tsc --noEmit` ✔ (0
+errors) · `vitest run src/modules/certificates` ✔ (50/50; +2 schema guards) ·
+`eslint` ✔. Full suite: 2508 pass, 1 pre-existing unrelated failure (teacher-portal
+deadline ordering). Migration authored but **not applied** to a live DB in this phase.
+
+**Ready for Phase 2: Repositories (tenant-safe) + read-only transcript reader.**
