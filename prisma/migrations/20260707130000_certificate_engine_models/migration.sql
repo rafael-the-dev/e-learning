@@ -11,23 +11,31 @@
 -- survives supersession/deletion of the transcript version and never follows
 -- transcript updates. transcriptNumber/transcriptChecksum are copied columns.
 --
--- Five UNIQUE indexes are FILTERED (partial) and therefore MIGRATION-ONLY —
+-- Seven UNIQUE indexes are FILTERED (partial) and therefore MIGRATION-ONLY —
 -- Prisma cannot express partial/filtered unique indexes, so they are NOT declared
 -- with @@unique in schema.prisma. Introspection may report drift for them; that is
 -- EXPECTED and intentional:
 --   1. certificate_policies_org_default_active_key — at most one ACTIVE org-default
 --      policy per (organizationId, certificateType) among live rows with no course
 --      override (courseId IS NULL AND status='ACTIVE' AND deletedAt IS NULL).
---   2. certificate_templates_org_default_active_key — at most one ACTIVE org-default
+--   2. certificate_policies_org_course_override_active_key — at most one ACTIVE
+--      per-course-override policy per (organizationId, certificateType, courseId)
+--      among live rows (courseId IS NOT NULL AND status='ACTIVE' AND deletedAt IS NULL),
+--      so the §5 "most specific wins" resolution can never match two active overrides.
+--   3. certificate_templates_org_default_active_key — at most one ACTIVE org-default
 --      template per (organizationId, certificateType, language) among live rows with
 --      no course override.
---   3. certificates_org_certificate_number_key — one certificate number per
+--   4. certificate_templates_org_course_override_active_key — at most one ACTIVE
+--      per-course-override template per (organizationId, certificateType, courseId,
+--      language) among live rows (courseId IS NOT NULL AND status='ACTIVE' AND
+--      deletedAt IS NULL).
+--   5. certificates_org_certificate_number_key — one certificate number per
 --      (organizationId, certificateNumber) among live, numbered rows
 --      (certificateNumber IS NOT NULL AND deletedAt IS NULL).
---   4. certificates_verification_code_key — globally unique verification code among
+--   6. certificates_verification_code_key — globally unique verification code among
 --      live rows with a code (verificationCode IS NOT NULL AND deletedAt IS NULL).
 --      The public lookup key has no tenant context, so it is org-agnostic.
---   5. certificates_active_per_transcript_type_key — at most one ACTIVE certificate
+--   7. certificates_active_per_transcript_type_key — at most one ACTIVE certificate
 --      per (organizationId, transcriptVersionId, certificateType); "active" excludes
 --      REVOKED and STALE so a reissue after revoke/stale is allowed. (SQL Server
 --      filtered predicates cannot use IN, so the active set is expressed as
@@ -66,7 +74,7 @@ CREATE TABLE [dbo].[certificate_templates] (
     [name] NVARCHAR(1000) NOT NULL,
     [certificateType] NVARCHAR(1000) NOT NULL,
     [courseId] NVARCHAR(1000),
-    [language] NVARCHAR(1000) NOT NULL CONSTRAINT [certificate_templates_language_df] DEFAULT 'pt',
+    [language] NVARCHAR(1000) NOT NULL CONSTRAINT [certificate_templates_language_df] DEFAULT 'pt-PT',
     [layoutJson] NVARCHAR(max) NOT NULL,
     [templateHtml] NVARCHAR(max),
     [backgroundImageUrl] NVARCHAR(1000),
@@ -233,6 +241,9 @@ CREATE NONCLUSTERED INDEX [certificates_organizationId_status_idx] ON [dbo].[cer
 CREATE NONCLUSTERED INDEX [certificates_organizationId_issuedAt_idx] ON [dbo].[certificates]([organizationId], [issuedAt]);
 
 -- CreateIndex
+CREATE NONCLUSTERED INDEX [certificates_organizationId_expiresAt_idx] ON [dbo].[certificates]([organizationId], [expiresAt]);
+
+-- CreateIndex
 CREATE NONCLUSTERED INDEX [certificates_organizationId_deletedAt_idx] ON [dbo].[certificates]([organizationId], [deletedAt]);
 
 -- CreateIndex
@@ -261,6 +272,9 @@ CREATE NONCLUSTERED INDEX [certificate_verifications_organizationId_publicStatus
 
 -- CreateIndex
 CREATE NONCLUSTERED INDEX [certificate_verifications_organizationId_lastVerifiedAt_idx] ON [dbo].[certificate_verifications]([organizationId], [lastVerifiedAt]);
+
+-- CreateIndex
+CREATE NONCLUSTERED INDEX [certificate_verifications_organizationId_expiresAt_idx] ON [dbo].[certificate_verifications]([organizationId], [expiresAt]);
 
 -- CreateIndex
 CREATE NONCLUSTERED INDEX [certificate_requests_organizationId_studentId_idx] ON [dbo].[certificate_requests]([organizationId], [studentId]);
@@ -342,8 +356,16 @@ ALTER TABLE [dbo].[certificate_requests] ADD CONSTRAINT [certificate_requests_fu
 CREATE UNIQUE NONCLUSTERED INDEX [certificate_policies_org_default_active_key] ON [dbo].[certificate_policies]([organizationId], [certificateType]) WHERE [courseId] IS NULL AND [status] = 'ACTIVE' AND [deletedAt] IS NULL;
 
 -- CreateIndex (filtered UNIQUE — migration-only; not expressible via Prisma @@unique)
+-- One ACTIVE per-course-override policy per (organizationId, certificateType, courseId) among live rows.
+CREATE UNIQUE NONCLUSTERED INDEX [certificate_policies_org_course_override_active_key] ON [dbo].[certificate_policies]([organizationId], [certificateType], [courseId]) WHERE [courseId] IS NOT NULL AND [status] = 'ACTIVE' AND [deletedAt] IS NULL;
+
+-- CreateIndex (filtered UNIQUE — migration-only; not expressible via Prisma @@unique)
 -- One ACTIVE org-default template per (organizationId, certificateType, language) with no course override.
 CREATE UNIQUE NONCLUSTERED INDEX [certificate_templates_org_default_active_key] ON [dbo].[certificate_templates]([organizationId], [certificateType], [language]) WHERE [courseId] IS NULL AND [status] = 'ACTIVE' AND [deletedAt] IS NULL;
+
+-- CreateIndex (filtered UNIQUE — migration-only; not expressible via Prisma @@unique)
+-- One ACTIVE per-course-override template per (organizationId, certificateType, courseId, language) among live rows.
+CREATE UNIQUE NONCLUSTERED INDEX [certificate_templates_org_course_override_active_key] ON [dbo].[certificate_templates]([organizationId], [certificateType], [courseId], [language]) WHERE [courseId] IS NOT NULL AND [status] = 'ACTIVE' AND [deletedAt] IS NULL;
 
 -- CreateIndex (filtered UNIQUE — migration-only; not expressible via Prisma @@unique)
 -- One certificate number per (organizationId, certificateNumber) among live, numbered rows.
