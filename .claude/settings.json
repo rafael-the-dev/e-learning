@@ -145,11 +145,22 @@
       "PowerShell(pnpm exec tsc --noEmit 2>&1)",
       "PowerShell(pnpm exec vitest run src/app/api/attendance/reports 2>&1)",
       "PowerShell(pnpm exec vitest run src/modules/attendance src/server/auth 2>&1)",
-      "PowerShell(pnpm exec vitest run src/modules/attendance 2>&1)"
+      "PowerShell(pnpm exec vitest run src/modules/attendance 2>&1)",
+      "Bash(git --no-pager diff --cached --stat)",
+      "PowerShell(pnpm exec vitest run src/modules/transcripts/repositories 2>&1)",
+      "PowerShell(pnpm exec vitest run src/modules/transcripts/repositories --pool=forks --poolOptions.forks.singleFork=true 2>&1)",
+      "Bash(git --no-pager log -1 --format='%s')",
+      "Bash(git --no-pager log -1 --format='%B')",
+      "Bash(git --no-pager log -2 --format='%h  %s')",
+      "Bash(echo \"exit=$?\")",
+      "Read(//tmp/**)",
+      "Bash(git show *)",
+      "Bash(echo \"eslint EXIT: $?\")"
     ],
     "additionalDirectories": [
       "c:\\salc\\web\\mine\\e-learning\\src\\app\\(org)\\settings\\roles\\[roleId]",
-      "c:\\salc\\web\\mine\\e-learning\\src\\modules\\student-documents\\actions"
+      "c:\\salc\\web\\mine\\e-learning\\src\\modules\\student-documents\\actions",
+      "\\tmp"
     ]
   }
 }
