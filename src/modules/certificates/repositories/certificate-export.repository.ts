@@ -124,6 +124,31 @@ export async function listCertificateExports(
   return rows.map(toRecord);
 }
 
+export interface ListCertificateIdsWithReadyExportParams {
+  organizationId: string;
+  certificateIds: string[];
+}
+
+/** The subset of the given certificate ids that have at least one READY export
+ *  (Phase 10 portal `canDownload` flag) — one org-scoped query, no N+1. Returns a
+ *  deduped id list; `[]` for an empty input. */
+export async function listCertificateIdsWithReadyExport(
+  params: ListCertificateIdsWithReadyExportParams,
+  client?: PrismaClientOrTx
+): Promise<string[]> {
+  if (params.certificateIds.length === 0) return [];
+  const db = client ?? (await getDb());
+  const rows = await db.certificateExport.findMany({
+    where: {
+      organizationId: params.organizationId,
+      certificateId: { in: params.certificateIds },
+      status: "READY",
+    },
+    select: { certificateId: true },
+  });
+  return [...new Set(rows.map((r) => r.certificateId as string))];
+}
+
 export interface FindCertificateExportDownloadByIdParams {
   organizationId: string;
   exportId: string;

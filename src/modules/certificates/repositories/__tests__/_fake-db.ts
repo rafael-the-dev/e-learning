@@ -59,6 +59,8 @@ function matchWhere(row: Row, where: WhereInput): boolean {
           } else if (rv === val) {
             return false;
           }
+        } else if (op === "contains") {
+          if (typeof rv !== "string" || !rv.includes(val as string)) return false;
         } else if (op === "lt" || op === "lte" || op === "gt" || op === "gte") {
           if (rv == null) return false;
           const a = rv instanceof Date ? rv.getTime() : (rv as number);

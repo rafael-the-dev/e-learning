@@ -306,11 +306,8 @@ export async function findCertificatesByTranscriptVersion(
   return rows.map(toRecord);
 }
 
-export async function listCertificates(
-  filters: CertificateListFilters,
-  client?: PrismaClientOrTx
-): Promise<CertificateRecord[]> {
-  const db = client ?? (await getDb());
+/** Build the org-scoped `where` shared by {@link listCertificates} + {@link countCertificates}. */
+function buildCertificateListWhere(filters: CertificateListFilters): Record<string, unknown> {
   const where: Record<string, unknown> = { organizationId: filters.organizationId };
   if (filters.studentId !== undefined) where.studentId = filters.studentId;
   if (filters.enrollmentId !== undefined) where.enrollmentId = filters.enrollmentId;
@@ -318,16 +315,39 @@ export async function listCertificates(
   if (filters.transcriptVersionId !== undefined) where.transcriptVersionId = filters.transcriptVersionId;
   if (filters.certificateType !== undefined) where.certificateType = filters.certificateType;
   if (filters.status !== undefined) where.status = filters.status;
+  if (filters.issuedFrom !== undefined || filters.issuedTo !== undefined) {
+    const issuedAt: Record<string, Date> = {};
+    if (filters.issuedFrom !== undefined) issuedAt.gte = filters.issuedFrom;
+    if (filters.issuedTo !== undefined) issuedAt.lte = filters.issuedTo;
+    where.issuedAt = issuedAt;
+  }
+  if (filters.search) where.certificateNumber = { contains: filters.search };
   if (!filters.includeDeleted) where.deletedAt = null;
+  return where;
+}
 
+export async function listCertificates(
+  filters: CertificateListFilters,
+  client?: PrismaClientOrTx
+): Promise<CertificateRecord[]> {
+  const db = client ?? (await getDb());
   const rows = await db.certificate.findMany({
-    where,
+    where: buildCertificateListWhere(filters),
     select: certificateSelect,
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     skip: filters.skip,
     take: filters.take,
   });
   return rows.map(toRecord);
+}
+
+/** Org-scoped total matching the same filters (Phase 10 pagination). */
+export async function countCertificates(
+  filters: CertificateListFilters,
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  return db.certificate.count({ where: buildCertificateListWhere(filters) });
 }
 
 // ─── Writes (columns only; no lifecycle decision) ─────────────────────────────
