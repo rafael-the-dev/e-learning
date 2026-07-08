@@ -11,3 +11,4 @@
 
 export * from "./certificate-pdf-renderer";
 export * from "./certificate-export-storage";
+export * from "./certificate-export-storage-reader";

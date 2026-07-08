@@ -115,6 +115,25 @@ export interface CertificateExportRecord {
   updatedAt: Date;
 }
 
+/** Composed, org-scoped read backing the authenticated export download (Phase 8C):
+ *  the export row + the minimal certificate columns the download path needs. It
+ *  carries NO transcript pointer/checksum, NO snapshot, and NO academic field — the
+ *  download path never reads the Transcript or Academic Core. `fileUrl` is INTERNAL
+ *  (never surfaced to the client); the artifact is streamed through the server. */
+export interface CertificateExportDownloadRecord {
+  exportId: string;
+  organizationId: string;
+  status: string;
+  exportType: string;
+  fileUrl: string | null;
+  fileChecksum: string | null;
+  certificateId: string;
+  certificateStatus: string;
+  certificateStudentId: string;
+  certificateNumber: string | null;
+  certificateType: string;
+}
+
 export interface CertificateVerificationRecord {
   id: string;
   organizationId: string;

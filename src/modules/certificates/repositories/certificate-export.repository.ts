@@ -1,6 +1,9 @@
 import { getDb } from "@/server/db";
 import type { PrismaClientOrTx } from "@/server/db";
-import type { CertificateExportRecord } from "@/modules/certificates/types/repository";
+import type {
+  CertificateExportDownloadRecord,
+  CertificateExportRecord,
+} from "@/modules/certificates/types/repository";
 
 // =============================================================================
 // CERTIFICATE EXPORT REPOSITORY (Phase 2B) — artifact tracking, persistence only
@@ -119,6 +122,69 @@ export async function listCertificateExports(
     take: params.take,
   });
   return rows.map(toRecord);
+}
+
+export interface FindCertificateExportDownloadByIdParams {
+  organizationId: string;
+  exportId: string;
+}
+
+/** Org-scoped composed read for the authenticated download path (Phase 8C): the
+ *  export row + the minimal certificate columns. Returns `null` when the export is
+ *  absent in this tenant, its certificate is missing, or the certificate is
+ *  soft-deleted (all → NOT_FOUND at the caller). Reads ONLY the export + certificate
+ *  tables — never the Transcript or any Academic Core table. Status is returned
+ *  as-is (the caller decides READY-gating); no write. */
+export async function findCertificateExportDownloadById(
+  params: FindCertificateExportDownloadByIdParams,
+  client?: PrismaClientOrTx
+): Promise<CertificateExportDownloadRecord | null> {
+  const db = client ?? (await getDb());
+
+  const exportRow = await db.certificateExport.findFirst({
+    where: { id: params.exportId, organizationId: params.organizationId },
+    select: {
+      id: true,
+      organizationId: true,
+      status: true,
+      exportType: true,
+      fileUrl: true,
+      fileChecksum: true,
+      certificateId: true,
+    },
+  });
+  if (!exportRow) return null;
+
+  const certificate = await db.certificate.findFirst({
+    where: {
+      id: exportRow.certificateId as string,
+      organizationId: params.organizationId,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      status: true,
+      studentId: true,
+      certificateNumber: true,
+      certificateType: true,
+    },
+  });
+  // A deleted or missing certificate → treat the export as not downloadable.
+  if (!certificate) return null;
+
+  return {
+    exportId: exportRow.id as string,
+    organizationId: exportRow.organizationId as string,
+    status: exportRow.status as string,
+    exportType: exportRow.exportType as string,
+    fileUrl: (exportRow.fileUrl as string | null) ?? null,
+    fileChecksum: (exportRow.fileChecksum as string | null) ?? null,
+    certificateId: certificate.id as string,
+    certificateStatus: certificate.status as string,
+    certificateStudentId: certificate.studentId as string,
+    certificateNumber: (certificate.certificateNumber as string | null) ?? null,
+    certificateType: certificate.certificateType as string,
+  };
 }
 
 export interface UpdateCertificateExportStatusParams {

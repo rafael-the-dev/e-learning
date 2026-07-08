@@ -1987,11 +1987,9 @@ and **always re-throw the ORIGINAL error**:
 `previousStatus === newStatus` (the current status), and no `markCertificate*` /
 `updateCertificateMetadata` / certificate-table write appears in the command (guard 32).
 
-**Download / access (§9) — deferred.** An authenticated, org-scoped download route
-(`certificates.export`, plus student-own / guardian-linked scoping) that resolves the internal
-`storageKey`/`fileUrl` to a short-lived URL is the **next phase**. The result DTO exposes
-`fileUrl` today; production must serve it through that authenticated route rather than a raw
-public path (the `storageKey` is never returned to a consumer verbatim).
+**Download / access (§9) — implemented in Phase 8C** (see §42). An authenticated, org-scoped
+route streams the artifact bytes through the server after authorization; the `storageKey`/
+`fileUrl` stay internal and are never surfaced to the client or redirected to.
 
 **No schema/migration change.** `CertificateExport` (Phase 1) already models the artifact row;
 no Prisma model was added (the Phase-1 model-set guard still passes).
@@ -2013,4 +2011,69 @@ unsupported export type (API/MINISTRY → `BusinessRuleError`, no row); and fail
 **Certificates export as PDF; artifact tracked in `CertificateExport`; QR is a safe public
 pointer; file checksum ≠ certificate checksum; no Academic Core / Transcript reads; no
 lifecycle mutation; both failure windows mark `FAILED` best-effort and preserve the original
-error.** Next: authenticated download route (Phase 8B) + STALE detection + ministry export.
+error.** Next: authenticated download route (Phase 8C) + STALE detection + ministry export.
+
+## 42. Phase 8C — Implementation Notes (Authenticated Export Download, 2026-07-08)
+
+Phase 8C adds the secure read-back half of the Export Engine: an authenticated route
+that streams a READY export's bytes through the server after authorization. The stored
+`fileUrl` / storage key are **internal** — never surfaced to the client and never
+redirected to.
+
+**Route — `GET /api/certificates/exports/:exportId/download`.** Authenticated only. It
+establishes an org context (`requireOrganization`; any failure → `401`), delegates to the
+download service, and on success returns the bytes with headers:
+`Content-Type: application/pdf`, `Content-Disposition: attachment; filename="CERT-…​.pdf"`
+(certificate number sanitized to `[A-Za-z0-9._-]`), `Cache-Control: private, no-store`,
+`X-Content-Type-Options: nosniff`, and `ETag: "<fileChecksum>"` when a checksum exists.
+Bytes are streamed via `new NextResponse(new Uint8Array(buffer), …)`.
+
+**Service — `CertificateExportDownloadService`** (`services/…`, read-only). Authorizes →
+loads org-scoped metadata → enforces READY → derives the storage key → streams. Never
+writes, never reads the Transcript / Academic Core / Grade / Attendance tables.
+Authorization (server-side; `organizationId`/`studentId` never from input):
+- **ORG_ADMIN / SUPER_ADMIN / SECRETARY** — holding `certificates.view` **or**
+  `certificates.export` → any export in their tenant.
+- **STUDENT** — `certificates.viewOwn` **and** the certificate's `studentId` equals the
+  session-resolved `Student.userId` → own export only; a mismatch is denied.
+- **TEACHER / GUARDIAN** — no certificate permission ⇒ denied. **Guardian certificate
+  visibility is intentionally DEFERRED** (documented; a future phase may scope it via the
+  guardian↔student links).
+
+**Storage key is derived, not stored.** The `CertificateExport` row persists only
+`fileUrl` + `fileChecksum`; the key is re-derived deterministically via
+`buildExportStorageKey({ organizationId, certificateId, exportId })` — no schema change.
+Bytes are read through a new **`CertificateExportStorageReader`** adapter (in `export/`,
+alongside the writer, outside `services/`) backed by a new `StorageProvider.download(key)`
+on the infra storage abstraction (additive; only `LocalStorageProvider` implemented it).
+
+**Data access — `findCertificateExportDownloadById({ organizationId, exportId })`** (export
+repo): composed org-scoped read of the export row + minimal certificate columns
+(status, studentId, number, type). Returns `null` when the export is absent in the tenant,
+the certificate is missing, or the certificate is **soft-deleted** → NOT_FOUND. No
+transcript/academic read.
+
+**Status mapping.** `401` unauthenticated · `403` authenticated-but-not-permitted · `404`
+not found / cross-tenant / soft-deleted certificate / **non-READY for a non-owner** · `409`
+the **owner's** export exists but is not READY · `500` storage/unexpected (generic message,
+no path leakage).
+
+**Certificate-state decision.** A **REVOKED or SUSPENDED** certificate's export **still
+downloads** — the artifact is historical truth; public verification reflects
+REVOKED/SUSPENDED independently (Phase 7). Only a **soft-deleted** certificate blocks
+download (→ 404). No public/unauthenticated download exists.
+
+**No schema/migration change.** Tests: **+28 → 444 within `src/modules/certificates`** —
+the download service suite (auth staff/own/denied + no-perm, cross-tenant, READY-gating +
+owner-not-ready, cert-state policy incl. deleted, internal-key read, no fileUrl/storageKey
+leak, storage-error propagation, arch guards 26–32). **Plus a 13-test route HTTP-contract
+suite under `src/app`** (headers 21–25 + no-ETag, byte streaming, filename sanitize, and the
+401/403/404/409/500 mapping incl. no-path-leak).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔
+(444/444) · route suite ✔ (13/13) · `eslint` ✔ (0 errors) · `prisma validate` ✔. No schema
+or migration change.
+
+**READY exports download securely through the server; no raw `fileUrl`/key leakage; no
+public unauthenticated access; student-own scoping enforced server-side; guardian deferred;
+no Academic Core / Transcript reads.** Next: STALE detection + ministry export.
