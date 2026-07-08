@@ -1,9 +1,11 @@
 // =============================================================================
-// CERTIFICATE ENGINE — SERVICES (Phase 3A)
+// CERTIFICATE ENGINE — SERVICES (Phase 3)
 // -----------------------------------------------------------------------------
-// Phase 3A ships ONLY the eligibility read-aggregation façade
-// (`CertificateEligibilitySource`). No eligibility engine, no commands, no
-// lifecycle — those arrive in later phases.
+// Part A — `CertificateEligibilitySource`: read-aggregation façade (loads facts).
+// Part B — `CertificateEligibilityEngine`: pure, deterministic decision function
+//          (`evaluateCertificateEligibility`) over those facts.
+// Still absent: commands, lifecycle, generation, issue/revoke — later phases.
 // =============================================================================
 
 export * from "./certificate-eligibility-source.service";
+export * from "./certificate-eligibility.engine";

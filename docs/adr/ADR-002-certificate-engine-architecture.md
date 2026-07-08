@@ -128,3 +128,24 @@ This ADR must be revisited **only** if:
 
 Any such revision is recorded as a **new ADR** that supersedes or amends this one;
 this document is not edited in place once Accepted.
+
+## Amendment note — Eligibility architecture frozen (2026-07-07)
+
+The certificate **eligibility architecture** is now frozen under this ADR via
+immutable **Rules C-3, C-4, C-5 and C-6** (see `docs/certificate-engine.md` §2):
+
+- **C-3** — `CertificateEligibilityEngine` is the single authority for whether a
+  certificate may be generated or issued.
+- **C-4** — the engine evaluates only `CertificateEligibilityFacts` from
+  `CertificateEligibilitySource`, which is its only read dependency.
+- **C-5** — commands (and jobs/APIs/integrations) execute the engine's decision and
+  never decide eligibility themselves.
+- **C-6** — the engine is a **deterministic** domain service: the same facts always
+  produce the same result; no clock, randomness, DB/repository, external service, or
+  mutable global state inside the engine. Time-dependent/external facts are loaded by
+  `CertificateEligibilitySource` and carried in `CertificateEligibilityFacts`.
+
+Any future architectural change to the eligibility flow (a new decision point, an
+additional read dependency of the engine, eligibility logic located outside
+`CertificateEligibilityEngine`, or a non-deterministic input to the engine) requires
+a **new ADR** that supersedes or amends this one.

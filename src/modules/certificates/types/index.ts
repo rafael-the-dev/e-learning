@@ -9,11 +9,7 @@
 // here describe certificate-domain results, not academic derivations.
 // =============================================================================
 
-import type {
-  CertificateEligibilityBlocker,
-  CertificateType,
-  FinancialClearanceStatus,
-} from "@/modules/certificates/constants";
+import type { FinancialClearanceStatus } from "@/modules/certificates/constants";
 
 /** Snapshot of a NON-ACADEMIC finance clearance check (D-3). Frozen onto the
  *  certificate at generation; never recomputed afterwards. */
@@ -24,19 +20,8 @@ export interface FinancialClearanceSnapshot {
   reference: string | null;
 }
 
-/** Result of evaluating whether a certificate may be issued against an ISSUED
- *  transcript version + policy. Read-only; produced by the future eligibility
- *  command. `warnings` carries soft gates such as MANUAL_APPROVAL_REQUIRED. */
-export interface CertificateEligibilityResult {
-  eligible: boolean;
-  blockers: CertificateEligibilityBlocker[];
-  warnings: CertificateEligibilityBlocker[];
-  transcriptVersionId: string;
-  policyId: string | null;
-  certificateType: CertificateType | string;
-  /** Null when the policy does not require a finance check. */
-  financialClearance: FinancialClearanceSnapshot | null;
-}
+// The eligibility RESULT contract (`CertificateEligibilityResult`) is defined in
+// `./eligibility-source` alongside the facts it embeds, and re-exported below.
 
 // The checksum contract type (`CertificateChecksumInput`) lives in
 // `../lib/certificate-checksum` and is re-exported from the module root

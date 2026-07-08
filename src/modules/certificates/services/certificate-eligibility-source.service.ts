@@ -119,7 +119,7 @@ export async function loadCertificateEligibilityFacts(
     // Finance integration is a future phase; the interface exists, the value is null.
     financialClearance: null,
     // No administrative sources yet.
-    administrative: {} as Record<string, never>,
+    administrative: {},
     metadata: {
       loadedAt: new Date(),
       sourceVersion: CERTIFICATE_ELIGIBILITY_SOURCE_VERSION,

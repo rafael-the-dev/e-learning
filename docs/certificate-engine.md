@@ -90,6 +90,60 @@ Engine is a certification layer *on top of* that record.
 > (finance read-model, approver identity, template registry) and **frozen onto the
 > Certificate**. The Certificate never recalculates an administrative fact after issue.
 
+> **Rule C-3 — Certificate eligibility has a single authority.**
+> `CertificateEligibilityEngine` is the only component allowed to determine whether a
+> certificate may be generated or issued. Commands, repositories, UI, jobs, scheduled
+> tasks, event handlers, APIs, integrations and future modules must never duplicate,
+> reimplement or bypass certificate eligibility rules. Every eligibility decision
+> originates **exclusively** from `CertificateEligibilityEngine`.
+> `CertificateEligibilitySource` provides facts; `CertificateEligibilityEngine`
+> evaluates those facts; commands execute the resulting decision. **No other component
+> is permitted to decide eligibility.**
+>
+> **Source provides facts. Engine decides. Commands execute.**
+
+> **Rule C-4 — Eligibility evaluates facts only.**
+> `CertificateEligibilityEngine` evaluates **only** the `CertificateEligibilityFacts`
+> supplied by `CertificateEligibilitySource`. The engine must never: query Prisma
+> directly · query repositories directly · call Transcript repositories · call Finance
+> repositories · call external APIs · load configuration directly · perform any
+> database access. If additional information becomes necessary, it must **first** be
+> exposed through `CertificateEligibilitySource`. `CertificateEligibilitySource` is
+> therefore the **only read dependency** of `CertificateEligibilityEngine`.
+
+> **Rule C-5 — Commands execute, never decide.**
+> `GenerateCertificateCommand`, `IssueCertificateCommand`, auto-issue handlers,
+> background jobs, HTTP endpoints, public APIs, integrations, and future services must
+> **consume** the decision returned by `CertificateEligibilityEngine`. They must never:
+> duplicate eligibility rules · re-check policy requirements · evaluate grades ·
+> evaluate attendance · evaluate financial clearance · decide whether a certificate may
+> be issued. **Commands orchestrate. `CertificateEligibilityEngine` decides.**
+
+> **Rule C-6 — Eligibility is a deterministic domain service.**
+> Given the same `CertificateEligibilityFacts`, `CertificateEligibilityEngine` must
+> **always** produce the same `CertificateEligibilityResult` — it is a pure function of
+> its input. The engine must not depend on: current database state · repository
+> queries · external services · the system clock (`Date.now()`/`new Date()`) · random
+> values · any mutable global state. Any time-dependent or external fact (e.g. "now",
+> an expiry cut-off, a finance flag) must be **loaded by `CertificateEligibilitySource`
+> and included explicitly in `CertificateEligibilityFacts`** (for example via
+> `metadata.loadedAt`), never read inside the engine. Determinism makes the decision
+> reproducible, testable from fixtures alone, and auditable: the same facts always
+> justify the same result. (Reinforces Rule C-4.)
+
+> **Architecture Checklist — Eligibility (code review).** Ask on every change that
+> touches the certificate flow:
+> - [ ] Does this code introduce eligibility logic outside `CertificateEligibilityEngine`?
+> - [ ] Does `CertificateEligibilityEngine` depend only on `CertificateEligibilitySource`?
+> - [ ] Does any command query repositories to decide eligibility?
+> - [ ] Does any repository evaluate business rules?
+> - [ ] Does any component bypass `CertificateEligibilityEngine`?
+> - [ ] Does `CertificateEligibilityEngine` read the clock, randomness, the DB, or any
+>   fact not present in `CertificateEligibilityFacts` (i.e. is it non-deterministic)?
+>
+> Any **"Yes"** (to the first, third, fourth, fifth or sixth) — or **"No"** to the
+> second — indicates an architectural violation of Rules C-3/C-4/C-5/C-6.
+
 ### What the Certificate Engine MAY read
 
 | Source | How | Why allowed |
@@ -668,6 +722,55 @@ output.
   errors propagate unchanged. **Never writes.** Accepts an optional
   `client?: PrismaClientOrTx`, passed straight through to the repositories.
 
+### 14b. Eligibility flow & ownership (Phase 3B — frozen by Rules C-3/C-4/C-5/C-6)
+
+The eligibility path has exactly one shape. Facts flow in one direction; the
+decision is made in exactly one place; commands only orchestrate around it.
+
+```
+CertificateEligibilitySource
+        │  loads facts (policy + transcript + finance + administrative)
+        ▼
+CertificateEligibilityFacts
+        │
+        ▼
+CertificateEligibilityEngine
+        │  evaluates facts against policy gates  (the ONLY decision point)
+        ▼
+EligibilityResult
+        │
+        ▼
+GenerateCertificateCommand  ──▶  IssueCertificateCommand
+        │  consume the result, then persist (repositories)
+        ▼
+persisted Certificate
+```
+
+**Dependency rule (frozen).** The only permitted edges are:
+
+```
+CertificateEligibilitySource ──▶ Policy Repository + Transcript ACL (+ Finance/Admin, future)
+CertificateEligibilityEngine ──▶ CertificateEligibilitySource        (its ONLY read dependency)
+GenerateCertificateCommand   ──▶ CertificateEligibilityEngine
+IssueCertificateCommand      ──▶ CertificateEligibilityEngine
+```
+
+**Commands must never connect directly to** `PolicyRepository`, the Transcript ACL,
+Finance, or administrative sources for the purpose of deciding eligibility — those
+reads belong to `CertificateEligibilitySource`, and the decision belongs to
+`CertificateEligibilityEngine`. (Commands still use the certificate-model
+repositories to *persist* the outcome — that is orchestration, not a decision.)
+
+**Ownership (frozen):**
+
+- `CertificateEligibilityEngine` **owns every eligibility rule** — the single
+  authority (Rule C-3), evaluating facts only (Rule C-4), as a **deterministic pure
+  function** of `CertificateEligibilityFacts` (Rule C-6): no clock, randomness, DB, or
+  external read inside the engine.
+- **Commands own orchestration only** — they consume the `EligibilityResult` and
+  execute it; they never decide (Rule C-5).
+- **Repositories own persistence only** — no business-rule evaluation.
+
 ---
 
 ## 15. Generation flow
@@ -1018,7 +1121,9 @@ question remains unresolved.
   - **Part A — `CertificateEligibilitySource` (read-aggregation façade):** ✅ **IMPLEMENTED
     (2026-07-07)** — see §14a and *Phase 3, Part A Implementation Notes* below.
   - **Part B — `CertificateEligibilityEngine`** (evaluates the façade's facts against
-    the policy gates): not started.
+    the policy gates): ✅ **IMPLEMENTED (2026-07-07)** — pure/deterministic; governed by
+    the frozen **Rules C-3/C-4/C-5/C-6** and the flow in §14b. See *Phase 3, Part B
+    Implementation Notes* below.
 - **Phase 4 — `EvaluateCertificateEligibilityCommand`** (read-only, snapshot-fact gates).
 - **Phase 5 — `GenerateCertificateDraftCommand`** (snapshot, verification code, no number).
 - **Phase 6 — `IssueCertificateCommand`** (number allocation, checksum, verification
@@ -1325,3 +1430,61 @@ lifecycle export.
 ✔ (154/154; +29) · `eslint` ✔. No schema or migration change.
 
 **Ready for Phase 3B: `CertificateEligibilityEngine` (evaluates these facts).**
+
+---
+
+## 36. Phase 3, Part B — Implementation Notes (2026-07-07)
+
+Part B shipped `CertificateEligibilityEngine` — the **pure, deterministic decision
+function** `evaluateCertificateEligibility(facts) → CertificateEligibilityResult`
+(`src/modules/certificates/services/certificate-eligibility.engine.ts`). It is the
+single eligibility authority (Rules C-3…C-6). **No data loading, no commands, no
+persistence, no events/audit. No schema changes, no migrations.**
+
+**Contract:**
+
+- **Input** — `CertificateEligibilityFacts` (from the Phase 3A source), extended this
+  phase with an optional `evaluationContext.evaluatedAt` and
+  `AdministrativeFacts.alreadyIssued?`.
+- **Output** — `CertificateEligibilityResult` (defined in `types/eligibility-source.ts`,
+  replacing the unused Phase 0 placeholder): `{ eligible, blockingReasons[],
+  warnings[], evaluatedPolicyId, evaluatedAt, facts }`. `eligible` is exactly
+  `blockingReasons.length === 0`; warnings never block; `facts` is returned unchanged.
+- New constants: `CertificateEligibilityBlocker.POLICY_NOT_FOUND` and the
+  `CertificateEligibilityWarning` vocabulary (informational only).
+
+**Blocking reasons** (all from copied facts — nothing recomputed):
+`POLICY_NOT_FOUND` (no policy) · `TRANSCRIPT_NOT_ISSUED` (missing / DRAFT / non-issued)
+· `TRANSCRIPT_REVOKED` · `TRANSCRIPT_SUPERSEDED` · `COURSE_NOT_COMPLETED`
+(`requiresCourseCompleted` and `courseProgressSnapshot.status !== COMPLETED`) ·
+`PENDING_REQUIRED_SUBJECTS` (`requiresNoPendingSubjects` and a required subject whose
+copied status ∉ {PASSED, COMPLETED, PROMOTED}) · `FINANCIAL_CLEARANCE_REQUIRED`
+(`requiresFinancialClearance` and clearance not `CLEARED`) · `MANUAL_APPROVAL_REQUIRED`
+(hard gate, never auto-approved) · `CERTIFICATE_ALREADY_ISSUED`
+(`administrative.alreadyIssued === true`). The transcript-status reason is
+mutually-exclusive (one per status); other gates accumulate.
+
+**Warnings** (non-blocking): `FINANCIAL_CLEARANCE_UNKNOWN` is emitted whenever the
+clearance status is `UNKNOWN` — it blocks only when the policy requires clearance
+(that is a separate blocker); on its own it is informational. (Expiry warnings are
+deferred; the engine never reads the clock.)
+
+**Determinism (Rule C-6):** the engine reads no DB/repository/service/clock/
+randomness; `evaluatedAt` comes from `evaluationContext.evaluatedAt` else
+`metadata.loadedAt`. Same facts → same result; it never mutates the input.
+
+**Commands (later phases) must consume this result** and execute it — they must not
+duplicate or re-check any gate (Rule C-5).
+
+**Tests (32):** 24 behavioural (happy path; each blocker; optional-subject ignored;
+finance null/NOT_CLEARED/UNKNOWN+warning/CLEARED; manual approval; already-issued;
+multiple blockers; warnings-don't-block; `eligible === blockingReasons.length===0`;
+`evaluatedPolicyId`; `evaluatedAt` from facts; facts returned unchanged; input not
+mutated; deterministic) + 8 architecture guards (no Prisma/db, no repository, no
+source/ACL/transcript-Prisma, no Grade/Attendance/course-completion, no
+event/audit, no clock/randomness, no writes).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates`
+✔ (187/187; +32, +1 warnings-vocabulary) · `eslint` ✔. No schema or migration change.
+
+**Ready for review before Phase 4.**
