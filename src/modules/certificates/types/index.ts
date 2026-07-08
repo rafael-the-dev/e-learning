@@ -47,3 +47,7 @@ export * from "./public-verification";
 // Export contracts (Phase 8) — the render DTO, the renderer/storage adapter
 // interfaces, and the outward export-result DTO for the Certificate Export Engine.
 export * from "./export";
+
+// Ministry export contracts (Phase 11) — the minimized source, the normalized
+// payload, the formatter/transport/storage adapter interfaces, and the result DTO.
+export * from "./ministry";

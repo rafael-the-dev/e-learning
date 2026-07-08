@@ -102,6 +102,16 @@ export const CertificateExportStatus = {
 export type CertificateExportStatus =
   (typeof CertificateExportStatus)[keyof typeof CertificateExportStatus];
 
+/** Serialization format for a MINISTRY export artifact (Phase 11). Distinct from the
+ *  export TYPE — every value here produces a `CertificateExportType.MINISTRY` row. */
+export const CertificateMinistryFormat = {
+  JSON: "JSON",
+  CSV: "CSV",
+  XML: "XML",
+} as const;
+export type CertificateMinistryFormat =
+  (typeof CertificateMinistryFormat)[keyof typeof CertificateMinistryFormat];
+
 /** Reasons a certificate cannot be issued — each makes `eligible = false`. Each is
  *  derived from a FROZEN transcript fact or an administrative gate — never from
  *  re-running an academic rule (ADR-002). NOTE: `MANUAL_APPROVAL_REQUIRED` is a

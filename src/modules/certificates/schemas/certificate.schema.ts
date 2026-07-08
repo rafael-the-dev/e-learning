@@ -3,6 +3,7 @@ import {
   CertificateEligibilityBlocker,
   CertificateExportStatus,
   CertificateExportType,
+  CertificateMinistryFormat,
   CertificateRequestStatus,
   CertificateStatus,
   CertificateType,
@@ -147,6 +148,26 @@ export const exportCertificateSchema = z
   .strict();
 /** INPUT type (pre-parse): `exportType` is optional and defaults to PDF. */
 export type ExportCertificateInput = z.input<typeof exportCertificateSchema>;
+
+/** Input for `ExportCertificateToMinistryCommand` (Phase 11) — serialize an ISSUED
+ *  certificate's frozen, privacy-minimized snapshot to a ministry artifact and submit
+ *  it through the transport adapter. `format` defaults to JSON. Every produced value
+ *  (external reference / file checksum) is computed server-side, never supplied here. */
+export const exportCertificateToMinistrySchema = z
+  .object({
+    certificateId: z.string().min(1, "O identificador do certificado é obrigatório"),
+    format: z
+      .enum([
+        CertificateMinistryFormat.JSON,
+        CertificateMinistryFormat.CSV,
+        CertificateMinistryFormat.XML,
+      ])
+      .default(CertificateMinistryFormat.JSON),
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+  })
+  .strict();
+/** INPUT type (pre-parse): `format` is optional and defaults to JSON. */
+export type ExportCertificateToMinistryInput = z.input<typeof exportCertificateToMinistrySchema>;
 
 /** Input for `ReconcileCertificateStalenessCommand` (Phase 9) — a manual/admin
  *  backfill that marks certificates STALE when their linked transcript version was

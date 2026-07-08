@@ -18,7 +18,9 @@
 // Phase 9 — `ReconcileCertificateStalenessCommand`: manual/admin backfill that marks
 // certificates STALE when their linked transcript version was invalidated (same
 // rules as the transcript-staleness event handler; idempotent; no regeneration).
-// Still absent: ministry export — a later phase.
+// Phase 11 — `ExportCertificateToMinistryCommand`: adapter-driven ministry/government
+// export (JSON/CSV/XML) of an ISSUED certificate's frozen, privacy-minimized snapshot;
+// separate from PDF export; no real external API yet (local transport).
 // =============================================================================
 
 export * from "./generate-certificate.command";
@@ -28,3 +30,4 @@ export * from "./suspend-certificate.command";
 export * from "./restore-certificate.command";
 export * from "./export-certificate.command";
 export * from "./reconcile-certificate-staleness.command";
+export * from "./export-certificate-to-ministry.command";
