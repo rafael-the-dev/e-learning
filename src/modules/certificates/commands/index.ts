@@ -14,8 +14,11 @@
 // `RestoreCertificateCommand` (SUSPENDED → ISSUED).
 // Phase 8 — `ExportCertificateCommand`: renders an ISSUED/SUSPENDED certificate to
 // a PDF artifact and tracks it in a `CertificateExport` row (consumes frozen
-// snapshots only; never reads Academic Core / Transcript). Still absent: STALE
-// handling, authenticated download route, ministry export — later phases.
+// snapshots only; never reads Academic Core / Transcript).
+// Phase 9 — `ReconcileCertificateStalenessCommand`: manual/admin backfill that marks
+// certificates STALE when their linked transcript version was invalidated (same
+// rules as the transcript-staleness event handler; idempotent; no regeneration).
+// Still absent: ministry export — a later phase.
 // =============================================================================
 
 export * from "./generate-certificate.command";
@@ -24,3 +27,4 @@ export * from "./revoke-certificate.command";
 export * from "./suspend-certificate.command";
 export * from "./restore-certificate.command";
 export * from "./export-certificate.command";
+export * from "./reconcile-certificate-staleness.command";

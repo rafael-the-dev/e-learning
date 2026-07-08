@@ -2077,3 +2077,87 @@ or migration change.
 **READY exports download securely through the server; no raw `fileUrl`/key leakage; no
 public unauthenticated access; student-own scoping enforced server-side; guardian deferred;
 no Academic Core / Transcript reads.** Next: STALE detection + ministry export.
+
+## 43. Phase 9 — Implementation Notes (Certificate STALE Detection, 2026-07-08)
+
+Phase 9 makes a certificate **react** to the lifecycle of the transcript version it
+certified. The rule is strict: a certificate **never silently updates**, **never
+recalculates academics**, and **only reacts to a transcript lifecycle FACT** carried
+on a domain event — it reads **no** Transcript / Academic Core / grade / attendance
+table. Regeneration, re-issue, PDF/export, ministry export, notifications and UI are
+explicitly **out of scope** for this phase.
+
+**Triggers → stale reasons (§1/§4).** The reaction fires on three transcript events,
+each mapped to an existing `StaleReason`:
+`transcript.superseded → TRANSCRIPT_SUPERSEDED`, `transcript.revoked →
+TRANSCRIPT_REVOKED`, `transcript.marked_stale → TRANSCRIPT_MARKED_STALE`.
+
+**Status semantics (§2/§3).** Applied per certificate by the shared decision:
+- **ISSUED → STALE** + `staleReason` + `staleDetectedAt`; verification `publicStatus →
+  SUSPENDED` (a stale certificate must not read VALID publicly).
+- **SUSPENDED → stays SUSPENDED**, but the stale metadata (`staleReason`/
+  `staleDetectedAt`) is recorded; `publicStatus` stays SUSPENDED. *We never hide an
+  active suspension behind STALE.*
+- **STALE → stays STALE**; metadata refreshed only if the reason changed.
+- **REVOKED → unchanged** (terminal).
+- **DRAFT / PENDING_APPROVAL → unchanged** (pre-issue drafts are not mutated yet).
+
+**Idempotency (§10).** The decision makes a repeated identical fact a per-certificate
+no-op: `REVOKED`/`DRAFT`/`PENDING_APPROVAL` skip; already-STALE (or SUSPENDED) **with
+the same reason** skips. So no duplicate `CertificateEvent` / `AuditLog` / `DomainEvent`
+is written. The event dispatcher additionally skips a handler that already PROCESSED an
+event. Each certificate is re-read **inside its transaction** and every write is
+conditional (`markCertificateStale` `WHERE status = ISSUED`; `setCertificateStaleMetadata`
+`WHERE status IN (ISSUED, SUSPENDED, STALE)`), so a concurrent transition surfaces as
+`count !== 1` → abort (that certificate only).
+
+**Event handler — `CertificateTranscriptStalenessHandler`** (`src/server/events/handlers/`,
+registered in `registry.ts`). `canHandle` matches the three transcript events; `handle`
+reads `organizationId` + `transcriptVersionId` from the **payload**, loads the linked
+live certificates (`findCertificatesByTranscriptVersion`, statuses `ISSUED/SUSPENDED/
+STALE` — pre-issue/terminal excluded up front), applies staleness in **one transaction
+per certificate** with a **null system actor**, and publishes `certificate.marked_stale`
+**after** commit. It imports no transcript module.
+
+**Repair command — `ReconcileCertificateStalenessCommand`** (`commands/`). Manual/admin
+backfill for a missed reaction. Input: `transcriptVersionId?` (all linked) **or**
+`certificateId?` (one) — at least one required; `dryRun` (**default true**, reports the
+plan without writing); `reason?` (one of the three transcript reasons, default
+`TRANSCRIPT_MARKED_STALE`). Authorized by **`certificates.suspend`** (stale behaves like
+a public suspension). Apply mode uses **one transaction per certificate** so a single
+failure is isolated; returns `{ dryRun, processed, changed, skipped, failed, items }`. It
+reads no transcript table (the caller supplies the reason) and does no regeneration/
+export.
+
+**Shared core — `commands/certificate-staleness-shared.ts`.** `mapTranscriptEventToStaleReason`,
+the pure `decideCertificateStaleness` (used for dry-run), and `applyCertificateStalenessInTx`
+(the single write path: conditional status/metadata → verification projection → append-only
+`CertificateEvent` → `AuditLog`). Used by BOTH the handler and the command. The `AuditLog`
+is written directly (not via `auditService`) so the **system actor id can be null** (§8);
+the domain-event payload carries `certificateId`, `certificateNumber`, `certificateType`,
+`transcriptVersionId`, `transcriptNumber`, `staleReason`, `previousStatus`, `newStatus`,
+`actorId` (null for the handler) and `sourceEventId`.
+
+**Data access (§5).** `findCertificatesByTranscriptVersion` (Certificate table only),
+`markCertificateStale` (now guarded `WHERE status = ISSUED`), `setCertificateStaleMetadata`
+(`WHERE status IN (ISSUED, SUSPENDED, STALE)`, status column untouched), and
+`updatePublicStatusByCertificateId` (verification, org-scoped, by certificate id). No
+snapshot / number / checksum / transcript-pointer mutation.
+
+**No schema/migration change.** Tests: **+31 within `src/modules/certificates`** (→ 475) —
+the reconcile command suite (dry-run by cert/version, apply, idempotency, partial-failure
+isolation, authz, cross-tenant 404, no-regeneration), the Phase 9 repository methods
+(22–24), and the arch guards (25–30) — **plus a 13-test handler suite** under
+`src/server/events` (superseded/revoked/marked_stale → STALE, publicStatus SUSPENDED,
+SUSPENDED-keeps-status, REVOKED/DRAFT/PENDING no-op, idempotency, payload-only, missing
+target).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔
+(475/475) + handler suite ✔ (13/13) · `eslint` ✔ (0 errors) · `prisma validate` ✔. No
+schema or migration change.
+
+**Certificates now react to transcript invalidation: ISSUED → STALE, SUSPENDED keeps its
+suspension, REVOKED is terminal, drafts untouched; public verification shows SUSPENDED for
+stale certs; idempotent; a manual repair command backfills — all with no academic
+recalculation, no transcript reads, and no regeneration/re-issue/export.** Next: ministry
+export.

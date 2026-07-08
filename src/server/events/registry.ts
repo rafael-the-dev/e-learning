@@ -4,6 +4,7 @@ import { EnrollmentActivationEventHandler } from "./handlers/enrollment-activati
 import { StudentUserProvisioningHandler } from "./handlers/student-user-provisioning.handler";
 import { AssessmentEventHandler } from "./handlers/assessment.handler";
 import { NotificationEventHandler } from "./handlers/notification.handler";
+import { CertificateTranscriptStalenessHandler } from "./handlers/certificate-transcript-staleness.handler";
 import type { DomainEventHandler } from "./event-handlers";
 
 // =============================================================================
@@ -19,4 +20,5 @@ export const registeredHandlers: DomainEventHandler[] = [
   new StudentUserProvisioningHandler(),
   new AssessmentEventHandler(),
   new NotificationEventHandler(),
+  new CertificateTranscriptStalenessHandler(),
 ];

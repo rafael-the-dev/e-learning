@@ -8,6 +8,7 @@ import {
   CertificateType,
   CertificateVerificationPublicStatus,
   FinancialClearanceStatus,
+  StaleReason,
 } from "@/modules/certificates/constants";
 
 // =============================================================================
@@ -146,6 +147,33 @@ export const exportCertificateSchema = z
   .strict();
 /** INPUT type (pre-parse): `exportType` is optional and defaults to PDF. */
 export type ExportCertificateInput = z.input<typeof exportCertificateSchema>;
+
+/** Input for `ReconcileCertificateStalenessCommand` (Phase 9) — a manual/admin
+ *  backfill that marks certificates STALE when their linked transcript version was
+ *  invalidated but the reactive event was missed. At least one target is required
+ *  (`transcriptVersionId` processes all linked certificates; `certificateId`
+ *  processes one). `dryRun` defaults to TRUE (report only). `reason` is one of the
+ *  transcript-driven stale reasons and defaults to `TRANSCRIPT_MARKED_STALE`. The
+ *  command reads NO transcript table — the caller supplies the reason. */
+export const reconcileCertificateStalenessSchema = z
+  .object({
+    transcriptVersionId: z.string().min(1).optional(),
+    certificateId: z.string().min(1).optional(),
+    dryRun: z.boolean().optional().default(true),
+    reason: z
+      .enum([
+        StaleReason.TRANSCRIPT_SUPERSEDED,
+        StaleReason.TRANSCRIPT_REVOKED,
+        StaleReason.TRANSCRIPT_MARKED_STALE,
+      ])
+      .optional(),
+  })
+  .strict()
+  .refine((v) => Boolean(v.transcriptVersionId) || Boolean(v.certificateId), {
+    message: "É necessário indicar a versão do histórico ou o certificado",
+  });
+/** INPUT type (pre-parse): `dryRun` is optional and defaults to `true`. */
+export type ReconcileCertificateStalenessInput = z.input<typeof reconcileCertificateStalenessSchema>;
 
 /** Public verification code (Phase 7) — the opaque, globally-unique lookup handle.
  *  32 lowercase-hex chars (128 bits), matching `generateVerificationCode`. Validated

@@ -146,6 +146,29 @@ export async function updateCertificateVerificationStatus(
   return { count: res.count };
 }
 
+export interface UpdatePublicStatusByCertificateIdParams {
+  organizationId: string;
+  certificateId: string;
+  publicStatus: string;
+}
+
+/** Org-scoped `publicStatus` write addressed by `certificateId` (Phase 9). The
+ *  staleness reaction knows the certificate, not the verification row id, so this
+ *  updates the 1:1 projection by its owning certificate. Returns the affected count
+ *  (`0` when no projection exists — the caller decides whether that is an error).
+ *  Touches `publicStatus` only. */
+export async function updatePublicStatusByCertificateId(
+  params: UpdatePublicStatusByCertificateIdParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.certificateVerification.updateMany({
+    where: { organizationId: params.organizationId, certificateId: params.certificateId },
+    data: { publicStatus: params.publicStatus },
+  });
+  return { count: res.count };
+}
+
 export interface IncrementVerificationCountParams {
   id: string;
   organizationId: string;
