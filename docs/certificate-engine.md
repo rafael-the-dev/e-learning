@@ -2161,3 +2161,86 @@ suspension, REVOKED is terminal, drafts untouched; public verification shows SUS
 stale certs; idempotent; a manual repair command backfills — all with no academic
 recalculation, no transcript reads, and no regeneration/re-issue/export.** Next: ministry
 export.
+
+## 44. Phase 10 — Implementation Notes (Portal Integration, 2026-07-08)
+
+Phase 10 exposes the Certificate Engine to authenticated users through **read models +
+thin HTTP routes**. The binding rule holds: portals consume Certificate read models and
+commands — they **never read Academic Core or the Transcript, and never recompute
+eligibility**. All display data comes from the certificate's OWN frozen columns/snapshots.
+
+**Read services (READ-ONLY, in `services/`).**
+- **`CertificateAdminReadService`** — `list(context, filters)` (org-scoped, paginated) +
+  `getDetail(context, id)`. Requires `certificates.view`; derives `allowedActions` from the
+  caller's certificate permissions. Filters: `studentId`, `courseId`, `certificateType`,
+  `status`, `issuedFrom`, `issuedTo`, `search` (certificate number), `page`/`pageSize`.
+- **`CertificateStudentReadService`** — `list` + `getDetail`, restricted to the caller's OWN
+  certificates. `studentId` is resolved server-side from the session (`resolveStudentScope`,
+  never from input); requires `certificates.viewOwn`; another student's id detail → not-found.
+Both batch the verification-projection + READY-export lookups (no N+1) and make **no**
+business decision.
+
+**DTOs + `allowedActions` (`types/portal.ts`, mapper in `services/certificate-portal.mapper.ts`).**
+`allowedActions` (`canIssue`/`canRevoke`/`canSuspend`/`canRestore`/`canExport`/`canDownload`)
+are computed **server-side** from permissions + certificate status + whether a READY export
+exists (restore reuses `certificates.suspend`). The UI only renders flags. **Privacy split:**
+the **student** detail DTO omits audit/events, the transcript & certificate checksums, the
+transcript pointer/number, and the finance reference; the **admin** detail DTO exposes a safe
+event history + issue-basis summary but **never** a raw `fileUrl` / storage key / raw
+metadata blob. Export summaries carry only `{ id, exportType, status, exportedAt, canDownload }`.
+
+**Routes (thin shells; commands own all business rules).**
+- Admin/secretary: `GET /api/certificates`, `GET /api/certificates/:id`, and
+  `POST /api/certificates/generate|:id/issue|:id/revoke|:id/suspend|:id/restore|:id/export`
+  — each delegates to the existing command (validate → authorize → execute) or read service;
+  typed errors map to `401/403/404/422/500`. No eligibility, no repository writes, no PDF in
+  a route.
+- Student: `GET /api/student/certificates`, `GET /api/student/certificates/:id`, and
+  `GET /api/student/certificates/exports/:exportId/download` — the download is a
+  student-namespaced **alias over the Phase 8C download service**, which already enforces
+  own-scope and streams bytes through the server (never a `fileUrl` / storage key).
+
+**Guardian — DEFERRED (denied by default).** The generic guardian-student scope infra exists
+(`resolveGuardianScope` + `canViewDocuments`/`canViewAcademic` link flags), but a certificate
+visibility *policy* for guardians was deliberately deferred in Phase 8C/9 and remains so: no
+guardian certificate endpoint is exposed, and a guardian is denied by both read services
+(lacks `certificates.view`, not student-scoped so no `viewOwn` path). A future phase may scope
+guardian certificate visibility via the link flags + the Phase 8C download service.
+
+**Download integration (§9).** Both admin and student download through the authenticated
+Phase 8C endpoint/service; `fileUrl`/storage key are never exposed and there is no redirect.
+The Phase 8C route and the student alias build their response through ONE shared helper
+(`buildCertificateDownloadResponse` in `lib/portal-http.ts` — `application/pdf`, attachment +
+sanitized filename, `private, no-store`, `nosniff`, `ETag` when a checksum exists) so the two
+cannot drift.
+
+**Pagination.** Both read services return `{ items, total, page, pageSize }` with `total` from a
+scoped `countCertificates` (own-scoped for the student) — so paging past the first page works.
+
+**UI.** The read services + DTOs + `allowedActions` are UI-ready (the UI need only render the
+flags). The portal **pages** (admin table/filters/detail drawer + student cards) are a thin
+follow-up owned by the frontend team and are intentionally out of this backend integration
+commit; no business branching will live in them.
+
+**Tests:** **20 portal read-service tests** (admin list/detail + cross-tenant + allowedActions,
+admin filters — issuedFrom/issuedTo range, `search` contains, org-scoped —, student own-scope
+list/detail incl. `total` = full scoped count across pages, DTO privacy/redaction, guardian
+denial) within `src/modules/certificates` **plus 21 route tests** under `src/app` (admin list +
+generate/issue/revoke/suspend/restore/export command wiring + 401/403 mapping + Phase 10 arch
+guards 24–29; student list + own-scoped download 14/15). Repository: `countCertificates`,
+`listVerificationsByCertificateIds`, `listCertificateIdsWithReadyExport`, and `issuedFrom/
+issuedTo/search` list filters (fake-db gained `contains`).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔
+(482/482) + portal route suites ✔ (34/34) · `eslint` ✔ (0 errors) · `prisma validate` ✔. No
+schema or migration change.
+
+**Review follow-ups applied (2026-07-08):** M1 — the student list `total` now comes from a
+scoped `countCertificates` (was the page length), so pagination past page 1 works; L1 — added
+behavioural tests for the admin `issuedFrom`/`issuedTo`/`search` filters (org-scoped); L2 —
+extracted the shared `buildCertificateDownloadResponse` helper used by both download routes.
+
+**The engine is now reachable safely: admins/secretaries manage within their tenant, students
+see only their own certificates, download stays authenticated, `allowedActions` are decided
+server-side, and no route/read service reads Academic Core / Transcript or duplicates
+eligibility.** Guardian access is deferred. Next: ministry export.

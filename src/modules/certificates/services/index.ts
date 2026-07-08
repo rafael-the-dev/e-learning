@@ -11,7 +11,10 @@
 //   • `public-rate-limiter`: in-memory throttle seam for the public endpoint.
 // Phase 8C — `CertificateExportDownloadService`: authorizes + streams a READY export
 //   artifact through the server (read-only; never exposes the storage key / fileUrl).
-// Still absent: portal UI, ministry export — later phases.
+// Phase 10 — portal read models (READ-ONLY): `CertificateAdminReadService` (org-scoped
+//   list/detail + server-side allowedActions) and `CertificateStudentReadService`
+//   (own-scope, redacted DTOs). Guardian access is DEFERRED (denied by default).
+// Still absent: ministry export — a later phase.
 // =============================================================================
 
 export * from "./certificate-eligibility-source.service";
@@ -20,3 +23,5 @@ export * from "./certificate-public-verification.service";
 export * from "./certificate-expiry.service";
 export * from "./public-rate-limiter";
 export * from "./certificate-export-download.service";
+export * from "./certificate-admin-read.service";
+export * from "./certificate-student-read.service";

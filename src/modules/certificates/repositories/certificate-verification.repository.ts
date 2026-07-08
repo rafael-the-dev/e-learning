@@ -146,6 +146,26 @@ export async function updateCertificateVerificationStatus(
   return { count: res.count };
 }
 
+export interface ListVerificationsByCertificateIdsParams {
+  organizationId: string;
+  certificateIds: string[];
+}
+
+/** Batch org-scoped fetch of the verification projections for a set of certificates
+ *  (Phase 10 portal lists) — one query, no N+1. Returns `[]` for an empty id list. */
+export async function listVerificationsByCertificateIds(
+  params: ListVerificationsByCertificateIdsParams,
+  client?: PrismaClientOrTx
+): Promise<CertificateVerificationRecord[]> {
+  if (params.certificateIds.length === 0) return [];
+  const db = client ?? (await getDb());
+  const rows = await db.certificateVerification.findMany({
+    where: { organizationId: params.organizationId, certificateId: { in: params.certificateIds } },
+    select: verificationSelect,
+  });
+  return rows.map(toRecord);
+}
+
 export interface UpdatePublicStatusByCertificateIdParams {
   organizationId: string;
   certificateId: string;

@@ -204,6 +204,12 @@ export interface CertificateListFilters {
   transcriptVersionId?: string;
   certificateType?: string;
   status?: string;
+  /** Inclusive `issuedAt` lower bound (Phase 10 admin filter). */
+  issuedFrom?: Date;
+  /** Inclusive `issuedAt` upper bound (Phase 10 admin filter). */
+  issuedTo?: Date;
+  /** Free-text match against `certificateNumber` (Phase 10 admin filter). */
+  search?: string;
   includeDeleted?: boolean;
   skip?: number;
   take?: number;
