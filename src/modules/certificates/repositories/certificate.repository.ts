@@ -273,6 +273,39 @@ export async function findExistingActiveCertificate(
   return row ? toRecord(row) : null;
 }
 
+export interface FindCertificatesByTranscriptVersionParams {
+  organizationId: string;
+  transcriptVersionId: string;
+  /** Optional status filter (e.g. `[ISSUED, SUSPENDED, STALE]`); omitted → all live rows. */
+  statuses?: string[];
+}
+
+/** Org-scoped list of the LIVE certificates linked to a transcript version (Phase 9).
+ *  Backs the transcript-staleness reaction: a transcript-lifecycle fact names a
+ *  `transcriptVersionId`, and every certificate that certified it may need to be
+ *  marked STALE. Reads the Certificate table ONLY — no transcript/academic read.
+ *  `deletedAt = null`; optional `{ status IN statuses }`; deterministic order. */
+export async function findCertificatesByTranscriptVersion(
+  params: FindCertificatesByTranscriptVersionParams,
+  client?: PrismaClientOrTx
+): Promise<CertificateRecord[]> {
+  const db = client ?? (await getDb());
+  const where: Record<string, unknown> = {
+    organizationId: params.organizationId,
+    transcriptVersionId: params.transcriptVersionId,
+    deletedAt: null,
+  };
+  if (params.statuses && params.statuses.length > 0) {
+    where.status = { in: params.statuses };
+  }
+  const rows = await db.certificate.findMany({
+    where,
+    select: certificateSelect,
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  return rows.map(toRecord);
+}
+
 export async function listCertificates(
   filters: CertificateListFilters,
   client?: PrismaClientOrTx
@@ -524,18 +557,56 @@ export interface MarkCertificateStaleParams {
   staleDetectedAt?: Date;
 }
 
-/** Focused column setter: records STALE + `staleReason`/`staleDetectedAt`. Whether
- *  the certificate is *eligible* to become stale is the caller's decision — this
- *  setter enforces no source-status precondition beyond "still live". */
+/** Conditional stale transition: ISSUED → STALE, setting `staleReason`/
+ *  `staleDetectedAt` (Phase 9). The `status = ISSUED` guard makes a double-mark /
+ *  mark-after-terminal race a no-op (`count: 0`) — the caller asserts `count === 1`.
+ *  Only an ISSUED certificate flips status here; a SUSPENDED/STALE certificate keeps
+ *  its status and records the stale metadata via {@link setCertificateStaleMetadata}
+ *  instead. Never touches the frozen content columns, number, checksum, or transcript
+ *  pointer. */
 export async function markCertificateStale(
   params: MarkCertificateStaleParams,
   client?: PrismaClientOrTx
 ): Promise<{ count: number }> {
   const db = client ?? (await getDb());
   const res = await db.certificate.updateMany({
-    where: { id: params.id, organizationId: params.organizationId, deletedAt: null },
+    where: { id: params.id, organizationId: params.organizationId, deletedAt: null, status: "ISSUED" },
     data: {
       status: "STALE",
+      staleReason: params.staleReason,
+      staleDetectedAt: params.staleDetectedAt ?? new Date(),
+    },
+  });
+  return { count: res.count };
+}
+
+export interface SetCertificateStaleMetadataParams {
+  id: string;
+  organizationId: string;
+  staleReason: string;
+  staleDetectedAt?: Date;
+}
+
+/** Records the stale metadata (`staleReason`/`staleDetectedAt`) WITHOUT changing the
+ *  lifecycle status (Phase 9). Used when a SUSPENDED or already-STALE certificate's
+ *  linked transcript is invalidated: the public suspension / stale state stays, but
+ *  the reason is captured (we must not hide an active suspension behind STALE, nor
+ *  overwrite a REVOKED/DRAFT/PENDING row). The `status IN (ISSUED, SUSPENDED, STALE)`
+ *  guard keeps a REVOKED/DRAFT/PENDING race a no-op (`count: 0`). Never touches the
+ *  status column, the number, the checksum, or the transcript pointer. */
+export async function setCertificateStaleMetadata(
+  params: SetCertificateStaleMetadataParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.certificate.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      deletedAt: null,
+      status: { in: ["ISSUED", "SUSPENDED", "STALE"] },
+    },
+    data: {
       staleReason: params.staleReason,
       staleDetectedAt: params.staleDetectedAt ?? new Date(),
     },
