@@ -32,6 +32,10 @@ import { checkRateLimit } from "@/modules/certificates/services/public-rate-limi
 const RATE_LIMIT = 30;
 const RATE_WINDOW_MS = 60_000;
 
+/** A public verification response is never cacheable — it must not be stored by a
+ *  CDN/browser on ANY path (a cached NOT_FOUND/VALID would leak or go stale). */
+const NO_STORE_HEADERS = { "Cache-Control": "no-store" } as const;
+
 function clientIp(req: NextRequest): string {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0]!.trim();
@@ -50,23 +54,26 @@ export async function GET(
     const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
     return NextResponse.json(
       { error: "Demasiados pedidos. Tente novamente mais tarde." },
-      { status: 429, headers: { "Retry-After": String(retryAfter) } }
+      { status: 429, headers: { ...NO_STORE_HEADERS, "Retry-After": String(retryAfter) } }
     );
   }
 
   const { verificationCode } = await params;
   const parsed = certificateVerificationCodeSchema.safeParse(verificationCode);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Código de verificação inválido" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Código de verificação inválido" },
+      { status: 400, headers: NO_STORE_HEADERS }
+    );
   }
 
   try {
     const result = await verifyCertificatePublicService.verify({ verificationCode: parsed.data });
-    return NextResponse.json(result, {
-      status: 200,
-      headers: { "Cache-Control": "no-store" },
-    });
+    return NextResponse.json(result, { status: 200, headers: NO_STORE_HEADERS });
   } catch {
-    return NextResponse.json({ error: "Erro interno no servidor" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Erro interno no servidor" },
+      { status: 500, headers: NO_STORE_HEADERS }
+    );
   }
 }
