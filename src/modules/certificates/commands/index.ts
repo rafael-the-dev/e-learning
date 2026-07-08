@@ -11,8 +11,11 @@
 // official ISSUED record (number + checksum + verification row, event post-commit).
 // Phase 6 — post-issue lifecycle: `RevokeCertificateCommand` (ISSUED|SUSPENDED →
 // REVOKED, terminal), `SuspendCertificateCommand` (ISSUED → SUSPENDED),
-// `RestoreCertificateCommand` (SUSPENDED → ISSUED). Still absent: STALE handling,
-// export, public verification endpoint — later phases.
+// `RestoreCertificateCommand` (SUSPENDED → ISSUED).
+// Phase 8 — `ExportCertificateCommand`: renders an ISSUED/SUSPENDED certificate to
+// a PDF artifact and tracks it in a `CertificateExport` row (consumes frozen
+// snapshots only; never reads Academic Core / Transcript). Still absent: STALE
+// handling, authenticated download route, ministry export — later phases.
 // =============================================================================
 
 export * from "./generate-certificate.command";
@@ -20,3 +23,4 @@ export * from "./issue-certificate.command";
 export * from "./revoke-certificate.command";
 export * from "./suspend-certificate.command";
 export * from "./restore-certificate.command";
+export * from "./export-certificate.command";

@@ -135,6 +135,18 @@ export const restoreCertificateSchema = z
   .strict();
 export type RestoreCertificateInput = z.infer<typeof restoreCertificateSchema>;
 
+/** Input for `ExportCertificateCommand` — render + persist a certificate artifact.
+ *  The certificate is addressed by id; `exportType` defaults to PDF. Every produced
+ *  value (file url/checksum) is computed server-side and never supplied by the client. */
+export const exportCertificateSchema = z
+  .object({
+    certificateId: z.string().min(1, "O identificador do certificado é obrigatório"),
+    exportType: certificateExportTypeSchema.default(CertificateExportType.PDF),
+  })
+  .strict();
+/** INPUT type (pre-parse): `exportType` is optional and defaults to PDF. */
+export type ExportCertificateInput = z.input<typeof exportCertificateSchema>;
+
 /** Public verification code (Phase 7) — the opaque, globally-unique lookup handle.
  *  32 lowercase-hex chars (128 bits), matching `generateVerificationCode`. Validated
  *  at the public endpoint before any DB lookup so malformed input never hits the DB. */
