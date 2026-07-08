@@ -1909,3 +1909,108 @@ file, since write-capable services legitimately depend on other repositories).
 
 **Public verification works; expiry projection works; no sensitive data leaked; certificate
 immutable; no Academic Core / Transcript reads.** Next: STALE detection + PDF/QR/export.
+
+## 41. Phase 8 — Implementation Notes (Certificate Export Engine, 2026-07-08)
+
+Phase 8 adds the outward artifact half of the engine — rendering an issued certificate
+to a PDF, hashing and storing that file, and tracking it in a `CertificateExport` row.
+It CONSUMES the frozen certificate snapshots; it recalculates nothing.
+
+**Command — `ExportCertificateCommand`** (`commands/export-certificate.command.ts`).
+Input `{ certificateId, exportType = PDF }`; auth `certificates.export`. Guards (§1):
+the certificate must exist **in the tenant** (a cross-tenant id is `NotFoundError`), be
+`ISSUED` or `SUSPENDED` (`REVOKED` / `DRAFT` / `PENDING_APPROVAL` / **`STALE`** are refused —
+a stale certificate never produces an artifact), and carry a `certificateNumber`, a
+`checksum`, and a `verificationCode`. API/MINISTRY export types are rejected this phase.
+
+**Render source (§2) — snapshots only.** The command reads exactly three tables —
+`Certificate`, `CertificateTemplate`, `CertificateVerification` — plus the organization
+name for display. It **never** reads the Transcript, Grade, Attendance, `StudentProgress`,
+or Academic Core, and **never** re-evaluates eligibility. Static guards (tests 26–29)
+assert no such import exists in the command, renderer, or storage.
+
+**Template resolution (§3).** Pinned `certificateTemplateId` → that template; otherwise
+the active org-default for `(certificateType, pt-PT)`. No template → `BusinessRuleError`
+`TEMPLATE_NOT_FOUND`, thrown **before** any export row is created (no orphan PENDING).
+
+**QR — public pointer only (§4).** `buildQrPayload` returns the public verification URL
+(`buildVerificationUrl`, carrying the opaque code) and nothing else — no certificate/
+transcript checksum, no internal id, no student document, no grades/attendance. The base
+URL is resolved from the environment (`NEXT_PUBLIC_APP_URL` / `APP_URL` / `NEXTAUTH_URL`)
+or injected for deterministic tests. The machine endpoint already lives at
+`/api/public/certificates/verify/:code`; the human page at `PUBLIC_VERIFICATION_PATH`
+(`/verify/certificate/<code>`) is a later UI phase.
+
+**Renderer — `CertificatePdfRenderer`** (`export/certificate-pdf-renderer.ts`). Takes a
+privacy-safe `CertificateRenderDto` (+ template view) and returns `{ buffer, contentType:
+"application/pdf" }`. It holds no business rule and imports no repository (guards 30–31).
+The default `DeterministicCertificatePdfRenderer` is a dependency-free minimal-PDF writer
+(xref offsets computed from real bytes → valid by construction; no clock/randomness → same
+input yields byte-identical output). A richer branded renderer can replace it behind the
+interface. The renderer + storage live **outside** `services/` on purpose: the service-layer
+architecture guards forbid `infrastructure/storage` and PDF dependencies in a service, and
+these are infrastructure adapters, not domain services.
+
+**Storage — `CertificateExportStorage`** (`export/certificate-export-storage.ts`). Wraps
+`@/infrastructure/storage`; stores the buffer under `certificates/<org>/<cert>/<export>.pdf`,
+returns the provider URL, and computes the **file checksum** = SHA-256 of the exported bytes.
+This is SEPARATE from `Certificate.checksum` (§8): the certificate checksum protects the
+frozen content; the file checksum protects the produced artifact. The command never reads or
+writes `Certificate.checksum`.
+
+**Transaction discipline (§11).** No DB transaction is held during rendering/storage. Flow:
+create the `CertificateExport` row `PENDING` → render → store → in **one short transaction**
+flip it `READY` (+ `fileUrl` / `fileChecksum` / `exportedBy` / `exportedAt`), append a
+`certificate.exported` `CertificateEvent`, and write a `certificate.exported` AuditLog → then
+publish the `certificate.exported` DomainEvent **after commit**. On render/storage failure the
+row is flipped `FAILED` and the error re-thrown; no success event/audit is emitted and the
+certificate is never mutated. (The `CertificateExport` model has no failure-metadata column,
+so a failure records only `status = FAILED` — noted here rather than inventing a column.)
+
+**Failure hardening (Phase 8B, 2026-07-08).** Both failure windows now flip the row `FAILED`
+and **always re-throw the ORIGINAL error**:
+- *Render / storage failure* — the artifact was not (fully) stored; the row is marked `FAILED`
+  best-effort and the render/storage error is re-thrown.
+- *Finalize-tx failure* — render + store already succeeded, so the transaction that marks
+  `READY` + writes the event/audit is wrapped: on failure it rolls back (no `READY`, no event,
+  no audit, no DomainEvent), the row is marked `FAILED` best-effort, and the **original finalize
+  error** is re-thrown. This closes the earlier gap where a finalize failure left the row stuck
+  in `PENDING`.
+- The `FAILED` mark is **best-effort**: `markFailedBestEffort` swallows any error from its own
+  status update so it can never mask the true cause. If that update itself fails, the row may
+  remain `PENDING` but the original render/storage/finalize error is still the thrown error.
+- A finalize failure can leave an **orphaned stored artifact** (bytes in storage with a non-
+  `READY` row). This is deliberate — the artifact is never deleted here; a **storage cleanup
+  job is future work**. No download route exists yet, so an orphaned artifact is unreachable.
+
+**No lifecycle change.** Export is not a lifecycle transition: `CertificateEvent`
+`previousStatus === newStatus` (the current status), and no `markCertificate*` /
+`updateCertificateMetadata` / certificate-table write appears in the command (guard 32).
+
+**Download / access (§9) — deferred.** An authenticated, org-scoped download route
+(`certificates.export`, plus student-own / guardian-linked scoping) that resolves the internal
+`storageKey`/`fileUrl` to a short-lived URL is the **next phase**. The result DTO exposes
+`fileUrl` today; production must serve it through that authenticated route rather than a raw
+public path (the `storageKey` is never returned to a consumer verbatim).
+
+**No schema/migration change.** `CertificateExport` (Phase 1) already models the artifact row;
+no Prisma model was added (the Phase-1 model-set guard still passes).
+
+**Tests (+41 → 399 module total at Phase 8; +17 → 416 after Phase 8B):** command auth 1–2,
+export eligibility 3–8, template resolution 9–11, QR/privacy 12–14, rendering/storage 15–17,
+export-record lifecycle (PENDING→READY / FAILED / no-mutation) 18–21, events/audit 22–25, and
+static architecture guards 26–32 (32 tests); the deterministic renderer (valid PDF, determinism,
+whitelist, no-leak, 4 tests); and the verification-URL / QR-payload builder (5 tests). **Phase 8B
+adds 17:** finalize-tx failure (FAILED-mark, original-error preservation, no event/audit,
+certificate unchanged, artifact-stored-but-not-READY, failing-FAILED-mark 3.1–3.7); failure-path
+error preservation (render/storage + failing-FAILED-mark still rethrows the original 4.1–4.5);
+unsupported export type (API/MINISTRY → `BusinessRuleError`, no row); and failure immutability
+(render/storage/finalize failure never mutates checksum/number/snapshots).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔
+(416/416) · `eslint` ✔ · `prisma validate` ✔. No schema or migration change.
+
+**Certificates export as PDF; artifact tracked in `CertificateExport`; QR is a safe public
+pointer; file checksum ≠ certificate checksum; no Academic Core / Transcript reads; no
+lifecycle mutation; both failure windows mark `FAILED` best-effort and preserve the original
+error.** Next: authenticated download route (Phase 8B) + STALE detection + ministry export.

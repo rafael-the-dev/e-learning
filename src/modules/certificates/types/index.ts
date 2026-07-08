@@ -43,3 +43,7 @@ export * from "./eligibility-source";
 // Public verification contracts (Phase 7) — the internal composed source and the
 // outward privacy-safe DTO for the unauthenticated verification endpoint.
 export * from "./public-verification";
+
+// Export contracts (Phase 8) — the render DTO, the renderer/storage adapter
+// interfaces, and the outward export-result DTO for the Certificate Export Engine.
+export * from "./export";
