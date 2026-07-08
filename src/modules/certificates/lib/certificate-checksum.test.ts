@@ -20,6 +20,7 @@ function baseInput(): CertificateChecksumInput {
     transcriptChecksum: "abc123",
     studentSnapshot: { studentId: "stu-1", fullName: "João Silva" },
     courseSnapshot: { courseId: "crs-1", courseName: "Categoria B" },
+    issueBasisSnapshot: { transcriptVersionId: "tv-1", certificateType: "COURSE_COMPLETION" },
     certificateType: CertificateType.COURSE_COMPLETION,
     issuedAt: new Date("2026-07-07T10:00:00.000Z"),
     policyId: "pol-1",
@@ -41,6 +42,7 @@ describe("certificate checksum (tests 10–13)", () => {
       policyId: "pol-1",
       issuedAt: new Date("2026-07-07T10:00:00.000Z"),
       certificateType: CertificateType.COURSE_COMPLETION,
+      issueBasisSnapshot: { certificateType: "COURSE_COMPLETION", transcriptVersionId: "tv-1" },
       courseSnapshot: { courseName: "Categoria B", courseId: "crs-1" },
       studentSnapshot: { fullName: "João Silva", studentId: "stu-1" },
       transcriptChecksum: "abc123",
@@ -64,6 +66,7 @@ describe("certificate checksum (tests 10–13)", () => {
       { policyId: "pol-2" },
       { templateId: "tpl-2" },
       { financialClearanceStatus: FinancialClearanceStatus.NOT_CLEARED },
+      { issueBasisSnapshot: { transcriptVersionId: "tv-9", certificateType: "COURSE_COMPLETION" } },
     ];
 
     for (const patch of mutations) {

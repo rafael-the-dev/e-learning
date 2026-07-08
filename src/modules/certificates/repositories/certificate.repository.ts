@@ -375,6 +375,50 @@ export async function updateCertificateMetadata(
   return { count: res.count };
 }
 
+export interface MarkCertificateIssuedParams {
+  id: string;
+  organizationId: string;
+  certificateNumber: string;
+  checksum: string;
+  issuedAt: Date;
+  issuedBy: string;
+  verificationCode: string;
+  verificationUrl?: string | null;
+  expiresAt?: Date | null;
+}
+
+/** Conditional issue transition: DRAFT | PENDING_APPROVAL → ISSUED, setting the
+ *  lifecycle metadata a command supplies (number, checksum, issue stamp,
+ *  verification code/url, expiry). The `status IN (DRAFT, PENDING_APPROVAL)` guard
+ *  makes a double-issue / issue-after-revoke race a no-op (`count: 0`) — the caller
+ *  asserts `count === 1`. It never touches the frozen content columns
+ *  (student/course/issueBasis snapshots, transcript pointer, finance snapshot). */
+export async function markCertificateIssued(
+  params: MarkCertificateIssuedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.certificate.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      deletedAt: null,
+      status: { in: ["DRAFT", "PENDING_APPROVAL"] },
+    },
+    data: {
+      status: "ISSUED",
+      certificateNumber: params.certificateNumber,
+      checksum: params.checksum,
+      issuedAt: params.issuedAt,
+      issuedBy: params.issuedBy,
+      verificationCode: params.verificationCode,
+      verificationUrl: params.verificationUrl ?? null,
+      expiresAt: params.expiresAt ?? null,
+    },
+  });
+  return { count: res.count };
+}
+
 export interface MarkCertificateStaleParams {
   id: string;
   organizationId: string;

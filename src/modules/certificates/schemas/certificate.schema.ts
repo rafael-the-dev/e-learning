@@ -94,3 +94,15 @@ export const generateCertificateSchema = z
   })
   .strict();
 export type GenerateCertificateInput = z.infer<typeof generateCertificateSchema>;
+
+/** Input for `IssueCertificateCommand` — promote a generated certificate to the
+ *  official ISSUED record. The certificate is addressed by id only; every
+ *  lifecycle value (number, checksum, status, issue stamp, verification code/url)
+ *  is computed server-side and must not be supplied by the client. */
+export const issueCertificateSchema = z
+  .object({
+    certificateId: z.string().min(1, "O identificador do certificado é obrigatório"),
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+  })
+  .strict();
+export type IssueCertificateInput = z.infer<typeof issueCertificateSchema>;

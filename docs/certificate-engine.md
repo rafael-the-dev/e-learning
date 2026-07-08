@@ -396,7 +396,7 @@ academic logic** and is checksum-relevant only via `templateId`.
 | `financialClearanceReference` | `String?` | optional finance reference (e.g. clearance/statement id); pointer, not FK |
 | `issuedAt` | `DateTime?` | |
 | `issuedBy` | `String?` | userId |
-| `expiresAt` | `DateTime?` | issuedAt + `validityMonths` (null = perpetual) |
+| `expiresAt` | `DateTime?` | operational-validity end (null = perpetual). Intended value is `issuedAt + validityMonths`, but its **derivation is DEFERRED to the Expiry / public-Verification phase** — Phase 5 `IssueCertificateCommand` does **not** compute it (it only copies any pre-existing value, which is `null` today). See the deferral note in §16 and D-6. |
 | `suspendedAt` | `DateTime?` | |
 | `suspendedBy` | `String?` | |
 | `suspendReason` | `String? @db.NVarChar(Max)` | |
@@ -818,12 +818,27 @@ Single `db.$transaction`:
 3. If `PENDING_APPROVAL`, require it was approved (or approve+issue in one authorized call).
 4. Allocate `certificateNumber` via `allocateCertificateNumber(tx, {org, year})`
    (row-locked counter; §19) — first assignment only.
-5. Set `status = ISSUED`, `issuedAt`, `issuedBy`, `expiresAt` (if `validityMonths`).
+5. Set `status = ISSUED`, `issuedAt`, `issuedBy`. **`expiresAt` derivation is DEFERRED**
+   (see note below) — Phase 5 issue copies any existing `expiresAt` (currently `null`)
+   and does not compute it from `validityMonths`.
 6. Compute and store `checksum` (§20).
 7. **Create the `CertificateVerification` row** (`publicStatus = VALID`).
 8. Write `certificate.issued` event + audit (in-tx).
 9. Publish domain event **after commit**.
 10. PDF/export is a **separate, later** action (`CertificateExport`), not part of issue.
+
+> **Deferred: `expiresAt` derivation (design decision, 2026-07-08).** Expiry is an
+> **operational process that runs *after* issuance** (D-6: expiry affects the
+> verification projection only, never `Certificate.status`). Since the Expiry /
+> public-Verification phase does not exist yet, `IssueCertificateCommand`
+> deliberately does **not** compute `expiresAt` from `validityMonths` — introducing
+> that derivation now would add logic with no real consumer. Issue copies any
+> existing `expiresAt` (currently always `null` — Generate does not set it), so an
+> issued certificate is perpetual until the expiry phase lands. **When the Expiry /
+> public-Verification phase is built, decide definitively where `expiresAt` is
+> derived** — at Generate, at Issue, or by the expiry process itself — and wire the
+> sweep (`publicStatus = EXPIRED`) at the same time. Until then this is intentional,
+> not an omission.
 
 Concurrency: conditional writes (`WHERE status = 'DRAFT'/'PENDING_APPROVAL'`) with
 `count === 1` guards; the duplicate-prevention filtered index makes a concurrent
@@ -914,7 +929,8 @@ checksummed content, mirroring `transcript-canonical-payload.service.ts`.
 **Checksummed content includes:**
 `certificateNumber`, `transcriptVersionId`, `transcriptChecksum`, `studentSnapshot`,
 `courseSnapshot`, `issueBasisSnapshot`, `certificateType`, `issuedAt`,
-`certificatePolicyId`, `certificateTemplateId`.
+`certificatePolicyId`, `certificateTemplateId`, `financialClearanceStatus` (the frozen
+administrative finance-clearance result, D-3).
 
 **Excluded from checksum** (envelope/transport): `verificationCount`, `lastVerifiedAt`,
 export rows, `updatedAt`, stale/suspend bookkeeping.
@@ -1142,8 +1158,11 @@ question remains unresolved.
   `EvaluateCertificateEligibilityCommand` was **not** built separately: the engine
   (Phase 3B) is already the single evaluation authority, and this command consumes it
   directly (a thin read-only wrapper can be added later without changing the engine).
-- **Phase 6 — `IssueCertificateCommand`** (number allocation, checksum, verification
-  row, in-tx transcript re-check).
+- **Phase 5 — `IssueCertificateCommand`** (number allocation, checksum, verification
+  row, in-tx transcript re-check): ✅ **IMPLEMENTED (2026-07-08)** — promotes a generated
+  certificate (DRAFT / PENDING_APPROVAL) to the official ISSUED record. See *Phase 5
+  Implementation Notes* (§38) below. (Numbered "Phase 6" in the original sketch; built as
+  the Phase 5 step.)
 - **Phase 7 — Revoke / Suspend / Restore + stale-handling event subscriber.**
 - **Phase 8 — Public verification endpoint** (rate-limited, minimal, added to `PUBLIC_PATHS`).
 - **Phase 9 — Export pipeline (`CertificateExport`, PDF + QR)** and portal/backoffice UI.
@@ -1603,3 +1622,109 @@ event/audit, or PDF/storage/UI; contains no `policy.requires*` / `courseProgress
 (223/223; +33) · `eslint` ✔ · `prisma validate` ✔. No schema or migration change.
 
 **Ready for review before Phase 6: `IssueCertificateCommand`.**
+
+---
+
+## 38. Phase 5 — Implementation Notes (`IssueCertificateCommand`, 2026-07-08)
+
+Phase 5 shipped `IssueCertificateCommand`
+(`src/modules/certificates/commands/issue-certificate.command.ts`) — the command
+that turns a generated certificate into the **official** ISSUED record.
+
+**What it does:**
+
+- **Promotes DRAFT / PENDING_APPROVAL → ISSUED.** A conditional repository write
+  (`markCertificateIssued`, `WHERE status IN ('DRAFT','PENDING_APPROVAL')`) performs the
+  transition; the command asserts `count === 1`. `ISSUED`/`SUSPENDED`/`REVOKED`/`STALE`
+  are rejected.
+- **Does NOT re-run eligibility (Rule C-5).** Eligibility was decided at generation. Issue
+  validates only the **issue state** and re-confirms the pinned transcript — it never
+  calls `CertificateEligibilityEngine`/`Source`, and never inspects a policy gate,
+  courseProgress/subject/attendance status, or the finance flag.
+- **Approval gate.** A `PENDING_APPROVAL` certificate is issuable only when a
+  `certificate.approved` event already exists in `CertificateEvent` (approval provenance
+  lives in the event log, not in policy flags or certificate columns). No approval event
+  → `BusinessRuleError`.
+- **Transcript re-check (via the ACL only, §6).** Loads the pinned version through
+  `CertificateTranscriptSourceRepository.findIssuedTranscriptVersionForCertificate`. If it
+  is no longer ISSUED → `TRANSCRIPT_NOT_ISSUED_OR_NO_LONGER_VALID`; if its checksum differs
+  from the certificate's copied `transcriptChecksum` → `TRANSCRIPT_CHECKSUM_CHANGED`. It
+  never touches transcript tables directly and never rebuilds/alters certificate snapshots.
+- **Numbering on issue.** `allocateCertificateNumber(tx, { organizationId, year })` (the
+  row-locked per-(org, year) counter, `CERT-YYYY-NNNNNN`, §19) — allocated only when the
+  certificate has no number yet; an existing number is never reassigned. Allocation is
+  inside the transaction, so a rollback leaves no committed number.
+- **Checksum on issue (§20).** `certificateContentChecksum` over
+  `certificateNumber` + `transcriptVersionId` + `transcriptChecksum` + `studentSnapshot`
+  + `courseSnapshot` + `issueBasisSnapshot` + `certificateType` + `issuedAt` +
+  `certificatePolicyId` + `certificateTemplateId` + `financialClearanceStatus`. Computed
+  once, stored on `Certificate.checksum`, never recomputed. (The Phase 0 checksum contract
+  was completed this phase to add `issueBasisSnapshot`, matching §20.) No PDF checksum, no
+  signature.
+- **Verification row on issue (§11).** One `CertificateVerification` is created with a
+  freshly generated globally-unique `verificationCode`
+  (`lib/certificate-verification-code.ts`, 128-bit hex; any existing code is kept),
+  `publicStatus = VALID` (or `EXPIRED` when `expiresAt <= issuedAt`), `expiresAt` copied
+  from the certificate. `verificationUrl` is `null` (no URL helper/config this phase). It
+  is created **after** the conditional mark, so a losing race aborts before the
+  unique(`certificateId`) row is attempted. **No public endpoint yet.**
+- **`expiresAt` derivation is DEFERRED (deliberate).** Issue copies the certificate's
+  existing `expiresAt` (always `null` today — Generate does not set it) and does **not**
+  compute `issuedAt + validityMonths`. Expiry is an operational process that runs after
+  issuance (D-6), and its engine/sweep does not exist yet; adding the derivation now would
+  create logic with no consumer. The Expiry / public-Verification phase will decide where
+  `expiresAt` is derived (Generate, Issue, or the expiry process) and wire the sweep. See
+  the deferral note in §16. Until then, issued certificates are perpetual — intentional,
+  not an omission.
+- **Immutability (§15).** Only lifecycle metadata is written (status, certificateNumber,
+  checksum, issuedAt/By, verificationCode/Url, expiresAt). The frozen content columns —
+  student/course/issueBasis snapshots, transcript pointer/number/checksum, finance snapshot
+  — are never mutated.
+- **One transaction; event after commit.** Load → validate status/approval → transcript
+  re-check → allocate number → checksum → `markCertificateIssued` → create verification →
+  `certificate.issued` `CertificateEvent` → `auditService.log` all run inside one
+  `db.$transaction`. The `certificate.issued` **domain event publishes only after commit**;
+  a rollback leaves no verification/event/audit row, no committed number, and publishes
+  nothing.
+- **Concurrency (§16).** Double-issue, issue-after-revoke/stale/suspend, number overwrite,
+  and duplicate verification are all guarded by the conditional `count === 1` mark plus the
+  DB filtered-unique indexes (active-per-transcript-type, verification code/certificate).
+  A lost race → `count 0` → `BusinessRuleError`, aborting before any duplicate side effect.
+- **Authorization:** requires `certificates.issue` (server-side; SECRETARY does not get it
+  by default). Tenant scoping from `ServiceContext.organizationId`.
+
+**Result** `IssueCertificateResult`: `{ certificateId, status, certificateNumber,
+certificateType, transcriptVersionId, transcriptNumber, issuedAt, checksum,
+verificationCode, verificationUrl, publicStatus }` — no transcript snapshot details.
+
+**Domain event** `certificate.issued` (post-commit) payload: `organizationId`,
+`certificateId`, `certificateNumber`, `certificateType`, `studentId`, `enrollmentId?`,
+`courseId?`, `transcriptVersionId`, `transcriptNumber`, `issuedAt`, `issuedBy`, `checksum`,
+`actorId`, `reason?`.
+
+**Input contract.** `issueCertificateSchema` (strict): `{ certificateId, reason? }`.
+`organizationId`, `studentId`, and every lifecycle value (number, checksum, status,
+issue stamp, verification code/url) are rejected from client input.
+
+**Supporting changes:** `markCertificateIssued` conditional-update added to the certificate
+repository; `certificate-verification-code.ts` helper added; `CertificateChecksumInput`
+gained `issueBasisSnapshot` (aligns the Phase 0 contract with §20); the certificate test
+fake-DB `$transaction` gained real rollback semantics.
+
+**Out of scope (later phases):** revoke/suspend/restore, PDF/export, QR, the public
+verification endpoint, stale-detection/auto-issue handlers, certificate-request workflow.
+
+**Tests (41):** happy path (DRAFT & approved-PENDING_APPROVAL → ISSUED; number-on-issue;
+checksum; verification row; event row; audit row; post-commit event); guards (rejects
+ISSUED/SUSPENDED/REVOKED/STALE, PENDING_APPROVAL-without-approval, missing/cross-tenant
+certificate, transcript-not-issued, checksum-changed, missing permission, strict schema);
+transaction rollback (verification/audit/event failures roll back everything, publish
+nothing, leave no committed number); concurrency (double-issue fails, no second number, no
+duplicate event, mark-count-0 aborts, duplicate-verification rolls back); immutability
+(snapshots / transcript pointer / finance snapshot unchanged, number never reassigned);
+event/audit/CertificateEvent payloads; and static architecture guards (37–44).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔
+(264/264; +41) · `eslint` ✔ · `prisma validate` ✔. No schema or migration change.
+
+**Ready for review before Phase 7: Revoke / Suspend / Restore + stale handling.**
