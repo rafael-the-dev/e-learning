@@ -106,6 +106,7 @@ export type CertificateExportStatus =
  *  fact or an administrative gate — never from re-running an academic rule (ADR-002).
  *  `MANUAL_APPROVAL_REQUIRED` routes to PENDING_APPROVAL rather than a hard block. */
 export const CertificateEligibilityBlocker = {
+  POLICY_NOT_FOUND: "POLICY_NOT_FOUND",
   TRANSCRIPT_NOT_ISSUED: "TRANSCRIPT_NOT_ISSUED",
   TRANSCRIPT_REVOKED: "TRANSCRIPT_REVOKED",
   TRANSCRIPT_SUPERSEDED: "TRANSCRIPT_SUPERSEDED",
@@ -117,6 +118,19 @@ export const CertificateEligibilityBlocker = {
 } as const;
 export type CertificateEligibilityBlocker =
   (typeof CertificateEligibilityBlocker)[keyof typeof CertificateEligibilityBlocker];
+
+/** Informational, NON-blocking eligibility signals. Warnings never change
+ *  `eligible`; they surface conditions a caller may want to act on (e.g. surface a
+ *  notice, prompt manual approval). The engine sets them purely from copied facts. */
+export const CertificateEligibilityWarning = {
+  TRANSCRIPT_SUPERSEDED_WARNING: "TRANSCRIPT_SUPERSEDED_WARNING",
+  TRANSCRIPT_STALE_WARNING: "TRANSCRIPT_STALE_WARNING",
+  CERTIFICATE_EXPIRING_SOON: "CERTIFICATE_EXPIRING_SOON",
+  FINANCIAL_CLEARANCE_UNKNOWN: "FINANCIAL_CLEARANCE_UNKNOWN",
+  MANUAL_APPROVAL_REQUIRED_WARNING: "MANUAL_APPROVAL_REQUIRED_WARNING",
+} as const;
+export type CertificateEligibilityWarning =
+  (typeof CertificateEligibilityWarning)[keyof typeof CertificateEligibilityWarning];
 
 /** Snapshot of a NON-ACADEMIC finance clearance check (D-3). Evaluated externally
  *  against a finance read-model and FROZEN onto the certificate; never recomputed.

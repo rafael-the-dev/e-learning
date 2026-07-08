@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   CertificateEligibilityBlocker,
+  CertificateEligibilityWarning,
   CertificateExportStatus,
   CertificateExportType,
   CertificatePolicyStatus,
@@ -77,6 +78,7 @@ describe("certificate constants — statuses match architecture (test 2)", () =>
   it("eligibility blockers", () => {
     expect(Object.values(CertificateEligibilityBlocker).sort()).toEqual(
       [
+        "POLICY_NOT_FOUND",
         "TRANSCRIPT_NOT_ISSUED",
         "TRANSCRIPT_REVOKED",
         "TRANSCRIPT_SUPERSEDED",
@@ -85,6 +87,18 @@ describe("certificate constants — statuses match architecture (test 2)", () =>
         "FINANCIAL_CLEARANCE_REQUIRED",
         "MANUAL_APPROVAL_REQUIRED",
         "CERTIFICATE_ALREADY_ISSUED",
+      ].sort()
+    );
+  });
+
+  it("eligibility warnings", () => {
+    expect(Object.values(CertificateEligibilityWarning).sort()).toEqual(
+      [
+        "TRANSCRIPT_SUPERSEDED_WARNING",
+        "TRANSCRIPT_STALE_WARNING",
+        "CERTIFICATE_EXPIRING_SOON",
+        "FINANCIAL_CLEARANCE_UNKNOWN",
+        "MANUAL_APPROVAL_REQUIRED_WARNING",
       ].sort()
     );
   });
