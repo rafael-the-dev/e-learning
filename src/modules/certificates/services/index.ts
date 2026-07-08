@@ -25,3 +25,5 @@ export * from "./public-rate-limiter";
 export * from "./certificate-export-download.service";
 export * from "./certificate-admin-read.service";
 export * from "./certificate-student-read.service";
+// Phase 12 — certificate request workflow read models (admin + student, read-only).
+export * from "./certificate-request-read.service";

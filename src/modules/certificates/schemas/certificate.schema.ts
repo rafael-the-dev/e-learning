@@ -196,6 +196,65 @@ export const reconcileCertificateStalenessSchema = z
 /** INPUT type (pre-parse): `dryRun` is optional and defaults to `true`. */
 export type ReconcileCertificateStalenessInput = z.input<typeof reconcileCertificateStalenessSchema>;
 
+// =============================================================================
+// CERTIFICATE REQUEST WORKFLOW SCHEMAS (Phase 12)
+// -----------------------------------------------------------------------------
+// The request is an ADMINISTRATIVE workflow — it decides no academic eligibility
+// (that stays in the engine) and generates no certificate directly (that stays in
+// GenerateCertificateCommand). `organizationId` + the actor come from the context;
+// `studentId` is resolved server-side (own for a student, or the supplied id for a
+// staff-created request). `.strict()` rejects unexpected fields.
+// =============================================================================
+
+/** Input for `RequestCertificateCommand` — create a PENDING request. `studentId` is
+ *  accepted ONLY for a staff-created request (a student is always resolved to self). */
+export const requestCertificateSchema = z
+  .object({
+    certificateType: certificateTypeSchema,
+    transcriptVersionId: z.string().min(1).optional(),
+    studentId: z.string().min(1).optional(),
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+  })
+  .strict();
+export type RequestCertificateInput = z.infer<typeof requestCertificateSchema>;
+
+/** Input for `ApproveCertificateRequestCommand` — PENDING → APPROVED. */
+export const approveCertificateRequestSchema = z
+  .object({
+    requestId: z.string().min(1, "O identificador do pedido é obrigatório"),
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+  })
+  .strict();
+export type ApproveCertificateRequestInput = z.infer<typeof approveCertificateRequestSchema>;
+
+/** Input for `RejectCertificateRequestCommand` — PENDING → REJECTED (reason required). */
+export const rejectCertificateRequestSchema = z
+  .object({
+    requestId: z.string().min(1, "O identificador do pedido é obrigatório"),
+    reason: z.string().min(1, "O motivo é obrigatório").max(500, "O motivo não pode exceder 500 caracteres"),
+  })
+  .strict();
+export type RejectCertificateRequestInput = z.infer<typeof rejectCertificateRequestSchema>;
+
+/** Input for `CancelCertificateRequestCommand` — PENDING/APPROVED → CANCELLED. */
+export const cancelCertificateRequestSchema = z
+  .object({
+    requestId: z.string().min(1, "O identificador do pedido é obrigatório"),
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+  })
+  .strict();
+export type CancelCertificateRequestInput = z.infer<typeof cancelCertificateRequestSchema>;
+
+/** Input for `FulfillCertificateRequestCommand` — APPROVED → FULFILLED (generates the
+ *  certificate via GenerateCertificateCommand; no auto-issue in Phase 12). */
+export const fulfillCertificateRequestSchema = z
+  .object({
+    requestId: z.string().min(1, "O identificador do pedido é obrigatório"),
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+  })
+  .strict();
+export type FulfillCertificateRequestInput = z.infer<typeof fulfillCertificateRequestSchema>;
+
 /** Public verification code (Phase 7) — the opaque, globally-unique lookup handle.
  *  32 lowercase-hex chars (128 bits), matching `generateVerificationCode`. Validated
  *  at the public endpoint before any DB lookup so malformed input never hits the DB. */

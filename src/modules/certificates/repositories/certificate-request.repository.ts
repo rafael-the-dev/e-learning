@@ -99,25 +99,157 @@ export async function findCertificateRequestById(
   return row ? toRecord(row) : null;
 }
 
+function buildRequestListWhere(filters: CertificateRequestListFilters): Record<string, unknown> {
+  const where: Record<string, unknown> = { organizationId: filters.organizationId };
+  if (filters.studentId !== undefined) where.studentId = filters.studentId;
+  if (filters.certificateType !== undefined) where.certificateType = filters.certificateType;
+  if (filters.status !== undefined) where.status = filters.status;
+  if (filters.createdFrom !== undefined || filters.createdTo !== undefined) {
+    const createdAt: Record<string, Date> = {};
+    if (filters.createdFrom !== undefined) createdAt.gte = filters.createdFrom;
+    if (filters.createdTo !== undefined) createdAt.lte = filters.createdTo;
+    where.createdAt = createdAt;
+  }
+  if (!filters.includeDeleted) where.deletedAt = null;
+  return where;
+}
+
 export async function listCertificateRequests(
   filters: CertificateRequestListFilters,
   client?: PrismaClientOrTx
 ): Promise<CertificateRequestRecord[]> {
   const db = client ?? (await getDb());
-  const where: Record<string, unknown> = { organizationId: filters.organizationId };
-  if (filters.studentId !== undefined) where.studentId = filters.studentId;
-  if (filters.certificateType !== undefined) where.certificateType = filters.certificateType;
-  if (filters.status !== undefined) where.status = filters.status;
-  if (!filters.includeDeleted) where.deletedAt = null;
-
   const rows = await db.certificateRequest.findMany({
-    where,
+    where: buildRequestListWhere(filters),
     select: requestSelect,
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     skip: filters.skip,
     take: filters.take,
   });
   return rows.map(toRecord);
+}
+
+/** Org-scoped total matching the same filters (Phase 12 pagination). */
+export async function countCertificateRequests(
+  filters: CertificateRequestListFilters,
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  return db.certificateRequest.count({ where: buildRequestListWhere(filters) });
+}
+
+export interface FindActiveRequestParams {
+  organizationId: string;
+  studentId: string;
+  certificateType: string;
+  /** Matched EXACTLY (including `null`) — the uniqueness key is (student, type, version). */
+  transcriptVersionId?: string | null;
+}
+
+/** The active request (PENDING or APPROVED) for a (student, type, transcriptVersion), if
+ *  any — the duplicate-prevention lookup (Phase 12). Terminal requests (REJECTED /
+ *  FULFILLED / CANCELLED) never block a new one. Org-scoped, live rows only. */
+export async function findActiveRequest(
+  params: FindActiveRequestParams,
+  client?: PrismaClientOrTx
+): Promise<CertificateRequestRecord | null> {
+  const db = client ?? (await getDb());
+  const row = await db.certificateRequest.findFirst({
+    where: {
+      organizationId: params.organizationId,
+      studentId: params.studentId,
+      certificateType: params.certificateType,
+      transcriptVersionId: params.transcriptVersionId ?? null,
+      status: { in: ["PENDING", "APPROVED"] },
+      deletedAt: null,
+    },
+    select: requestSelect,
+  });
+  return row ? toRecord(row) : null;
+}
+
+export interface MarkRequestReviewedParams {
+  id: string;
+  organizationId: string;
+  reviewedBy: string;
+  reviewedAt: Date;
+  reason?: string | null;
+}
+
+/** Conditional PENDING → APPROVED (race-safe; caller asserts `count === 1`). */
+export async function markRequestApproved(
+  params: MarkRequestReviewedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.certificateRequest.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, deletedAt: null, status: "PENDING" },
+    data: { status: "APPROVED", reviewedBy: params.reviewedBy, reviewedAt: params.reviewedAt },
+  });
+  return { count: res.count };
+}
+
+/** Conditional PENDING → REJECTED (stores the review reason; caller asserts `count === 1`). */
+export async function markRequestRejected(
+  params: MarkRequestReviewedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.certificateRequest.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, deletedAt: null, status: "PENDING" },
+    data: {
+      status: "REJECTED",
+      reviewedBy: params.reviewedBy,
+      reviewedAt: params.reviewedAt,
+      reason: params.reason ?? null,
+    },
+  });
+  return { count: res.count };
+}
+
+export interface MarkRequestCancelledParams {
+  id: string;
+  organizationId: string;
+}
+
+/** Conditional PENDING|APPROVED → CANCELLED (terminal; caller asserts `count === 1`). The
+ *  cancelling actor + time are captured in the AuditLog, not on the review columns. */
+export async function markRequestCancelled(
+  params: MarkRequestCancelledParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.certificateRequest.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      deletedAt: null,
+      status: { in: ["PENDING", "APPROVED"] },
+    },
+    data: { status: "CANCELLED" },
+  });
+  return { count: res.count };
+}
+
+export interface MarkRequestFulfilledParams {
+  id: string;
+  organizationId: string;
+  fulfilledCertificateId: string;
+}
+
+/** Conditional APPROVED → FULFILLED, pinning the generated certificate (caller asserts
+ *  `count === 1`). Never a lifecycle decision — the certificate was produced by
+ *  GenerateCertificateCommand before this write. */
+export async function markRequestFulfilled(
+  params: MarkRequestFulfilledParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.certificateRequest.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, deletedAt: null, status: "APPROVED" },
+    data: { status: "FULFILLED", fulfilledCertificateId: params.fulfilledCertificateId },
+  });
+  return { count: res.count };
 }
 
 export interface UpdateCertificateRequestStatusParams {

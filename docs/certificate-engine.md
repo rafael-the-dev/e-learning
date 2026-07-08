@@ -2321,3 +2321,83 @@ is intentionally NOT designed here:
   already reached the ministry);
 - **reconciliation** should key off the `externalReference`;
 - an **Outbox / retry** strategy may be required for at-least-once delivery.
+
+## 46. Phase 12 — Implementation Notes (Certificate Request Workflow, 2026-07-08)
+
+Phase 12 adds the **administrative** request workflow around the existing engine. A request
+decides NO academic eligibility (that stays in `CertificateEligibilityEngine`) and generates
+NO certificate directly — fulfilment delegates to `GenerateCertificateCommand`. No Academic
+Core / Transcript read, no new lifecycle state, no auto-issue, no payment (deferred).
+
+**Lifecycle (existing `CertificateRequestStatus`).** `PENDING → APPROVED | REJECTED |
+CANCELLED`; `APPROVED → FULFILLED | CANCELLED`. `REJECTED / FULFILLED / CANCELLED` are terminal.
+Every transition is a CONDITIONAL repository write (`WHERE status = <expected>`) so a racing
+double-transition is a no-op (`count 0` → abort); the command asserts `count === 1`.
+
+**Commands (all `BaseCommand`, audit inside the transaction).**
+- **`RequestCertificateCommand`** — creates a PENDING request. A **student** requests only for
+  self (studentId from the session via `getStudentByUserId`; a *different* supplied studentId is
+  denied), gated by `certificates.request`. **Staff** may request FOR a student (studentId
+  required + validated in-org via `getStudentById`), gated by `certificates.generate`. A
+  duplicate ACTIVE request (PENDING/APPROVED) for the same (student, type, transcriptVersion) is
+  refused (`findActiveRequest`). Create + audit in one transaction.
+- **`ApproveCertificateRequestCommand`** — PENDING → APPROVED (`certificates.generate`); records
+  `reviewedBy`/`reviewedAt`.
+- **`RejectCertificateRequestCommand`** — PENDING → REJECTED (`certificates.generate`; reason
+  required).
+- **`CancelCertificateRequestCommand`** — the REQUESTER (`certificates.request`) may cancel their
+  OWN request while PENDING only; STAFF (`certificates.generate`) may cancel PENDING or APPROVED.
+  Terminal requests cannot be cancelled.
+- **`FulfillCertificateRequestCommand`** — APPROVED → FULFILLED (`certificates.generate`). It
+  loads + guards (APPROVED, transcriptVersionId present), then **generates FIRST** via
+  `GenerateCertificateCommand` (its own transaction + its own eligibility evaluation). If Generate
+  fails, the command throws and the request stays APPROVED (no partial state). Only after a
+  successful generation is the request flipped FULFILLED (conditional) + audited in a short
+  transaction. **No auto-issue** — the produced certificate stays DRAFT / PENDING_APPROVAL.
+
+**Repository additions** (`certificate-request.repository.ts`): `findActiveRequest`,
+`markRequestApproved` / `markRequestRejected` (guard `status = PENDING`), `markRequestCancelled`
+(guard `status IN (PENDING, APPROVED)`), `markRequestFulfilled` (guard `status = APPROVED`, pins
+`fulfilledCertificateId`), `countCertificateRequests`, and `createdFrom`/`createdTo` list filters.
+All org-scoped, conditional, returning `{ count }`; no hard delete.
+
+**Audit (no domain events — none are defined for requests).** Actions
+`certificate_request.{created,approved,rejected,cancelled,fulfilled}`, written inside the
+transaction with `{ requestId, studentId, certificateType, transcriptVersionId, previousStatus,
+newStatus, actorId, reason, fulfilledCertificateId? }`. Nothing on rollback.
+
+**Read services (READ-ONLY) + `allowedActions`.** `CertificateRequestAdminReadService`
+(`certificates.view`, org-scoped, filters status/studentId/type/createdFrom/createdTo, paginated)
+and `CertificateRequestStudentReadService` (`certificates.request`, own requests only — studentId
+from the session). `allowedActions` (`canApprove/canReject/canCancel/canFulfill`) are computed
+server-side from permissions + status (+ transcriptVersionId for fulfil); the student DTO carries
+no audit metadata.
+
+**Routes (thin shells over commands / read services).** Admin: `GET|POST /api/certificates/
+requests`, `POST /api/certificates/requests/:id/{approve,reject,cancel,fulfill}`. Student:
+`GET|POST /api/student/certificates/requests`, `POST /api/student/certificates/requests/:id/
+cancel` (the student route never forwards a studentId). No business rule / repository / PDF /
+export / ministry in a route.
+
+**Guardian — DEFERRED** (consistent with Phases 8C–11): no guardian request endpoint; a guardian
+is denied by both read services (no `certificates.view`, not student-scoped) and cannot create
+(the request command's student path needs a linked Student profile). **Payment/invoice
+integration is out of scope.**
+
+**No schema/migration change** (`CertificateRequest` already existed since Phase 1). Tests: **+40
+within `src/modules/certificates`** (→ 554) — the command suite (student/staff create, duplicate
+block, terminal-does-not-block, approve/reject/cancel/fulfill transitions + guards, requester-only
+cancel, generate-first fulfilment incl. failure-leaves-APPROVED, cross-tenant 404, no-audit-on-
+rollback, arch guards 27–32) + the read-service suite (admin list/filters/allowedActions, student
+own-scope, guardian denial, pure `computeRequestAllowedActions`) — **plus a 10-test route suite**
+under `src/app` (delegation + auth mapping; §25/§31).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔ (554/554)
++ request route suite ✔ · `eslint` ✔ (0 errors) · `prisma validate` ✔. No schema or migration
+change.
+
+**Certificate requests can be created (student self / staff-for-student), reviewed
+(approve/reject), cancelled (requester-PENDING / staff-PENDING|APPROVED) and fulfilled (generates
+via GenerateCertificateCommand, no auto-issue) — all tenant-safe, auditable, with server-side
+allowedActions and zero eligibility duplication or Academic Core / Transcript reads.** Guardian
+request flow and payment integration remain deferred.
