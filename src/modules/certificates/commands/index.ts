@@ -37,3 +37,5 @@ export * from "./approve-certificate-request.command";
 export * from "./reject-certificate-request.command";
 export * from "./cancel-certificate-request.command";
 export * from "./fulfill-certificate-request.command";
+// Phase 13 — bulk operations (orchestrate the single-item commands; no new rules).
+export * from "./bulk-certificate.commands";

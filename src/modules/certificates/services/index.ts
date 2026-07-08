@@ -27,3 +27,5 @@ export * from "./certificate-admin-read.service";
 export * from "./certificate-student-read.service";
 // Phase 12 — certificate request workflow read models (admin + student, read-only).
 export * from "./certificate-request-read.service";
+// Phase 13 — bulk operation preview (read-only input validation before execution).
+export * from "./certificate-bulk-preview.service";
