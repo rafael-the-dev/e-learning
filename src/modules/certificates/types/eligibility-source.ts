@@ -18,10 +18,14 @@ import type {
 import type { TranscriptCertificateSourceDto } from "./transcript-source";
 
 /** What to aggregate facts for. `transcriptVersionId`/`courseId`/`policyId` are
- *  optional; the source loads what it can and returns `null` for the rest. */
+ *  optional; the source loads what it can and returns `null` for the rest.
+ *  `studentId` is optional: the loaders do not use it (policy resolves by
+ *  type/course, transcript by version id), and callers such as
+ *  `GenerateCertificateCommand` derive the student identity FROM the loaded
+ *  transcript facts rather than trusting a client-supplied id. */
 export interface CertificateEligibilitySourceInput {
   organizationId: string;
-  studentId: string;
+  studentId?: string;
   certificateType: string;
   transcriptVersionId?: string | null;
   courseId?: string | null;

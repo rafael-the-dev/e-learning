@@ -58,7 +58,13 @@ export class NotFoundError extends Error {
 }
 
 export class BusinessRuleError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** Optional machine-readable context (e.g. `{ blockingReasons, warnings }`)
+     *  for callers that surface structured detail. Backward compatible: existing
+     *  single-argument callers are unaffected. */
+    public readonly details?: Record<string, unknown>
+  ) {
     super(message);
     this.name = "BusinessRuleError";
   }

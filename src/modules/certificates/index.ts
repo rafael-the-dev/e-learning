@@ -24,3 +24,4 @@ export * from "./lib/certificate-checksum";
 export * from "./types";
 export * from "./repositories";
 export * from "./services";
+export * from "./commands";
