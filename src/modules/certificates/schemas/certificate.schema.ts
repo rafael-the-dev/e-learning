@@ -106,3 +106,40 @@ export const issueCertificateSchema = z
   })
   .strict();
 export type IssueCertificateInput = z.infer<typeof issueCertificateSchema>;
+
+/** Input for `RevokeCertificateCommand` — ISSUED | SUSPENDED → REVOKED (terminal).
+ *  A reason is mandatory (revocation changes historical truth). */
+export const revokeCertificateSchema = z
+  .object({
+    certificateId: z.string().min(1, "O identificador do certificado é obrigatório"),
+    reason: z.string().min(1, "O motivo é obrigatório").max(500, "O motivo não pode exceder 500 caracteres"),
+  })
+  .strict();
+export type RevokeCertificateInput = z.infer<typeof revokeCertificateSchema>;
+
+/** Input for `SuspendCertificateCommand` — ISSUED → SUSPENDED. A reason is mandatory. */
+export const suspendCertificateSchema = z
+  .object({
+    certificateId: z.string().min(1, "O identificador do certificado é obrigatório"),
+    reason: z.string().min(1, "O motivo é obrigatório").max(500, "O motivo não pode exceder 500 caracteres"),
+  })
+  .strict();
+export type SuspendCertificateInput = z.infer<typeof suspendCertificateSchema>;
+
+/** Input for `RestoreCertificateCommand` — SUSPENDED → ISSUED. Reason optional. */
+export const restoreCertificateSchema = z
+  .object({
+    certificateId: z.string().min(1, "O identificador do certificado é obrigatório"),
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+  })
+  .strict();
+export type RestoreCertificateInput = z.infer<typeof restoreCertificateSchema>;
+
+/** Public verification code (Phase 7) — the opaque, globally-unique lookup handle.
+ *  32 lowercase-hex chars (128 bits), matching `generateVerificationCode`. Validated
+ *  at the public endpoint before any DB lookup so malformed input never hits the DB. */
+export const certificateVerificationCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[0-9a-f]{32}$/, "Código de verificação inválido");
+export type CertificateVerificationCode = z.infer<typeof certificateVerificationCodeSchema>;

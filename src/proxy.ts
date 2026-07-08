@@ -5,7 +5,7 @@ import { getPostLoginRedirect } from "./app/login/actions";
 
 const { auth } = NextAuth(authConfig);
 
-const PUBLIC_PATHS = ["/login", "/register", "/api/auth", "/set-password"];
+const PUBLIC_PATHS = ["/login", "/register", "/api/auth", "/set-password", "/api/public"];
 
 export default auth( async (req) => {
   const { pathname } = req.nextUrl;
