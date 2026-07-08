@@ -16,4 +16,5 @@ export * from "./certificate.repository";
 export * from "./certificate-event.repository";
 export * from "./certificate-export.repository";
 export * from "./certificate-verification.repository";
+export * from "./certificate-public-verification.repository";
 export * from "./certificate-request.repository";

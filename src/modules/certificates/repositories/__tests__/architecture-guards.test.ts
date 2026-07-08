@@ -69,9 +69,12 @@ const FORBIDDEN: Array<{ label: string; patterns: RegExp[] }> = [
 ];
 
 describe("certificate repository guards — forbidden dependencies (§12, tests 38–39)", () => {
-  it("discovers the ACL + the seven certificate-model repositories", () => {
+  it("discovers the ACL + the certificate-model / projection repositories", () => {
     expect(ALL_FILES).toContain(ACL_FILE);
-    expect(MODEL_FILES.length).toBe(7);
+    // Seven per-model repositories (Phase 2B) + the Phase 7 public-verification
+    // projection repository (cross-model read + expiry sweep, still persistence-only).
+    expect(MODEL_FILES.length).toBe(8);
+    expect(MODEL_FILES).toContain("certificate-public-verification.repository.ts");
   });
 
   for (const spec of FORBIDDEN) {

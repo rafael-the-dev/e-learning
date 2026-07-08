@@ -9,8 +9,14 @@
 // certificate from an issued transcript.
 // Phase 5 — `IssueCertificateCommand`: promotes a generated certificate to the
 // official ISSUED record (number + checksum + verification row, event post-commit).
-// Still absent: revoke/suspend/restore, stale handling, export — later phases.
+// Phase 6 — post-issue lifecycle: `RevokeCertificateCommand` (ISSUED|SUSPENDED →
+// REVOKED, terminal), `SuspendCertificateCommand` (ISSUED → SUSPENDED),
+// `RestoreCertificateCommand` (SUSPENDED → ISSUED). Still absent: STALE handling,
+// export, public verification endpoint — later phases.
 // =============================================================================
 
 export * from "./generate-certificate.command";
 export * from "./issue-certificate.command";
+export * from "./revoke-certificate.command";
+export * from "./suspend-certificate.command";
+export * from "./restore-certificate.command";

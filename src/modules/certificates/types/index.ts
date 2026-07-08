@@ -39,3 +39,7 @@ export * from "./repository";
 // Eligibility source contract — the input/output of the Phase 3A read-aggregation
 // façade consumed by the future eligibility engine.
 export * from "./eligibility-source";
+
+// Public verification contracts (Phase 7) — the internal composed source and the
+// outward privacy-safe DTO for the unauthenticated verification endpoint.
+export * from "./public-verification";

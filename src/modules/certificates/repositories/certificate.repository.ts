@@ -419,6 +419,104 @@ export async function markCertificateIssued(
   return { count: res.count };
 }
 
+export interface MarkCertificateRevokedParams {
+  id: string;
+  organizationId: string;
+  revokedAt: Date;
+  revokedBy: string;
+  revokeReason: string;
+}
+
+/** Conditional revoke: ISSUED | SUSPENDED → REVOKED (terminal). The
+ *  `status IN (ISSUED, SUSPENDED)` guard makes a double-revoke / revoke-after-terminal
+ *  race a no-op (`count: 0`) — the caller asserts `count === 1`. Never touches the
+ *  frozen content columns, the number, the checksum, or the transcript pointer. */
+export async function markCertificateRevoked(
+  params: MarkCertificateRevokedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.certificate.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      deletedAt: null,
+      status: { in: ["ISSUED", "SUSPENDED"] },
+    },
+    data: {
+      status: "REVOKED",
+      revokedAt: params.revokedAt,
+      revokedBy: params.revokedBy,
+      revokeReason: params.revokeReason,
+    },
+  });
+  return { count: res.count };
+}
+
+export interface MarkCertificateSuspendedParams {
+  id: string;
+  organizationId: string;
+  suspendedAt: Date;
+  suspendedBy: string;
+  suspendReason: string;
+}
+
+/** Conditional suspend: ISSUED → SUSPENDED. The `status = ISSUED` guard makes a
+ *  double-suspend / suspend-after-terminal race a no-op (`count: 0`). Content columns
+ *  untouched. */
+export async function markCertificateSuspended(
+  params: MarkCertificateSuspendedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.certificate.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      deletedAt: null,
+      status: "ISSUED",
+    },
+    data: {
+      status: "SUSPENDED",
+      suspendedAt: params.suspendedAt,
+      suspendedBy: params.suspendedBy,
+      suspendReason: params.suspendReason,
+    },
+  });
+  return { count: res.count };
+}
+
+export interface MarkCertificateRestoredParams {
+  id: string;
+  organizationId: string;
+}
+
+/** Conditional restore: SUSPENDED → ISSUED, clearing the current suspension fields
+ *  (history stays in `CertificateEvent`/audit). The `status = SUSPENDED` guard makes a
+ *  double-restore / restore-after-terminal race a no-op (`count: 0`). Content columns,
+ *  number, checksum, issue stamp, and transcript pointer untouched. */
+export async function markCertificateRestored(
+  params: MarkCertificateRestoredParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.certificate.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      deletedAt: null,
+      status: "SUSPENDED",
+    },
+    data: {
+      status: "ISSUED",
+      suspendedAt: null,
+      suspendedBy: null,
+      suspendReason: null,
+    },
+  });
+  return { count: res.count };
+}
+
 export interface MarkCertificateStaleParams {
   id: string;
   organizationId: string;

@@ -1728,3 +1728,184 @@ event/audit/CertificateEvent payloads; and static architecture guards (37–44).
 (264/264; +41) · `eslint` ✔ · `prisma validate` ✔. No schema or migration change.
 
 **Ready for review before Phase 7: Revoke / Suspend / Restore + stale handling.**
+
+---
+
+## 39. Phase 6 — Implementation Notes (Revoke / Suspend / Restore, 2026-07-08)
+
+Phase 6 completes the post-issue lifecycle with three `BaseCommand`s —
+`RevokeCertificateCommand`, `SuspendCertificateCommand`, `RestoreCertificateCommand`. They
+orchestrate and persist a status transition; they decide **nothing** about eligibility and
+never touch the transcript, Academic Core, PDF/export, or the public verification endpoint.
+
+**Lifecycle enforced.**
+
+- **Revoke:** `ISSUED | SUSPENDED → REVOKED`. **`REVOKED` is terminal** — a revoked
+  certificate never returns to any other state. `DRAFT`, `PENDING_APPROVAL`, and `STALE`
+  cannot be revoked in this phase.
+- **Suspend:** `ISSUED → SUSPENDED` (recoverable). `DRAFT`, `PENDING_APPROVAL`, `SUSPENDED`
+  (no double-suspend), `REVOKED`, and `STALE` are rejected.
+- **Restore:** `SUSPENDED → ISSUED`. Everything else (`DRAFT`, `PENDING_APPROVAL`,
+  `ISSUED`, `REVOKED`, `STALE`) is rejected.
+
+**Verification projection follows the lifecycle** (same transaction, no separate write path):
+revoke → `REVOKED`; suspend → `SUSPENDED`; restore → `VALID`, or `EXPIRED` when the
+certificate is already past `expiresAt` at restore time (D-6). If the 1:1 verification row is
+missing, the transition aborts with `BusinessRuleError` — an issued certificate must always
+have one (created by Issue). The projection update is a **conditional write asserted
+`count === 1`**, symmetric with the certificate mark: a `count !== 1` (data-integrity failure)
+aborts and rolls the whole transaction back. `expiresAt` is still `null` for every certificate
+today (Expiry phase not built), so restore resolves to `VALID` in practice; the `EXPIRED`
+branch is proven by test.
+
+**Reason.** Required for revoke and suspend (each changes historical/public truth); optional
+for restore. History is preserved append-only in `CertificateEvent` + `AuditLog`; restore
+**clears** the current suspension columns (`suspendedAt/By/Reason`) rather than keeping stale
+values on the row.
+
+**One transaction; event after commit.** Each command: load (org-scoped) → validate status →
+load verification-or-throw → conditional `count === 1` mark → verification projection update →
+`CertificateEvent` (append-only) → `auditService.log`, all inside one `db.$transaction`. The
+`certificate.revoked` / `.suspended` / `.restored` **domain event publishes only after
+commit**. A rollback leaves no status change, no verification update, no event row, no audit
+row, and publishes nothing (proven by fault-injection tests 9/19/29).
+
+**Concurrency (§16).** Three conditional repository marks were added:
+`markCertificateRevoked` (`status IN (ISSUED, SUSPENDED)`), `markCertificateSuspended`
+(`status = ISSUED`), `markCertificateRestored` (`status = SUSPENDED`, clears suspension
+columns). Each returns `{ count }`; the command asserts `count === 1` and throws
+`BusinessRuleError` on a lost race — so double-revoke, double-suspend, double-restore, and
+transition-from-a-just-changed-state are race-safe no-ops that abort before any side effect.
+
+**Immutability (§12).** These commands write only lifecycle metadata (status, the relevant
+`revoked*`/`suspended*` columns) and the verification `publicStatus`. The frozen content is
+never touched — student/course/issueBasis snapshots, transcript pointer/number/checksum,
+`certificateType`, finance snapshot, `certificateNumber`, `checksum`, `issuedAt`/`issuedBy`.
+Static architecture guards assert the source never even references the snapshot columns or a
+number/checksum-writing repository method.
+
+**Authorization.** Revoke requires `certificates.revoke`; suspend requires
+`certificates.suspend`. Restore reuses `certificates.suspend` — no dedicated
+`certificates.restore` permission was invented this phase (the operator who can suspend can
+restore). Tenant scoping via `ServiceContext.organizationId`; a cross-tenant id is
+`NotFoundError`.
+
+**Shared helper.** `certificate-lifecycle-shared.ts` (internal, not re-exported) centralizes
+the verification lookup, the domain-event payload (§9), and the `CertificateEvent.metadata`
+(§11) so the three commands stay identical where they must.
+
+**Domain event payload** (`certificate.revoked` / `.suspended` / `.restored`, post-commit):
+`organizationId`, `certificateId`, `certificateNumber`, `certificateType`, `studentId`,
+`enrollmentId`, `courseId`, `transcriptVersionId`, `transcriptNumber`, `previousStatus`,
+`newStatus`, `actorId`, `reason`, `occurredAt`, `checksum`.
+
+**Input contracts** (strict): `revokeCertificateSchema` `{ certificateId, reason }`,
+`suspendCertificateSchema` `{ certificateId, reason }`, `restoreCertificateSchema`
+`{ certificateId, reason? }`. `organizationId`, `status`, `certificateNumber`, `checksum`,
+`issuedAt`, `revokedAt`, `suspendedAt`, and `verificationCode` are all rejected from client
+input.
+
+**Out of scope (later phases):** PDF/export, QR rendering, the public verification endpoint,
+stale-detection / auto-issue handlers, certificate-request workflow, portal/API UI. **STALE
+handling remains future.**
+
+**Tests (55):** revoke (1–10), suspend (11–20), restore (21–30), immutability (31–34),
+concurrency count-0 aborts including the verification-projection branch (35–38b),
+authorization + tenant (39–42), event/audit/CertificateEvent payloads + missing-verification
+abort, and static architecture guards (43–49). The forbidden-source-status matrices now
+include `STALE` for all three commands, closing the state matrix (STALE → reject everywhere).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔
+(319/319; +55) · `eslint` ✔ · `prisma validate` ✔. No schema or migration change.
+
+**Certificate lifecycle is complete after issue.** Next: Expiry / public-verification endpoint
+and STALE detection.
+
+---
+
+## 40. Phase 7 — Implementation Notes (Public Verification + Expiry, 2026-07-08)
+
+Phase 7 adds the outward-facing half of the engine — an unauthenticated public
+verification lookup and a projection-only expiry sweep. Both read the frozen
+`CertificateVerification` projection (+ minimal certificate columns + the org name) and
+**never** read Academic Core, the transcript, grades, attendance, or finance, and never
+recompute validity.
+
+**Expiry — projection only (§1/§2).** `CertificateExpiryService.run({ organizationId, now })`
+flips `CertificateVerification.publicStatus` VALID → EXPIRED for ISSUED, non-deleted
+certificates whose verification `expiresAt <= now`. It is deliberately narrow:
+`Certificate.status` **stays ISSUED** (there is no ISSUED→EXPIRED lifecycle transition, D-6),
+no snapshot mutates, REVOKED/SUSPENDED projections are left untouched (only VALID → EXPIRED),
+and there is **no CertificateEvent, no AuditLog, no domain event** — a per-sweep event would
+be pure noise (§8). The sweep is idempotent (the final `updateMany` re-filters `publicStatus =
+VALID`, so a second run flips nothing) and race-safe (a concurrently revoked/suspended row is
+no longer VALID → skipped). A restored certificate with a future `expiresAt` returns to VALID
+via the restore command; this sweep never blocks that. `now` is caller-supplied for
+determinism; a scheduled job iterates each tenant. `expiresAt` is `null` for every certificate
+today (no `validityMonths` derivation yet), so the sweep is a no-op in practice — the
+machinery exists ahead of the data.
+
+**Public verification (§3/§4).** `VerifyCertificatePublicService.verify({ verificationCode })`
+resolves a **privacy-safe DTO**. Status is a pure function of the frozen certificate status +
+projection, in order: soft-deleted → `NOT_FOUND`; `REVOKED` → `REVOKED`; `SUSPENDED` →
+`SUSPENDED`; **not-publicly-issued (DRAFT / PENDING_APPROVAL / STALE) → `NOT_FOUND`**
+(hardening over the bare §4 list, so a non-issued certificate can never read as VALID and
+STALE — a future phase — is never surfaced); projection `EXPIRED` → `EXPIRED`; else `VALID`.
+Existence is never leaked: unknown code, soft-deleted, and not-issued all return the identical
+`NOT_FOUND` DTO (all other fields null). The response exposes ONLY: `status`, `publicStatus`,
+`certificateNumber`, `certificateType`, `organizationName`, `studentDisplayName` (**masked** to
+first-name + trailing initials, e.g. "João S. C."), `courseName`, `issuedAt`, `expiresAt`. The
+transcript pointer/number/checksum, certificate checksum, student document number, financial
+clearance, internal ids, and audit metadata never leave the service — enforced both by DTO
+whitelisting and by a static guard that the public source/service reference no sensitive column
+identifier.
+
+**Verification counter (§5).** A successful lookup (any resolved status other than `NOT_FOUND`)
+increments `verificationCount` and sets `lastVerifiedAt = now` via the existing
+`incrementVerificationCount`. A `NOT_FOUND` result never moves the counter. The counter write
+is **best-effort** — a telemetry write must never deny a legitimate verification, so its
+failure is swallowed.
+
+**Repository (§9).** New `certificate-public-verification.repository.ts` (persistence-only,
+still counted by the repository architecture guards): `findPublicVerificationByCode` composes
+three flat point-reads (verification → certificate → organization) selecting only the
+whitelisted columns (defense-in-depth); `markExpiredCertificateVerifications` runs the
+org-scoped sweep as candidate-read → issued-filter → conditional `updateMany`, deliberately
+avoiding a relation-filter so the ISSUED guard holds regardless of driver support.
+
+**API endpoint (§6).** `GET /api/public/certificates/verify/:verificationCode`. No auth
+(`/api/public` added to `PUBLIC_PATHS` in `src/proxy.ts`). The code format is validated
+(`certificateVerificationCodeSchema` — 32 lowercase-hex) **before** any DB access; malformed →
+400. `NOT_FOUND` returns **200** with `status: "NOT_FOUND"` (identical to a real lookup — no
+existence probe via status code). `Cache-Control: no-store`.
+
+**Rate limiting (§7).** A minimal in-memory fixed-window limiter
+(`public-rate-limiter.ts`, 30 req/min per IP) throttles the endpoint; over-limit → 429 with
+`Retry-After`. **PRODUCTION TODO (documented in the source):** the counter is per-process and
+does not coordinate across serverless instances — back it with a shared store (Redis / edge KV)
+before relying on it as a hard abuse control. `checkRateLimit` is the stable seam.
+
+**Immutability.** Nothing in Phase 7 mutates a certificate content column or `Certificate
+.status`; the only write is the verification projection (`publicStatus`, `verificationCount`,
+`lastVerifiedAt`). A static guard asserts the expiry path never writes the certificate table.
+
+**Test-double note.** The shared certificate fake-DB (`_fake-db.ts`) gained range operators
+(`lt`/`lte`/`gt`/`gte`) and multi-operator AND matching on a field, so the expiry sweep's
+`expiresAt: { not: null, lte: now }` filter is exercised behaviourally. Backward-compatible —
+existing equality/`in`/`not` usages are unchanged.
+
+**Out of scope (later phases):** PDF/QR/export, portal UI, ministry export, email/notifications,
+`validityMonths` → `expiresAt` derivation, and **STALE detection handlers** (still future).
+
+**Tests (+39 → 358 module total):** expiry (1–6 + null/deleted/tenant, 9 tests);
+public verification status mapping 7–11 + deleted/not-issued, privacy 12/13 + masking, counter
+14/15 + NOT_FOUND/REVOKED, code-format 16, and static architecture guards 18–23 (27 tests);
+rate limiter 17 + reset + per-IP isolation (3 tests). Two pre-existing guard tests were updated
+for Phase 7 (repository count 7 → 8; the eligibility-source import-allowlist scoped to its own
+file, since write-capable services legitimately depend on other repositories).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔
+(358/358; +39) · `eslint` ✔ · `prisma validate` ✔. No schema or migration change.
+
+**Public verification works; expiry projection works; no sensitive data leaked; certificate
+immutable; no Academic Core / Transcript reads.** Next: STALE detection + PDF/QR/export.

@@ -10,8 +10,9 @@
 //
 // Supported surface: findFirst / findMany / count (the read-only source repo uses
 // only these) plus create / updateMany for completeness, with equality + `{ in }`
-// + `{ not }` where-matching, scalar orderBy (single or array, asc/desc), and
-// skip/take. `select` is intentionally ignored — seeded rows carry every field
+// + `{ notIn }` + `{ not }` + range (`{ lt | lte | gt | gte }`) where-matching
+// (multiple operators on one field AND together), scalar orderBy (single or array,
+// asc/desc), and skip/take. `select` is intentionally ignored — seeded rows carry every field
 // and the repo mappers pick what they need. `$transaction(fn)` runs the callback
 // with the same fake as the tx client (proving the repo threads a tx client).
 // =============================================================================
@@ -43,26 +44,32 @@ function matchWhere(row: Row, where: WhereInput): boolean {
     }
 
     if (isPlainObject(cond)) {
-      if ("in" in cond) {
-        const list = cond.in as unknown[];
-        if (!list.includes(row[key])) return false;
-        continue;
-      }
-      if ("notIn" in cond) {
-        const list = cond.notIn as unknown[];
-        if (list.includes(row[key])) return false;
-        continue;
-      }
-      if ("not" in cond) {
-        const nv = cond.not;
-        if (nv === null) {
-          if (row[key] == null) return false;
-        } else if (row[key] === nv) {
-          return false;
+      // Evaluate EVERY operator present in the condition object (AND semantics), so
+      // combined filters like `{ not: null, lte: now }` work. Unknown keys are a
+      // nested relation filter → no-op (not modelled by these repos).
+      const rv = row[key];
+      for (const [op, val] of Object.entries(cond)) {
+        if (op === "in") {
+          if (!(val as unknown[]).includes(rv)) return false;
+        } else if (op === "notIn") {
+          if ((val as unknown[]).includes(rv)) return false;
+        } else if (op === "not") {
+          if (val === null) {
+            if (rv == null) return false;
+          } else if (rv === val) {
+            return false;
+          }
+        } else if (op === "lt" || op === "lte" || op === "gt" || op === "gte") {
+          if (rv == null) return false;
+          const a = rv instanceof Date ? rv.getTime() : (rv as number);
+          const b = val instanceof Date ? val.getTime() : (val as number);
+          if (op === "lt" && !(a < b)) return false;
+          if (op === "lte" && !(a <= b)) return false;
+          if (op === "gt" && !(a > b)) return false;
+          if (op === "gte" && !(a >= b)) return false;
         }
-        continue;
+        // else: nested relation filter — no-op.
       }
-      // Nested relation filter — not used by these repos; treat as a no-op.
       continue;
     }
 

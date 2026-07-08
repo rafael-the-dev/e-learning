@@ -80,16 +80,17 @@ describe("eligibility source guards — forbidden dependencies (tests 17–20)",
 });
 
 describe("eligibility source guards — only allowed repositories (test 16)", () => {
-  it("imports only the Policy repository and the Transcript source ACL", () => {
-    for (const file of SERVICE_FILES) {
-      const content = read(file);
-      // No certificate-MODEL repositories other than policy may be imported.
-      expect(content).not.toMatch(/repositories\/certificate\.repository/);
-      expect(content).not.toMatch(/repositories\/certificate-(event|export|verification|request)\.repository/);
-      expect(content).not.toMatch(/repositories\/certificate-template\.repository/);
-    }
-    // Positive: the source actually depends on the two allowed repositories.
+  // Scoped to the eligibility-source façade specifically. Other services added in
+  // later phases (e.g. the Phase 7 public-verification / expiry services) legitimately
+  // depend on other certificate repositories; the cross-engine / Transcript / PDF /
+  // UI guards above still apply to every service file.
+  it("the eligibility source imports only the Policy repository and the Transcript source ACL", () => {
     const svc = read("certificate-eligibility-source.service.ts");
+    // No certificate-MODEL repositories other than policy may be imported.
+    expect(svc).not.toMatch(/repositories\/certificate\.repository/);
+    expect(svc).not.toMatch(/repositories\/certificate-(event|export|verification|request)\.repository/);
+    expect(svc).not.toMatch(/repositories\/certificate-template\.repository/);
+    // Positive: the source actually depends on the two allowed repositories.
     expect(svc).toMatch(/repositories\/certificate-policy\.repository/);
     expect(svc).toMatch(/repositories\/certificate-transcript-source\.repository/);
   });
