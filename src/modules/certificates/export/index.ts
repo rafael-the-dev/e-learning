@@ -12,3 +12,8 @@
 export * from "./certificate-pdf-renderer";
 export * from "./certificate-export-storage";
 export * from "./certificate-export-storage-reader";
+// Phase 11 — Ministry export adapters (pure builder + formatters, transport, storage).
+export * from "./certificate-ministry-payload";
+export * from "./certificate-ministry-formatters";
+export * from "./certificate-ministry-transport";
+export * from "./certificate-ministry-storage";

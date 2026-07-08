@@ -2244,3 +2244,80 @@ extracted the shared `buildCertificateDownloadResponse` helper used by both down
 see only their own certificates, download stays authenticated, `allowedActions` are decided
 server-side, and no route/read service reads Academic Core / Transcript or duplicates
 eligibility.** Guardian access is deferred. Next: ministry export.
+
+## 45. Phase 11 — Implementation Notes (Ministry Export Engine, 2026-07-08)
+
+Phase 11 enables the **`CertificateExportType.MINISTRY`** channel that Phase 8 refused, as an
+**adapter-driven** pipeline SEPARATE from the PDF export (§1). It CONSUMES the frozen issued
+certificate snapshots only — no Academic Core / Transcript / grade / attendance read, no
+eligibility recompute, no certificate-lifecycle mutation (ADR-002). There is **no real
+external ministry API** — a local transport stands in; the HTTP integration is future work.
+
+**Command — `ExportCertificateToMinistryCommand`** (`certificates.export`). Input
+`{ certificateId, format?: JSON|CSV|XML (default JSON), reason? }`. Guards: certificate exists
+in the tenant (cross-tenant → NOT_FOUND); **status must be ISSUED** (SUSPENDED/REVOKED/STALE/
+DRAFT/PENDING_APPROVAL → BusinessRuleError); `certificateNumber` + `checksum` +
+`verificationCode` required. Reads ONLY `Certificate` + `CertificateVerification` (+ the org
+name for display). Never calls the eligibility engine, inspects the transcript, or re-runs
+issue logic.
+
+**Pipeline (mirrors Phase 8/8B hardening).** Create the `CertificateExport` row (`exportType =
+MINISTRY`, `PENDING`) → **build** (pure) → **format** (pure) → **store + submit** (no DB tx
+held) → finalize in ONE short tx: `READY` + append-only `CertificateEvent` (`certificate.
+exported`) + `AuditLog` → publish `certificate.exported` AFTER commit. BOTH failure windows
+flip the row `FAILED` best-effort and re-throw the ORIGINAL error; the certificate is never
+mutated and no event/audit/domain event is written on failure.
+
+**Adapters (all in `export/`, mirroring the PDF adapters' placement).**
+- **`buildCertificateMinistryPayload`** (`certificate-ministry-payload.ts`) — PURE builder,
+  field-by-field copy (never a spread) from a minimized `CertificateMinistrySourceDto` → the
+  official payload; dates → ISO-8601.
+- **JSON / CSV / XML formatters** (`certificate-ministry-formatters.ts`) — PURE, DETERMINISTIC
+  (fixed field order via `MINISTRY_PAYLOAD_FIELDS`); CSV has a header + RFC-4180 escaping, XML
+  escapes `& < > " '` and wraps a `<certificate>` root. No external library.
+- **`LocalCertificateMinistryTransport`** (`certificate-ministry-transport.ts`) — `submit`
+  returns a DETERMINISTIC `externalReference` (`LOCAL-MINISTRY-<payloadChecksum[:24]>`), the
+  caller's `submittedAt`, and `status: "RECORDED"`. No external call.
+- **`DefaultCertificateMinistryStorage`** (`certificate-ministry-storage.ts`) — persists the
+  serialized artifact under a key SEPARATE from the PDF key
+  (`…/<exportId>.ministry.<json|csv|xml>`); `fileChecksum = SHA-256` of the serialized bytes.
+  `fileUrl`/storage key are internal.
+
+**Privacy / data minimization (§11).** The payload carries ONLY:
+`certificateNumber, certificateType, studentName, courseName, organizationName, issuedAt,
+expiresAt, verificationCode, verificationUrl, certificateChecksum, status`. It NEVER carries a
+transcript pointer/checksum, grades, attendance, finance reference, internal ids, raw
+snapshots, or audit metadata. The `certificateChecksum` is the certificate CONTENT checksum
+(frozen at issue), never a transcript checksum.
+
+**Result DTO — `CertificateMinistryExportResultDto`**: `{ exportId, certificateId, exportType,
+format, status, externalReference, fileChecksum, exportedAt }` — no raw snapshot, transcript
+id/checksum, or internal storage path.
+
+**No schema/migration change** (`CertificateExport` already existed; `MINISTRY` is an existing
+`CertificateExportType` value). Tests: **+32 within `src/modules/certificates`** (→ 514) — the
+command suite (ISSUED-only gating incl. reject DRAFT/PENDING/SUSPENDED/REVOKED/STALE, required
+metadata, authz, cross-tenant 404, PENDING→READY, failure→FAILED preserving the error, no
+certificate mutation, event/audit/domain event on success only, deterministic transport
+reference, no storage-path leak, arch guards 25–32) + the pure builder/formatter/storage suite
+(allowed-fields-only, excludes transcript/grades/attendance/finance, JSON deterministic, CSV/XML
+escaping, `fileChecksum` = serialized-payload hash).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔
+(514/514) · `eslint` ✔ (0 errors) · `prisma validate` ✔. No schema or migration change.
+
+**MINISTRY export works through the adapter pipeline with no real external API, consuming only
+frozen certificate snapshots, with a privacy-minimized payload, Phase-8B-style failure
+handling, and zero Academic Core / Transcript reads or lifecycle mutation.** External ministry
+API integration (a real transport implementing the same interface) is future work.
+
+**Future integration concern (out of scope for Phase 11).** Phase 11 ships only the
+`LocalCertificateMinistryTransport` (no external call), so the current submit→finalize ordering
+is safe. When a REAL ministry integration is introduced, the following must be reviewed — this
+is intentionally NOT designed here:
+- external submission must be **idempotent** (a retry must not double-submit);
+- the **finalize/submit ordering** must be revisited (today `submit` runs before the finalize
+  transaction, so a finalize failure marks the row `FAILED` even though a real submit would have
+  already reached the ministry);
+- **reconciliation** should key off the `externalReference`;
+- an **Outbox / retry** strategy may be required for at-least-once delivery.
