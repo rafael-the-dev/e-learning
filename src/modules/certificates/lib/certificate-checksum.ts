@@ -38,6 +38,10 @@ export interface CertificateChecksumInput {
   studentSnapshot: Record<string, unknown>;
   /** Frozen course identity projection, or null for non-course certificates. */
   courseSnapshot: Record<string, unknown> | null;
+  /** Frozen structured statement of what was certified (completion status / issue
+   *  basis), as stored in `issueBasisSnapshot`. Part of the certificate's identity
+   *  (§20), so it is checksummed. */
+  issueBasisSnapshot: Record<string, unknown>;
   certificateType: CertificateType | string;
   issuedAt: Date;
   policyId: string;
@@ -61,6 +65,7 @@ export function toCanonicalCertificateContent(
     transcriptChecksum: input.transcriptChecksum,
     student: input.studentSnapshot,
     course: input.courseSnapshot,
+    issueBasis: input.issueBasisSnapshot,
     certificateType: input.certificateType,
     issuedAt: input.issuedAt,
     policyId: input.policyId,

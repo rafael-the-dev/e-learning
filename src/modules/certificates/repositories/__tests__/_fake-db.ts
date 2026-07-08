@@ -170,12 +170,33 @@ export type FakeDb = Record<string, ReturnType<typeof makeModel>>;
 
 /** Build a fresh in-memory DB. Model delegates are created lazily on first
  *  access, so any Prisma model name works without an up-front registry.
- *  `$transaction(fn)` simply runs the callback with the same fake as the tx
- *  client — enough to prove a repository threads its `client` argument. */
+ *
+ *  `$transaction(fn)` has real ROLLBACK semantics: every model's store is
+ *  snapshotted (shallow row copies) before the callback runs; if the callback
+ *  throws, all stores are restored (rows created mid-transaction are discarded,
+ *  in-place mutations are reverted to their pre-image) and the error re-throws.
+ *  This lets command tests prove "rollback leaves nothing" behaviourally. */
 export function makeFakeDb(): FakeDb {
   const models = new Map<string, ReturnType<typeof makeModel>>();
 
-  const transaction = async <T>(fn: (tx: FakeDb) => Promise<T> | T): Promise<T> => fn(proxy);
+  const transaction = async <T>(fn: (tx: FakeDb) => Promise<T> | T): Promise<T> => {
+    const backup = new Map<ReturnType<typeof makeModel>, Row[]>();
+    for (const model of models.values()) {
+      backup.set(model, model.__store.map((r) => ({ ...r })));
+    }
+    try {
+      return await fn(proxy);
+    } catch (err) {
+      // Restore models that existed before the tx; clear any model first touched
+      // inside the tx (it had no rows to begin with) so mid-tx creates are undone.
+      for (const model of models.values()) {
+        const rows = backup.get(model);
+        model.__store.length = 0;
+        if (rows) model.__store.push(...rows);
+      }
+      throw err;
+    }
+  };
 
   const proxy: FakeDb = new Proxy({} as FakeDb, {
     get(_target, prop) {
