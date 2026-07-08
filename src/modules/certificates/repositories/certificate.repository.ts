@@ -326,6 +326,26 @@ function buildCertificateListWhere(filters: CertificateListFilters): Record<stri
   return where;
 }
 
+export interface FindCertificatesByIdsParams {
+  organizationId: string;
+  ids: string[];
+}
+
+/** Batch org-scoped fetch by id set (Phase 13 bulk preview) — one query, no N+1.
+ *  Returns `[]` for an empty id list; live rows only. */
+export async function findCertificatesByIds(
+  params: FindCertificatesByIdsParams,
+  client?: PrismaClientOrTx
+): Promise<CertificateRecord[]> {
+  if (params.ids.length === 0) return [];
+  const db = client ?? (await getDb());
+  const rows = await db.certificate.findMany({
+    where: { organizationId: params.organizationId, id: { in: params.ids }, deletedAt: null },
+    select: certificateSelect,
+  });
+  return rows.map(toRecord);
+}
+
 export async function listCertificates(
   filters: CertificateListFilters,
   client?: PrismaClientOrTx

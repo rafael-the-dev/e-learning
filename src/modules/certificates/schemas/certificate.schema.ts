@@ -255,6 +255,91 @@ export const fulfillCertificateRequestSchema = z
   .strict();
 export type FulfillCertificateRequestInput = z.infer<typeof fulfillCertificateRequestSchema>;
 
+// =============================================================================
+// BULK OPERATION SCHEMAS (Phase 13)
+// -----------------------------------------------------------------------------
+// The bulk layer is an ORCHESTRATOR: each item is executed through the existing
+// single-item command. These schemas validate only the ENVELOPE (a non-empty item
+// list + flags) — the per-item business rules stay in the single commands.
+// `stopOnFailure` defaults to false (continue past failures). `reason` is applied to
+// every item; for revoke/suspend it is mandatory (mirrors the single commands).
+// =============================================================================
+
+const bulkStopOnFailure = z.boolean().optional().default(false);
+
+export const bulkGenerateCertificatesSchema = z
+  .object({
+    items: z
+      .array(
+        z.object({
+          transcriptVersionId: z.string().min(1, "A versão do histórico é obrigatória"),
+          certificateType: certificateTypeSchema,
+          policyId: z.string().min(1).optional(),
+          courseId: z.string().min(1).optional(),
+        })
+      )
+      .min(1, "É necessário pelo menos um item"),
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+    stopOnFailure: bulkStopOnFailure,
+  })
+  .strict();
+export type BulkGenerateCertificatesInput = z.input<typeof bulkGenerateCertificatesSchema>;
+
+const bulkCertificateIdItems = z
+  .array(z.object({ certificateId: z.string().min(1, "O identificador do certificado é obrigatório") }))
+  .min(1, "É necessário pelo menos um item");
+
+export const bulkIssueCertificatesSchema = z
+  .object({
+    items: bulkCertificateIdItems,
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+    stopOnFailure: bulkStopOnFailure,
+  })
+  .strict();
+export type BulkIssueCertificatesInput = z.input<typeof bulkIssueCertificatesSchema>;
+
+export const bulkExportCertificatesSchema = z
+  .object({
+    items: z
+      .array(
+        z.object({
+          certificateId: z.string().min(1, "O identificador do certificado é obrigatório"),
+          exportType: certificateExportTypeSchema.optional(),
+        })
+      )
+      .min(1, "É necessário pelo menos um item"),
+    stopOnFailure: bulkStopOnFailure,
+  })
+  .strict();
+export type BulkExportCertificatesInput = z.input<typeof bulkExportCertificatesSchema>;
+
+export const bulkRevokeCertificatesSchema = z
+  .object({
+    items: bulkCertificateIdItems,
+    reason: z.string().min(1, "O motivo é obrigatório").max(500, "O motivo não pode exceder 500 caracteres"),
+    stopOnFailure: bulkStopOnFailure,
+  })
+  .strict();
+export type BulkRevokeCertificatesInput = z.input<typeof bulkRevokeCertificatesSchema>;
+
+export const bulkSuspendCertificatesSchema = z
+  .object({
+    items: bulkCertificateIdItems,
+    reason: z.string().min(1, "O motivo é obrigatório").max(500, "O motivo não pode exceder 500 caracteres"),
+    stopOnFailure: bulkStopOnFailure,
+  })
+  .strict();
+export type BulkSuspendCertificatesInput = z.input<typeof bulkSuspendCertificatesSchema>;
+
+export const bulkRestoreCertificatesSchema = z
+  .object({
+    items: bulkCertificateIdItems,
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+    stopOnFailure: bulkStopOnFailure,
+  })
+  .strict();
+export type BulkRestoreCertificatesInput = z.input<typeof bulkRestoreCertificatesSchema>;
+
 /** Public verification code (Phase 7) — the opaque, globally-unique lookup handle.
  *  32 lowercase-hex chars (128 bits), matching `generateVerificationCode`. Validated
  *  at the public endpoint before any DB lookup so malformed input never hits the DB. */

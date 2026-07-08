@@ -2401,3 +2401,70 @@ change.
 via GenerateCertificateCommand, no auto-issue) — all tenant-safe, auditable, with server-side
 allowedActions and zero eligibility duplication or Academic Core / Transcript reads.** Guardian
 request flow and payment integration remain deferred.
+
+## 47. Phase 13 — Implementation Notes (Bulk Operations, 2026-07-08)
+
+Phase 13 adds a thin **orchestration** layer that runs the existing single-item commands over
+many items. The bulk layer duplicates NO business rule, reads NO Academic Core / Transcript,
+calls NO eligibility engine, and touches NO repository for writes — **every item executes through
+an existing command in its own transaction**. Out of scope (unchanged): queues/workers,
+background jobs, retry schedulers, parallelism, ZIP/PDF-merge, ministry batch API.
+
+**Commands** (`commands/bulk-certificate.commands.ts`), each orchestrating the matching single
+command: `BulkGenerateCertificatesCommand` → `GenerateCertificateCommand`,
+`BulkIssueCertificatesCommand` → `IssueCertificateCommand`, `BulkExportCertificatesCommand` →
+`ExportCertificateCommand`, `BulkRevokeCertificatesCommand` → `RevokeCertificateCommand`,
+`BulkSuspendCertificatesCommand` → `SuspendCertificateCommand`, `BulkRestoreCertificatesCommand`
+→ `RestoreCertificateCommand`.
+
+**Input.** `{ items: [...], reason?, stopOnFailure?=false }`. `reason` is applied to every item
+(mandatory for revoke/suspend, mirroring the single command). Item shapes match the single
+command inputs (generate carries `transcriptVersionId`/`certificateType`/`policyId?`/`courseId?`;
+issue/revoke/suspend/restore carry `certificateId`; export adds `exportType?`).
+
+**Execution (`commands/bulk-shared.ts` → `runBulkSequential`).** SEQUENTIAL only (no
+parallelism). Each item runs through the single command (its own transaction); a per-item failure
+is captured as `{ code, message }` (`mapBulkError`: ValidationError→VALIDATION,
+AuthorizationError→FORBIDDEN, NotFoundError→NOT_FOUND, BusinessRuleError→BUSINESS_RULE, else
+INTERNAL/generic — no leak) and **never rolls back earlier successes and never throws**. With
+`stopOnFailure=true` the run stops on the first failure and marks the remaining items `skipped`.
+
+**Result** — `BulkOperationResult { total, succeeded, failed, skipped, items[] }`; each item is
+`{ index, success, skipped, input, result?, error? }`. Invariant: `total === succeeded + failed +
+skipped`. An optional `onProgress` callback (constructor dep, never HTTP input) fires after each
+ATTEMPTED item with `{ processed, total, currentIndex, successes, failures, currentResult? }`.
+
+**Authorization ONCE.** The bulk command authorizes the single relevant permission up front
+(generate/issue/export/revoke/suspend; restore reuses suspend) and throws before processing if it
+fails. The single commands still authorize per item internally (unchanged) — the bulk layer adds
+no per-item authorization.
+
+**Tenant safety.** A cross-tenant / unknown item id makes the single command throw
+`NotFoundError` → captured as a per-item `NOT_FOUND` failure; the run continues. No other tenant's
+data is exposed.
+
+**Preview** — `BulkCertificateOperationPreviewService` (read-only, `certificates.view`): validates
+inputs BEFORE execution without mutation or eligibility recompute. `previewIssue` (batched via
+`findCertificatesByIds`) reports each certificate's `currentStatus` + `canIssue` (DRAFT/
+PENDING_APPROVAL); `previewGenerate` reports `canGenerate` via a shallow active-duplicate check
+(`findExistingActiveCertificate`) — the authoritative decision still happens in the command at
+execution time.
+
+**Routes** (admin) — `POST /api/certificates/bulk/{generate,issue,export,revoke,suspend,restore}`.
+Thin shells: authenticate → construct the bulk command → return its `BulkOperationResult` (200 even
+with partial failures); only invalid input (422) / unauthorized (401/403) short-circuit.
+
+**No schema/migration change** (one additive read `findCertificatesByIds` for the preview). Tests:
+**+22 within `src/modules/certificates`** (→ 576) — orchestration (single/multiple/mixed,
+stopOnFailure on/off, progress, counts, error mapping, never-throws, authz, invalid input) +
+delegation (each single command constructed exactly once per item) + preview (canIssue/canGenerate,
+org-scoped, no mutation, authz) + arch guards (no Transcript/Academic Core/eligibility/repository)
+— **plus a 9-test bulk route suite** under `src/app`.
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔ (576/576)
++ bulk route suite ✔ · `eslint` ✔ (0 errors) · `prisma validate` ✔. No schema or migration change.
+
+**Bulk operations reuse the existing commands verbatim — sequential, independent transactions,
+partial-success with per-item results, `stopOnFailure`, once-only authorization, a read-only
+preview, and zero duplicated business logic / Academic Core / Transcript reads.** Queues, retries,
+and parallel execution remain out of scope.
