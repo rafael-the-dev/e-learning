@@ -99,6 +99,12 @@ export interface CertificateEligibilityResult {
   eligible: boolean;
   blockingReasons: CertificateEligibilityBlocker[];
   warnings: CertificateEligibilityWarning[];
+  /** Non-blocking gate: `true` when the resolved policy sets `requiresManualApproval`.
+   *  Manual approval NEVER makes the certificate ineligible — an eligible certificate
+   *  with `requiresApproval === true` must route to `PENDING_APPROVAL` (a human sign-off
+   *  before issue) instead of being issued directly (§14/§15, D-5, Rule C-5). Commands
+   *  read this flag to choose DRAFT vs PENDING_APPROVAL; they never re-decide it. */
+  requiresApproval: boolean;
   evaluatedPolicyId: string | null;
   evaluatedAt: Date;
   facts: CertificateEligibilityFacts;

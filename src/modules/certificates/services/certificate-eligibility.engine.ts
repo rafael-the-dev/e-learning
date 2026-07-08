@@ -48,27 +48,33 @@ export function evaluateCertificateEligibility(
 
   // B–E. Transcript must exist and be ISSUED. One mutually-exclusive reason per
   // status: a certificate is generated from the current issued transcript version.
+  const transcriptIssued = transcript?.transcriptStatus === "ISSUED";
   if (!transcript) {
     blockingReasons.push(CertificateEligibilityBlocker.TRANSCRIPT_NOT_ISSUED);
   } else if (transcript.transcriptStatus === "REVOKED") {
     blockingReasons.push(CertificateEligibilityBlocker.TRANSCRIPT_REVOKED);
   } else if (transcript.transcriptStatus === "SUPERSEDED") {
     blockingReasons.push(CertificateEligibilityBlocker.TRANSCRIPT_SUPERSEDED);
-  } else if (transcript.transcriptStatus !== "ISSUED") {
+  } else if (!transcriptIssued) {
     blockingReasons.push(CertificateEligibilityBlocker.TRANSCRIPT_NOT_ISSUED);
   }
 
   // Policy gates — compare copied facts only, never recompute.
   if (policy) {
+    // Snapshot-fact gates only make sense against an ISSUED transcript's frozen facts;
+    // a non-ISSUED transcript already produced its own blocker above, and evaluating
+    // its (possibly incomplete) snapshot would emit noisy, redundant blockers. Gate
+    // them behind `transcriptIssued` so the blocker set stays clean.
+
     // F. Course completion (reads the frozen course-progress snapshot status).
-    if (policy.requiresCourseCompleted && transcript) {
+    if (policy.requiresCourseCompleted && transcriptIssued) {
       if (transcript.courseProgressSnapshot?.status !== "COMPLETED") {
         blockingReasons.push(CertificateEligibilityBlocker.COURSE_NOT_COMPLETED);
       }
     }
 
     // G. No pending required subjects (reads copied subject statuses).
-    if (policy.requiresNoPendingSubjects && transcript) {
+    if (policy.requiresNoPendingSubjects && transcriptIssued) {
       const hasPendingRequired = transcript.subjects.some(
         (subject) => subject.isRequired && !SUBJECT_PASSING_STATUSES.has(subject.status)
       );
@@ -85,11 +91,16 @@ export function evaluateCertificateEligibility(
         blockingReasons.push(CertificateEligibilityBlocker.FINANCIAL_CLEARANCE_REQUIRED);
       }
     }
+  }
 
-    // I. Manual approval is a hard gate here — never auto-approved.
-    if (policy.requiresManualApproval) {
-      blockingReasons.push(CertificateEligibilityBlocker.MANUAL_APPROVAL_REQUIRED);
-    }
+  // I. Manual approval is a NON-blocking gate (§14/§15, D-5, Rule C-5): it never makes
+  //    the certificate ineligible. An eligible certificate that requires approval must
+  //    route to PENDING_APPROVAL (a human sign-off before issue) instead of issuing
+  //    directly. The engine surfaces it as a warning + the `requiresApproval` flag;
+  //    commands read the flag to choose DRAFT vs PENDING_APPROVAL — they never re-decide.
+  const requiresApproval = policy?.requiresManualApproval === true;
+  if (requiresApproval) {
+    warnings.push(CertificateEligibilityWarning.MANUAL_APPROVAL_REQUIRED_WARNING);
   }
 
   // Informational: an UNKNOWN finance status is always surfaced. It only *blocks*
@@ -110,6 +121,7 @@ export function evaluateCertificateEligibility(
     eligible: blockingReasons.length === 0,
     blockingReasons,
     warnings,
+    requiresApproval,
     evaluatedPolicyId: policy?.id ?? null,
     evaluatedAt,
     // The input facts, returned unchanged (never mutated).
