@@ -100,3 +100,15 @@ export interface CertificateExportResultDto {
   fileChecksum: string | null;
   exportedAt: Date | null;
 }
+
+/** The authorized download payload (Phase 8C). Carries the artifact BYTES to stream
+ *  through the server plus the values the route needs for its headers. It never
+ *  carries the storage key or the internal `fileUrl` — those never reach the client. */
+export interface CertificateExportDownloadResult {
+  buffer: Buffer;
+  contentType: string;
+  /** Used to build a safe `Content-Disposition` filename. */
+  certificateNumber: string;
+  /** Optional strong validator for an `ETag` header. */
+  fileChecksum: string | null;
+}

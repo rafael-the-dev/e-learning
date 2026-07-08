@@ -11,6 +11,10 @@ export interface StorageProvider {
     buffer: Buffer,
     options?: UploadOptions
   ): Promise<UploadResult>;
+  /** Read the stored bytes for a key. Throws if the object does not exist. Used by
+   *  authenticated download paths that stream bytes through the server (never by
+   *  redirecting a client to a raw provider URL). */
+  download(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
   getUrl(key: string): string;
   getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
@@ -49,6 +53,11 @@ class LocalStorageProvider implements StorageProvider {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, buffer);
     return { key, url: this.getUrl(key), size: buffer.length };
+  }
+
+  async download(key: string): Promise<Buffer> {
+    const filePath = path.join(this.baseDir, key);
+    return fs.readFile(filePath);
   }
 
   async delete(key: string): Promise<void> {
