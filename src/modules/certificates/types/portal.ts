@@ -136,3 +136,53 @@ export interface CertificateStudentListFilters {
   page?: number;
   pageSize?: number;
 }
+
+// ─── Certificate request workflow (Phase 12) ─────────────────────────────────
+
+/** Per-request action flags, decided server-side (permissions + status). */
+export interface CertificateRequestAllowedActions {
+  canApprove: boolean;
+  canReject: boolean;
+  canCancel: boolean;
+  canFulfill: boolean;
+}
+
+/** A row in a portal certificate-request list (admin or student). No audit metadata. */
+export interface CertificateRequestListItemDto {
+  requestId: string;
+  studentId: string;
+  certificateType: string;
+  status: string;
+  transcriptVersionId: string | null;
+  reason: string | null;
+  createdAt: Date;
+  reviewedAt: Date | null;
+  fulfilledCertificateId: string | null;
+  allowedActions: CertificateRequestAllowedActions;
+}
+
+export interface CertificateRequestListResult {
+  items: CertificateRequestListItemDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Admin/secretary request-list filters. */
+export interface CertificateRequestAdminListFilters {
+  status?: string;
+  studentId?: string;
+  certificateType?: string;
+  createdFrom?: Date;
+  createdTo?: Date;
+  page?: number;
+  pageSize?: number;
+}
+
+/** Student request-list filters (own scope enforced by the service). */
+export interface CertificateRequestStudentListFilters {
+  status?: string;
+  certificateType?: string;
+  page?: number;
+  pageSize?: number;
+}

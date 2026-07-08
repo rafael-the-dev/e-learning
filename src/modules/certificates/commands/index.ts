@@ -31,3 +31,9 @@ export * from "./restore-certificate.command";
 export * from "./export-certificate.command";
 export * from "./reconcile-certificate-staleness.command";
 export * from "./export-certificate-to-ministry.command";
+// Phase 12 — certificate request workflow (administrative; no eligibility duplication).
+export * from "./request-certificate.command";
+export * from "./approve-certificate-request.command";
+export * from "./reject-certificate-request.command";
+export * from "./cancel-certificate-request.command";
+export * from "./fulfill-certificate-request.command";

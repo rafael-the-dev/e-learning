@@ -5,7 +5,10 @@ import {
   NotFoundError,
   ValidationError,
 } from "@/shared/lib/command";
-import type { CertificateAdminListFilters } from "@/modules/certificates/types/portal";
+import type {
+  CertificateAdminListFilters,
+  CertificateRequestAdminListFilters,
+} from "@/modules/certificates/types/portal";
 import type { CertificateExportDownloadResult } from "@/modules/certificates/types/export";
 
 // =============================================================================
@@ -79,6 +82,36 @@ export function parseAdminListFilters(searchParams: URLSearchParams): Certificat
     issuedFrom: parseDateParam(searchParams.get("issuedFrom")),
     issuedTo: parseDateParam(searchParams.get("issuedTo")),
     search: searchParams.get("search") ?? undefined,
+    page: parseIntParam(searchParams.get("page")),
+    pageSize: parseIntParam(searchParams.get("pageSize")),
+  };
+}
+
+/** Parse the admin certificate-request list filters from a URL's query string. */
+export function parseRequestAdminListFilters(
+  searchParams: URLSearchParams
+): CertificateRequestAdminListFilters {
+  return {
+    status: searchParams.get("status") ?? undefined,
+    studentId: searchParams.get("studentId") ?? undefined,
+    certificateType: searchParams.get("certificateType") ?? undefined,
+    createdFrom: parseDateParam(searchParams.get("createdFrom")),
+    createdTo: parseDateParam(searchParams.get("createdTo")),
+    page: parseIntParam(searchParams.get("page")),
+    pageSize: parseIntParam(searchParams.get("pageSize")),
+  };
+}
+
+/** Parse the narrow student list filters (status/type/page) from a query string. */
+export function parseStudentListQuery(searchParams: URLSearchParams): {
+  status?: string;
+  certificateType?: string;
+  page?: number;
+  pageSize?: number;
+} {
+  return {
+    status: searchParams.get("status") ?? undefined,
+    certificateType: searchParams.get("certificateType") ?? undefined,
     page: parseIntParam(searchParams.get("page")),
     pageSize: parseIntParam(searchParams.get("pageSize")),
   };

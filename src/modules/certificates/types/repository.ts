@@ -220,6 +220,10 @@ export interface CertificateRequestListFilters {
   studentId?: string;
   certificateType?: string;
   status?: string;
+  /** Inclusive `createdAt` lower bound (Phase 12 admin filter). */
+  createdFrom?: Date;
+  /** Inclusive `createdAt` upper bound (Phase 12 admin filter). */
+  createdTo?: Date;
   includeDeleted?: boolean;
   skip?: number;
   take?: number;
