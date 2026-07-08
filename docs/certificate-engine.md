@@ -1135,8 +1135,13 @@ question remains unresolved.
     the policy gates): ✅ **IMPLEMENTED (2026-07-07)** — pure/deterministic; governed by
     the frozen **Rules C-3/C-4/C-5/C-6** and the flow in §14b. See *Phase 3, Part B
     Implementation Notes* below.
-- **Phase 4 — `EvaluateCertificateEligibilityCommand`** (read-only, snapshot-fact gates).
-- **Phase 5 — `GenerateCertificateDraftCommand`** (snapshot, verification code, no number).
+- **Phase 4 — `GenerateCertificateCommand`** (snapshot, no number, no checksum, no
+  verification row): ✅ **IMPLEMENTED (2026-07-08)** — creates a `DRAFT` /
+  `PENDING_APPROVAL` certificate from the eligibility decision. See *Phase 4
+  Implementation Notes* (§37) below. A standalone read-only
+  `EvaluateCertificateEligibilityCommand` was **not** built separately: the engine
+  (Phase 3B) is already the single evaluation authority, and this command consumes it
+  directly (a thin read-only wrapper can be added later without changing the engine).
 - **Phase 6 — `IssueCertificateCommand`** (number allocation, checksum, verification
   row, in-tx transcript re-check).
 - **Phase 7 — Revoke / Suspend / Restore + stale-handling event subscriber.**
@@ -1516,3 +1521,85 @@ Grade/Attendance/course-completion, no event/audit, no clock/randomness, no writ
 ✔ (187/187; +32, +1 warnings-vocabulary) · `eslint` ✔. No schema or migration change.
 
 **Ready for review before Phase 4.**
+
+---
+
+## 37. Phase 4 — Implementation Notes (`GenerateCertificateCommand`, 2026-07-08)
+
+Phase 4 shipped `GenerateCertificateCommand`
+(`src/modules/certificates/commands/generate-certificate.command.ts`) — the first
+state-mutating certificate command. It **creates** a certificate record from an
+ISSUED transcript; it does **NOT issue** it.
+
+**What it does:**
+
+- **Creates `DRAFT` or `PENDING_APPROVAL` only.** The status is chosen solely from the
+  engine result: `result.requiresApproval === true → PENDING_APPROVAL`, else `DRAFT`.
+- **Consumes `CertificateEligibilitySource` + `CertificateEligibilityEngine`.** The
+  flow is exactly: source loads facts → engine decides → command executes. The command
+  branches **only** on `result.eligible` / `result.requiresApproval`; it never inspects
+  a policy gate, a transcript snapshot status, or the finance flag to decide anything
+  (Rules C-3/C-5). It **contains no eligibility logic**.
+- **Snapshots facts verbatim.** `studentSnapshot` / `courseSnapshot` are copied from
+  the transcript facts; `issueBasisSnapshot` records the transcript identity
+  (`transcriptVersionId` / `transcriptNumber` / `transcriptChecksum` / `transcriptType`),
+  the `certificateType`, the full `eligibilityResult`
+  (`eligible` / `blockingReasons` / `warnings` / `requiresApproval` / `evaluatedPolicyId`
+  / `evaluatedAt`), and the copied `policy` / `financialClearance` / `administrative`
+  fact objects (no Prisma or repository objects). `transcriptNumber` / `transcriptChecksum`
+  are copied exactly. `studentId` / `enrollmentId` / `courseId` are **derived from the
+  transcript facts** (the copied `studentSnapshot` / `courseSnapshot`), never accepted
+  from the client.
+- **Duplicate prevention.** It loads `findExistingActiveCertificate` (active =
+  not `REVOKED`/`STALE`, `deletedAt = null` — mirrors the
+  `certificates_active_per_transcript_type_key` filtered-unique index) and feeds the
+  result to the engine as `administrative.alreadyIssued`, so the **engine** produces the
+  `CERTIFICATE_ALREADY_ISSUED` decision. It does not rely on the DB constraint alone,
+  and does not decide the duplicate itself.
+- **One transaction.** Load → evaluate → duplicate check → create run inside a single
+  `db.$transaction`. The command performs exactly one write (the create) as the final
+  step, so any failure leaves **no** partial certificate.
+- **Authorization:** requires `certificates.generate` via
+  `getUserPermissions` + `createAbility` (never a raw role string). Tenant scoping comes
+  from `ServiceContext.organizationId`; a cross-tenant transcript is simply invisible to
+  the source (→ `TRANSCRIPT_NOT_ISSUED`).
+
+**What it explicitly does NOT do (later phases):** assign `certificateNumber`, compute
+`checksum`, create the `CertificateVerification` row, render/export a PDF or QR, publish
+domain events, or write audit. It performs no issuance, revoke/suspend/restore, or stale
+handling. No finance integration beyond the existing (null this phase) facts. No
+Transcript or Academic Core changes.
+
+**Input contract.** `generateCertificateSchema` (strict): `{ transcriptVersionId,
+certificateType, policyId?, courseId?, reason? }`. `organizationId`, `studentId`, and
+immutable engine-owned fields (`certificateNumber`, `checksum`, `transcriptNumber`,
+`transcriptChecksum`, `status`) are **rejected** from client input; unsupported
+`certificateType` values are rejected by the enum. Errors: `ValidationError` (bad
+input), `AuthorizationError` (missing permission), `BusinessRuleError` (ineligible —
+carries `details.blockingReasons` / `details.warnings`, now supported by an optional
+`details` field on `BusinessRuleError`).
+
+**Small supporting changes:** `CertificateEligibilitySourceInput.studentId` relaxed to
+optional (the loaders never used it; the command derives identity from the transcript
+facts). `BusinessRuleError` gained an optional `details` bag (backward compatible).
+
+**Commands execute, the engine decides.** This command is the reference implementation
+of Rule C-5: it orchestrates and persists, and takes every eligibility decision from
+`CertificateEligibilityEngine`.
+
+**Tests (33):** eligibility branching (DRAFT / PENDING_APPROVAL / ineligible / missing
+policy / missing transcript / multiple blockers in error metadata); persistence
+(student/course/issue-basis snapshots, exact transcript number+checksum, finance
+snapshot, `certificateNumber`/`checksum`/`verificationCode` remain null, no verification
+row, duplicate active blocks, REVOKED/STALE prior does not block); transaction
+(single-write rollback leaves nothing); authorization (`certificates.generate`,
+cross-tenant invisibility, strict-schema rejection); and static architecture guards
+(imports the source + engine; does NOT import the Transcript ACL, transcript repos,
+Grade/Attendance/CourseCompletion, the number allocator, the checksum utility,
+event/audit, or PDF/storage/UI; contains no `policy.requires*` / `courseProgress.status`
+/ `financialClearance.status` branching; branches only on the result contract).
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔
+(223/223; +33) · `eslint` ✔ · `prisma validate` ✔. No schema or migration change.
+
+**Ready for review before Phase 6: `IssueCertificateCommand`.**

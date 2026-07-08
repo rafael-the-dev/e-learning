@@ -71,3 +71,26 @@ export const certificateEligibilityBlockerSchema = z.enum(values(CertificateElig
 export type CertificateEligibilityBlockerInput = z.infer<
   typeof certificateEligibilityBlockerSchema
 >;
+
+// =============================================================================
+// COMMAND INPUT SCHEMAS (Phase 4)
+// -----------------------------------------------------------------------------
+// Client-supplied input for certificate commands. `organizationId`, `studentId`,
+// and the actor come from the server `ServiceContext` / are derived from the
+// transcript facts — never from the client. Immutable fields the engine owns
+// (certificateNumber, checksum, transcriptNumber/checksum, status) are likewise
+// not accepted here. `.strict()` rejects any unexpected field.
+// =============================================================================
+
+/** Input for `GenerateCertificateCommand` — create a DRAFT / PENDING_APPROVAL
+ *  certificate from an issued transcript version. */
+export const generateCertificateSchema = z
+  .object({
+    transcriptVersionId: z.string().min(1, "A versão do histórico é obrigatória"),
+    certificateType: certificateTypeSchema,
+    policyId: z.string().min(1).optional(),
+    courseId: z.string().min(1).optional(),
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+  })
+  .strict();
+export type GenerateCertificateInput = z.infer<typeof generateCertificateSchema>;
