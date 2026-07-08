@@ -134,6 +134,23 @@ describe("evaluateCertificateEligibility — core decisions", () => {
     expect(result.blockingReasons).toContain(B.TRANSCRIPT_SUPERSEDED);
   });
 
+  it("6b. does not emit snapshot-fact gates for a non-ISSUED transcript (no noisy blockers)", () => {
+    // A DRAFT transcript with an incomplete course + pending subject must yield ONLY
+    // the transcript-status blocker — the course/subject gates apply to ISSUED facts.
+    const result = evaluateCertificateEligibility(
+      makeFacts({
+        transcript: makeTranscript({
+          transcriptStatus: "DRAFT",
+          courseProgressSnapshot: { status: "IN_PROGRESS" },
+          subjects: [subject("IN_PROGRESS", true)],
+        }),
+      })
+    );
+    expect(result.blockingReasons).toEqual([B.TRANSCRIPT_NOT_ISSUED]);
+    expect(result.blockingReasons).not.toContain(B.COURSE_NOT_COMPLETED);
+    expect(result.blockingReasons).not.toContain(B.PENDING_REQUIRED_SUBJECTS);
+  });
+
   it("7. blocks COURSE_NOT_COMPLETED when required and course status is not COMPLETED", () => {
     const result = evaluateCertificateEligibility(
       makeFacts({ transcript: makeTranscript({ courseProgressSnapshot: { status: "IN_PROGRESS" } }) })
@@ -202,11 +219,22 @@ describe("evaluateCertificateEligibility — core decisions", () => {
     expect(result.eligible).toBe(true);
   });
 
-  it("15. blocks MANUAL_APPROVAL_REQUIRED when the policy requires it", () => {
+  it("15. manual approval is a NON-blocking gate: eligible + warning, never a blocker", () => {
     const result = evaluateCertificateEligibility(
       makeFacts({ policy: makePolicy({ requiresManualApproval: true }) })
     );
-    expect(result.blockingReasons).toContain(B.MANUAL_APPROVAL_REQUIRED);
+    // Eligible-but-pending: the student qualifies; issue must route to PENDING_APPROVAL.
+    expect(result.eligible).toBe(true);
+    expect(result.blockingReasons).toEqual([]);
+    expect(result.blockingReasons).not.toContain(B.MANUAL_APPROVAL_REQUIRED);
+    expect(result.warnings).toContain(W.MANUAL_APPROVAL_REQUIRED_WARNING);
+    expect(result.requiresApproval).toBe(true);
+  });
+
+  it("15b. does not require approval when the policy does not set it", () => {
+    const result = evaluateCertificateEligibility(makeFacts());
+    expect(result.requiresApproval).toBe(false);
+    expect(result.warnings).not.toContain(W.MANUAL_APPROVAL_REQUIRED_WARNING);
   });
 
   it("16. blocks CERTIFICATE_ALREADY_ISSUED when administrative.alreadyIssued is true", () => {
@@ -214,16 +242,33 @@ describe("evaluateCertificateEligibility — core decisions", () => {
     expect(result.blockingReasons).toContain(B.CERTIFICATE_ALREADY_ISSUED);
   });
 
-  it("17. returns multiple independent blockers together", () => {
+  it("17. returns multiple independent hard blockers together", () => {
+    const result = evaluateCertificateEligibility(
+      makeFacts({
+        policy: makePolicy({ requiresFinancialClearance: true }),
+        financialClearance: null,
+        transcript: makeTranscript({ courseProgressSnapshot: { status: "IN_PROGRESS" } }),
+      })
+    );
+    expect(result.blockingReasons).toContain(B.COURSE_NOT_COMPLETED);
+    expect(result.blockingReasons).toContain(B.FINANCIAL_CLEARANCE_REQUIRED);
+    expect(result.blockingReasons.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("17b. hard blockers + manual approval: eligible=false, only hard blockers, warning still present", () => {
     const result = evaluateCertificateEligibility(
       makeFacts({
         policy: makePolicy({ requiresManualApproval: true, requiresFinancialClearance: true }),
         financialClearance: null,
       })
     );
-    expect(result.blockingReasons).toContain(B.MANUAL_APPROVAL_REQUIRED);
-    expect(result.blockingReasons).toContain(B.FINANCIAL_CLEARANCE_REQUIRED);
-    expect(result.blockingReasons.length).toBeGreaterThanOrEqual(2);
+    expect(result.eligible).toBe(false);
+    // The manual-approval gate never enters the blocker list.
+    expect(result.blockingReasons).not.toContain(B.MANUAL_APPROVAL_REQUIRED);
+    expect(result.blockingReasons).toEqual([B.FINANCIAL_CLEARANCE_REQUIRED]);
+    // The gate is still surfaced (warning + flag) even while other blockers fail.
+    expect(result.warnings).toContain(W.MANUAL_APPROVAL_REQUIRED_WARNING);
+    expect(result.requiresApproval).toBe(true);
   });
 
   it("18. warnings do not block when there is no blocker", () => {

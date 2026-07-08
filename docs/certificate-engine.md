@@ -303,7 +303,7 @@ fact already present on the transcript snapshot (or a non-academic finance flag)
 
 1. `(organizationId, certificateType, courseId = <course>)` — course override
 2. `(organizationId, certificateType, courseId = null)` — org default
-3. none found → eligibility fails with blocker `NO_POLICY_CONFIGURED`
+3. none found → eligibility fails with blocker `POLICY_NOT_FOUND`
 
 ### Answers to the prompt's questions
 
@@ -664,28 +664,38 @@ rule — a `PARTICIPATION` statement still reads its facts from an issued transc
    Academic Core, Rule C-2). Its result is captured for snapshotting at generation.
 4. **Evaluate** — check each academic gate against **frozen snapshot facts only**,
    and the administrative gates (finance/manual-approval) against the external results.
-5. **Return** `CertificateEligibilityDto`:
-   `{ eligible, blockers[], warnings[], transcriptVersionId, policyId, financialClearance }`
-   where `financialClearance = { status, checkedAt, reference? } | null`.
+5. **Return** the engine's `CertificateEligibilityResult` (§14b, implemented Phase 3B):
+   `{ eligible, blockingReasons[], warnings[], requiresApproval, evaluatedPolicyId, evaluatedAt, facts }`
+   — `eligible` is exactly `blockingReasons.length === 0`; `requiresApproval` is the
+   non-blocking manual-approval gate; the copied `financialClearance` fact lives inside
+   `facts`. (A later `EvaluateCertificateEligibilityCommand`, Phase 4, MAY project this
+   into a thinner client DTO; the engine contract is the shape above.)
 
 No academic recalculation occurs in any step.
 
-**Blockers → the fact that produces them:**
+**Hard blockers → the fact that produces them** (each makes `eligible = false`):
 
 | Blocker | Derived from (frozen fact) |
 |---|---|
-| `NO_POLICY_CONFIGURED` | no active policy resolved |
-| `TRANSCRIPT_NOT_ISSUED` | `version.status !== ISSUED` |
+| `POLICY_NOT_FOUND` | no active policy resolved |
+| `TRANSCRIPT_NOT_ISSUED` | `version.status !== ISSUED` (missing / DRAFT / other non-issued) |
 | `TRANSCRIPT_REVOKED` | `version.status === REVOKED` |
 | `TRANSCRIPT_SUPERSEDED` | `version.status === SUPERSEDED` (or root `needsRegeneration`) |
-| `COURSE_NOT_COMPLETED` | `courseProgressSnapshot.status !== COMPLETED` (policy gate) |
-| `PENDING_REQUIRED_SUBJECTS` | any snapshot subject `isRequired && status ∉ {PASSED, …terminal-pass}` (policy gate) |
-| `FINANCIAL_CLEARANCE_REQUIRED` | finance read-model clearance flag is false (policy gate; **non-academic**, D-3 — snapshot the result into the certificate per Rule C-2) |
-| `MANUAL_APPROVAL_REQUIRED` | policy `requiresManualApproval` (not a hard block — routes to `PENDING_APPROVAL`) |
+| `COURSE_NOT_COMPLETED` | `courseProgressSnapshot.status !== COMPLETED` (policy gate; ISSUED transcript only) |
+| `PENDING_REQUIRED_SUBJECTS` | any snapshot subject `isRequired && status ∉ {PASSED, COMPLETED, PROMOTED}` (policy gate; ISSUED transcript only) |
+| `FINANCIAL_CLEARANCE_REQUIRED` | finance read-model clearance flag not `CLEARED` (policy gate; **non-academic**, D-3 — snapshot the result into the certificate per Rule C-2) |
 | `CERTIFICATE_ALREADY_ISSUED` | an active certificate exists for `(transcriptVersionId, certificateType)` |
 
-`MANUAL_APPROVAL_REQUIRED` is surfaced as a **warning/gate**, not a hard blocker: it
-means "eligible, but must pass approval before issue." All other blockers are hard.
+The transcript-status reason is mutually exclusive (one per status); the snapshot-fact
+gates apply **only to an ISSUED transcript** (a non-issued transcript already produced
+its own blocker, so its incomplete snapshot never adds redundant gate blockers).
+
+**Manual approval is NOT a blocker.** `policy.requiresManualApproval` is a **non-blocking
+gate**: it never makes `eligible = false`. When set, the engine leaves `eligible`
+untouched, sets `requiresApproval = true`, and adds the `MANUAL_APPROVAL_REQUIRED_WARNING`
+warning. An eligible-but-pending certificate **routes to `PENDING_APPROVAL`** (a human
+sign-off before issue) — it is not ineligible. Commands read `requiresApproval` to choose
+DRAFT vs PENDING_APPROVAL (Rule C-5); they never re-decide it.
 
 **No academic recalculation. No reads of Grade/Attendance/StudentAssessmentResult/
 StudentSubjectProgress/StudentLevelProgress.**
@@ -778,9 +788,10 @@ repositories to *persist* the outcome — that is orchestration, not a decision.
 `GenerateCertificateDraftCommand`
 
 1. Run eligibility (§14).
-2. If hard-blocked → abort with the blockers.
-3. If eligible and policy has no manual gate → create `Certificate (DRAFT)`.
-   If `requiresManualApproval` → create `Certificate (PENDING_APPROVAL)`.
+2. If there are hard `blockingReasons` (`eligible === false`) → abort with the blockers.
+   (Manual approval is **not** a blocker, so it never triggers this abort.)
+3. If `eligible` and `!requiresApproval` → create `Certificate (DRAFT)`.
+   If `eligible` and `requiresApproval` → create `Certificate (PENDING_APPROVAL)`.
 4. **Snapshot** the display facts from the transcript version into the three snapshot
    columns — `studentSnapshot` (student identity), `courseSnapshot` (course identity),
    `issueBasisSnapshot` (completion status + issue basis) — copied verbatim, never
@@ -1094,7 +1105,7 @@ question remains unresolved.
 | **D-2** | Visible type prefix in number | **`CERT-YYYY-NNNNNN`, single per-(org, year) counter.** A visible type prefix is permitted only under regulatory requirement, and even then the counter key stays per-(org, year). Never key the counter by type. |
 | **D-3** | Financial clearance source | **Consult a finance read-model at eligibility time and SNAPSHOT the result onto the certificate** (`financialClearanceStatus` / `financialClearanceCheckedAt` / `financialClearanceReference`). Finance is **not** an academic fact and must never enter Academic Core / Grade Engine / Transcript Engine. The certificate never recalculates finance later. (Rule C-2.) |
 | **D-4** | `onTranscriptInvalidated` default | **Default `MARK_STALE`** (`Certificate.status = STALE`, `publicStatus = SUSPENDED` — "under review"). Policy may specify `SUSPEND` or `REVOKE` for regulated types. Never silently regenerated, never silently re-issued. |
-| **D-5** | Auto-issue safety | `autoIssueOnTranscriptIssued` proceeds **only** when the policy has no manual/financial gate; otherwise it produces a `PENDING_APPROVAL`. Frozen. |
+| **D-5** | Auto-issue safety | `autoIssueOnTranscriptIssued` proceeds **only** when the policy has no manual/financial gate; otherwise it produces a `PENDING_APPROVAL`. Manual approval is a **non-blocking gate**, never a hard blocker: the eligibility engine keeps such a certificate `eligible` and sets `requiresApproval = true`, and the auto-issue/generate path routes it to `PENDING_APPROVAL` (a human sign-off) instead of aborting or issuing directly. Frozen. |
 | **D-6** | Expiry handling | **Expiry affects VERIFICATION ONLY.** `Certificate.status` stays `ISSUED`; a scheduled sweep sets `CertificateVerification.publicStatus = EXPIRED` when `expiresAt` passes. There is **no `ISSUED → EXPIRED` lifecycle transition** — issuance is historical truth; expiry is operational validity. |
 | **D-7** | Digital signature | **Content-only checksum, generated once on issue, never recomputed.** Cryptographic org signature is a later phase (key management out of scope for v1.0). |
 | **D-8** | Snapshot shape vs child tables | **JSON snapshot columns on the leaf `Certificate` aggregate — no child tables.** Implemented (Phase 1) as **three** columns: `studentSnapshot` (`NVarChar(Max)`, required), `courseSnapshot` (`NVarChar(Max)`, nullable), `issueBasisSnapshot` (`NVarChar(Max)`, required). This refines the original single-`contentSnapshot` sketch into three purpose-scoped JSON columns while preserving the binding intent (leaf aggregate, no child tables, frozen at generation, never recomputed). Promote to child tables only if reporting later needs relational queries over certificate content (new ADR). |
@@ -1448,8 +1459,9 @@ persistence, no events/audit. No schema changes, no migrations.**
   `AdministrativeFacts.alreadyIssued?`.
 - **Output** — `CertificateEligibilityResult` (defined in `types/eligibility-source.ts`,
   replacing the unused Phase 0 placeholder): `{ eligible, blockingReasons[],
-  warnings[], evaluatedPolicyId, evaluatedAt, facts }`. `eligible` is exactly
-  `blockingReasons.length === 0`; warnings never block; `facts` is returned unchanged.
+  warnings[], requiresApproval, evaluatedPolicyId, evaluatedAt, facts }`. `eligible` is
+  exactly `blockingReasons.length === 0`; warnings and `requiresApproval` never affect
+  `eligible`; `facts` is returned unchanged.
 - New constants: `CertificateEligibilityBlocker.POLICY_NOT_FOUND` and the
   `CertificateEligibilityWarning` vocabulary (informational only).
 
@@ -1459,30 +1471,46 @@ persistence, no events/audit. No schema changes, no migrations.**
 (`requiresCourseCompleted` and `courseProgressSnapshot.status !== COMPLETED`) ·
 `PENDING_REQUIRED_SUBJECTS` (`requiresNoPendingSubjects` and a required subject whose
 copied status ∉ {PASSED, COMPLETED, PROMOTED}) · `FINANCIAL_CLEARANCE_REQUIRED`
-(`requiresFinancialClearance` and clearance not `CLEARED`) · `MANUAL_APPROVAL_REQUIRED`
-(hard gate, never auto-approved) · `CERTIFICATE_ALREADY_ISSUED`
+(`requiresFinancialClearance` and clearance not `CLEARED`) · `CERTIFICATE_ALREADY_ISSUED`
 (`administrative.alreadyIssued === true`). The transcript-status reason is
-mutually-exclusive (one per status); other gates accumulate.
+mutually-exclusive (one per status); the snapshot-fact gates (`COURSE_NOT_COMPLETED`,
+`PENDING_REQUIRED_SUBJECTS`) evaluate **only for an ISSUED transcript** so a non-issued
+transcript never adds redundant gate blockers on top of its status blocker; the
+remaining gates accumulate.
 
-**Warnings** (non-blocking): `FINANCIAL_CLEARANCE_UNKNOWN` is emitted whenever the
-clearance status is `UNKNOWN` — it blocks only when the policy requires clearance
-(that is a separate blocker); on its own it is informational. (Expiry warnings are
-deferred; the engine never reads the clock.)
+**Manual approval is a NON-blocking gate** (H1 fix — aligns with §14/§15, D-5, Rule
+C-5). `policy.requiresManualApproval` does **not** add a blocker and never makes
+`eligible = false`. Instead the engine sets `requiresApproval = true` and emits the
+`MANUAL_APPROVAL_REQUIRED_WARNING` warning. An eligible certificate that
+`requiresApproval` routes to `PENDING_APPROVAL` (human sign-off before issue); an
+eligible one that does not goes straight to DRAFT/ready-for-issue. The unused
+`MANUAL_APPROVAL_REQUIRED` blocker constant is retained in the vocabulary but the engine
+never emits it.
+
+**Warnings** (non-blocking): `MANUAL_APPROVAL_REQUIRED_WARNING` (policy requires manual
+approval — see above) and `FINANCIAL_CLEARANCE_UNKNOWN` (emitted whenever clearance
+status is `UNKNOWN`; it blocks only when the policy requires clearance — a separate
+blocker; on its own it is informational). Expiry warnings are deferred; the engine
+never reads the clock.
 
 **Determinism (Rule C-6):** the engine reads no DB/repository/service/clock/
 randomness; `evaluatedAt` comes from `evaluationContext.evaluatedAt` else
 `metadata.loadedAt`. Same facts → same result; it never mutates the input.
 
-**Commands (later phases) must consume this result** and execute it — they must not
-duplicate or re-check any gate (Rule C-5).
+**Commands (later phases) must consume this result** and execute it — they route on
+`eligible` + `requiresApproval` (blockers → abort; eligible + `requiresApproval` →
+PENDING_APPROVAL; eligible without it → DRAFT/ready). They must not duplicate or
+re-check any gate, nor re-decide approval routing (Rule C-5).
 
-**Tests (32):** 24 behavioural (happy path; each blocker; optional-subject ignored;
-finance null/NOT_CLEARED/UNKNOWN+warning/CLEARED; manual approval; already-issued;
-multiple blockers; warnings-don't-block; `eligible === blockingReasons.length===0`;
-`evaluatedPolicyId`; `evaluatedAt` from facts; facts returned unchanged; input not
-mutated; deterministic) + 8 architecture guards (no Prisma/db, no repository, no
-source/ACL/transcript-Prisma, no Grade/Attendance/course-completion, no
-event/audit, no clock/randomness, no writes).
+**Tests (35):** 27 behavioural (happy path; each hard blocker; non-ISSUED transcript
+emits no snapshot-fact gates; optional-subject ignored; finance
+null/NOT_CLEARED/UNKNOWN+warning/CLEARED; manual approval → eligible + warning + flag,
+never a blocker; manual approval + hard blockers → ineligible with only hard blockers
+but warning/flag still present; already-issued; multiple hard blockers;
+warnings-don't-block; `eligible === blockingReasons.length===0`; `evaluatedPolicyId`;
+`evaluatedAt` from facts; facts returned unchanged; input not mutated; deterministic) +
+8 architecture guards (no Prisma/db, no repository, no source/ACL/transcript-Prisma, no
+Grade/Attendance/course-completion, no event/audit, no clock/randomness, no writes).
 
 **Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates`
 ✔ (187/187; +32, +1 warnings-vocabulary) · `eslint` ✔. No schema or migration change.

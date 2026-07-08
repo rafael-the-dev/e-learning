@@ -102,9 +102,13 @@ export const CertificateExportStatus = {
 export type CertificateExportStatus =
   (typeof CertificateExportStatus)[keyof typeof CertificateExportStatus];
 
-/** Reasons a certificate cannot be issued. Each is derived from a FROZEN transcript
- *  fact or an administrative gate — never from re-running an academic rule (ADR-002).
- *  `MANUAL_APPROVAL_REQUIRED` routes to PENDING_APPROVAL rather than a hard block. */
+/** Reasons a certificate cannot be issued — each makes `eligible = false`. Each is
+ *  derived from a FROZEN transcript fact or an administrative gate — never from
+ *  re-running an academic rule (ADR-002). NOTE: `MANUAL_APPROVAL_REQUIRED` is a
+ *  non-blocking gate, NOT a hard blocker — the eligibility engine never emits it as a
+ *  blocking reason; it instead sets `requiresApproval` + `MANUAL_APPROVAL_REQUIRED_WARNING`
+ *  and the certificate routes to PENDING_APPROVAL. The constant is retained for the
+ *  vocabulary but is not used by the engine. */
 export const CertificateEligibilityBlocker = {
   POLICY_NOT_FOUND: "POLICY_NOT_FOUND",
   TRANSCRIPT_NOT_ISSUED: "TRANSCRIPT_NOT_ISSUED",
