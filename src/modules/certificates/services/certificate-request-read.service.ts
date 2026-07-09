@@ -2,7 +2,11 @@ import { AuthorizationError } from "@/shared/lib/command";
 import type { AuthContext } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { resolveStudentScope } from "@/server/auth/student-scope";
-import { CertificateRequestStatus } from "@/modules/certificates/constants";
+import {
+  CERTIFICATE_LIST_DEFAULT_PAGE_SIZE,
+  CERTIFICATE_LIST_MAX_PAGE_SIZE,
+  CertificateRequestStatus,
+} from "@/modules/certificates/constants";
 import {
   countCertificateRequests,
   listCertificateRequests,
@@ -26,8 +30,8 @@ import type {
 // decision, no eligibility, no Academic Core / Transcript read, no writes.
 // =============================================================================
 
-const DEFAULT_PAGE_SIZE = 20;
-const MAX_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = CERTIFICATE_LIST_DEFAULT_PAGE_SIZE;
+const MAX_PAGE_SIZE = CERTIFICATE_LIST_MAX_PAGE_SIZE;
 
 /** The caller's request-workflow capabilities (per row for `isRequester`). */
 export interface RequestActionCaps {

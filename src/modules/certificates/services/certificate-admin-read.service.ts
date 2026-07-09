@@ -2,6 +2,10 @@ import { AuthorizationError } from "@/shared/lib/command";
 import type { AuthContext } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import {
+  CERTIFICATE_LIST_DEFAULT_PAGE_SIZE,
+  CERTIFICATE_LIST_MAX_PAGE_SIZE,
+} from "@/modules/certificates/constants";
+import {
   countCertificates,
   findCertificateDetailById,
   listCertificates,
@@ -31,8 +35,8 @@ import {
 // happen only through the commands the routes invoke, never here.
 // =============================================================================
 
-const DEFAULT_PAGE_SIZE = 20;
-const MAX_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = CERTIFICATE_LIST_DEFAULT_PAGE_SIZE;
+const MAX_PAGE_SIZE = CERTIFICATE_LIST_MAX_PAGE_SIZE;
 
 /** Resolve the caller's action capabilities from RBAC (restore reuses `suspend`). */
 function resolveCaps(context: AuthContext): CertificateActionCaps {

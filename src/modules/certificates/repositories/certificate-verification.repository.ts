@@ -68,23 +68,6 @@ export async function createCertificateVerification(
   return toRecord(row);
 }
 
-export interface FindCertificateVerificationByIdParams {
-  id: string;
-  organizationId: string;
-}
-
-export async function findCertificateVerificationById(
-  params: FindCertificateVerificationByIdParams,
-  client?: PrismaClientOrTx
-): Promise<CertificateVerificationRecord | null> {
-  const db = client ?? (await getDb());
-  const row = await db.certificateVerification.findFirst({
-    where: { id: params.id, organizationId: params.organizationId },
-    select: verificationSelect,
-  });
-  return row ? toRecord(row) : null;
-}
-
 export interface FindByCodeParams {
   organizationId: string;
   verificationCode: string;

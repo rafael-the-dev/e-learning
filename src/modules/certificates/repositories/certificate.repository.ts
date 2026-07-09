@@ -3,6 +3,7 @@ import type { PrismaClientOrTx } from "@/server/db";
 import type {
   CertificateDetailRecord,
   CertificateListFilters,
+  CertificateListRecord,
   CertificateRecord,
 } from "@/modules/certificates/types/repository";
 import { listCertificateEvents } from "./certificate-event.repository";
@@ -59,7 +60,34 @@ const certificateSelect = {
   deletedAt: true,
 } as const;
 
+/** Lean select for paginated list reads — only the columns `toListItemDto` needs.
+ *  Deliberately omits the large `NVARCHAR(Max)` blobs (`issueBasisSnapshot`, the
+ *  reason columns) so a list page does not transfer data it discards. */
+const certificateListSelect = {
+  id: true,
+  certificateNumber: true,
+  certificateType: true,
+  status: true,
+  studentSnapshot: true,
+  courseSnapshot: true,
+  issuedAt: true,
+  expiresAt: true,
+} as const;
+
 type Row = Record<string, unknown>;
+
+function toListRecord(row: Row): CertificateListRecord {
+  return {
+    id: row.id as string,
+    certificateNumber: (row.certificateNumber as string | null) ?? null,
+    certificateType: row.certificateType as string,
+    status: row.status as string,
+    studentSnapshot: row.studentSnapshot as string,
+    courseSnapshot: (row.courseSnapshot as string | null) ?? null,
+    issuedAt: (row.issuedAt as Date | null) ?? null,
+    expiresAt: (row.expiresAt as Date | null) ?? null,
+  };
+}
 
 function toRecord(row: Row): CertificateRecord {
   return {
@@ -391,16 +419,16 @@ export async function findCertificatesByIds(
 export async function listCertificates(
   filters: CertificateListFilters,
   client?: PrismaClientOrTx
-): Promise<CertificateRecord[]> {
+): Promise<CertificateListRecord[]> {
   const db = client ?? (await getDb());
   const rows = await db.certificate.findMany({
     where: buildCertificateListWhere(filters),
-    select: certificateSelect,
+    select: certificateListSelect,
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     skip: filters.skip,
     take: filters.take,
   });
-  return rows.map(toRecord);
+  return rows.map(toListRecord);
 }
 
 /** Org-scoped total matching the same filters (Phase 10 pagination). */

@@ -3,6 +3,10 @@ import type { AuthContext } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { resolveStudentScope } from "@/server/auth/student-scope";
 import {
+  CERTIFICATE_LIST_DEFAULT_PAGE_SIZE,
+  CERTIFICATE_LIST_MAX_PAGE_SIZE,
+} from "@/modules/certificates/constants";
+import {
   countCertificates,
   findCertificateDetailById,
   listCertificates,
@@ -28,8 +32,8 @@ import { READONLY_CAPS, toListItemDto, toStudentDetailDto } from "./certificate-
 // eligibility, no Academic Core / Transcript read.
 // =============================================================================
 
-const DEFAULT_PAGE_SIZE = 20;
-const MAX_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = CERTIFICATE_LIST_DEFAULT_PAGE_SIZE;
+const MAX_PAGE_SIZE = CERTIFICATE_LIST_MAX_PAGE_SIZE;
 
 /** Resolve the caller's OWN studentId or throw. Requires `certificates.viewOwn` AND
  *  a student-scoped session linked to a Student profile. */

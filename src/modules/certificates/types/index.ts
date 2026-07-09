@@ -9,16 +9,10 @@
 // here describe certificate-domain results, not academic derivations.
 // =============================================================================
 
-import type { FinancialClearanceStatus } from "@/modules/certificates/constants";
-
-/** Snapshot of a NON-ACADEMIC finance clearance check (D-3). Frozen onto the
- *  certificate at generation; never recomputed afterwards. */
-export interface FinancialClearanceSnapshot {
-  status: FinancialClearanceStatus;
-  checkedAt: Date | null;
-  /** Optional finance-side reference (e.g. clearance/statement id). Pointer, not FK. */
-  reference: string | null;
-}
+// The finance-clearance snapshot the certificate freezes at generation (D-3) is
+// modelled by `FinancialClearanceFacts` in `./eligibility-source` (the shape the
+// eligibility facts already carry); a separate duplicate type is intentionally not
+// defined here.
 
 // The eligibility RESULT contract (`CertificateEligibilityResult`) is defined in
 // `./eligibility-source` alongside the facts it embeds, and re-exported below.
