@@ -28,3 +28,6 @@ export type {
 
 // Phase 2 — repository record, input & filter types (persistence-shaped).
 export * from "./repository";
+
+// Phase 3A — eligibility-source input + facts contracts (read-aggregation shapes).
+export * from "./eligibility-source";

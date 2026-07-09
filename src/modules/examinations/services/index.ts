@@ -1,0 +1,10 @@
+// =============================================================================
+// EXAMINATION ENGINE — SERVICES BARREL
+// -----------------------------------------------------------------------------
+// Phase 3A — ExaminationEligibilitySource: a pure read-aggregation façade that
+// loads the facts the ExaminationEligibilityEngine (Phase 3B) decides on. The source
+// decides nothing; the engine is a pure, synchronous function of those facts.
+// =============================================================================
+
+export * from "./examination-eligibility-source.service";
+export * from "./examination-eligibility.engine";

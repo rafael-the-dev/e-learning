@@ -716,6 +716,70 @@ audit; no schema/migration change. Delivered per the Phase-2 brief:
 - **Validation:** `tsc --noEmit` ✅ (0 errors) · `vitest run src/modules/examinations`
   ✅ (40 passed) · `eslint src/modules/examinations` ✅ · `prisma validate` ✅.
 
+### Phase 3A — Implementation notes (2026-07-09)
+
+`ExaminationEligibilitySource` implemented as a pure **read-aggregation façade** —
+it **loads facts and decides nothing** (ADR-013 E-3/E-4). No commands/routes/UI, no
+writes, no events, no audit, no schema change.
+
+- **`loadExaminationEligibilityFacts(input, client?)`**
+  (`src/modules/examinations/services/examination-eligibility-source.service.ts`)
+  returns `ExaminationEligibilityFacts` — fact containers only. There is **no**
+  `eligible` / `blockingReasons` / `warnings` / `requiresApproval` /
+  `canRegister` / `canSchedule` / `canOverride` (a static guard scans the code for
+  that vocabulary). Facts are copied verbatim; no recalculation.
+- **Reads (org-scoped, read-only):** Academic Core `Student` / `Enrollment` /
+  `LevelSubject` (+ `Subject` name) / `StudentSubjectProgress` /
+  `StudentSubjectAttendanceSummary` / `LevelSubjectPrerequisiteGroup` + `Item`
+  (both keyed by `(organizationId, enrollmentId, levelSubjectId)` / `levelSubjectId`),
+  plus the Examination repositories for previous attempts / period / session /
+  existing candidate. **No** Transcript, Certificate, Grade-calculation,
+  Attendance-mutation, or Progression-command reads (E-2/E-11/D5).
+- **Missing integrations are explicit** — `financialClearance` and `disciplinary`
+  are `UNKNOWN`, `manualApproval.requiredByPolicy` is `null` (no finance /
+  disciplinary / exam-policy model exists yet); attendance/progress absent →
+  `null` / `exists:false`. The source never invents data.
+- **`existingCandidate`** is a **fact only** — the source does not decide
+  `ALREADY_REGISTERED`; capacity/duplicate/conflict remain command-level (E-3a).
+- **Determinism boundary:** `now` (input) is copied only into `metadata.loadedAt`
+  (`sourceVersion: "examination-eligibility-source.v1"`); no fact is derived from
+  the clock, keeping the future Phase-3B engine a pure function of the facts.
+- **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
+  (56 passed) · `eslint` ✅ · `prisma validate` ✅.
+
+### Phase 3B — Implementation notes (2026-07-09)
+
+`ExaminationEligibilityEngine` implemented as a **pure, synchronous, deterministic**
+function (ADR-013 E-3/E-4/E-5). It consumes the Phase-3A `ExaminationEligibilityFacts`
+and returns `ExaminationEligibilityResult`. It loads/writes nothing, calls no
+repository/service/command/Prisma, publishes no events, writes no audit, and reads no
+clock/random/env.
+
+- **`evaluateExaminationEligibility(facts)`**
+  (`src/modules/examinations/services/examination-eligibility.engine.ts`) →
+  `{ eligible, blockingReasons[], warnings[], requiresApproval, evaluatedAt,
+  evaluatedFacts, metadata.engineVersion }`. `eligible === blockingReasons.length
+  === 0`; `evaluatedAt` is copied from `facts.metadata.loadedAt` (no clock);
+  `evaluatedFacts` is the **same reference** (the engine mutates nothing).
+- **Blockers (academic/administrative only):** NO_STUDENT, NO_ACTIVE_ENROLLMENT,
+  LEVEL_SUBJECT_NOT_FOUND, SUBJECT_ALREADY_PASSED, ATTENDANCE_BELOW_REQUIRED,
+  PREREQUISITE_NOT_MET, FINANCIAL_CLEARANCE_REQUIRED, DISCIPLINARY_BLOCK,
+  EXAM_PERIOD_CLOSED, EXAM_SESSION_NOT_AVAILABLE.
+  `SUBJECT_NOT_REGISTERED` is defined but **not emitted** yet (no such fact from
+  Phase 3A — not invented; reserved for a future source fact).
+- **`SESSION_FULL` and `ALREADY_REGISTERED` are NOT engine blockers** (nor room/
+  invigilator/seat/timetable conflicts) — they are command-level operational blockers
+  (E-3a), and a static test asserts they are absent from the blocker vocabulary.
+- **Manual approval is a NON-blocking gate:** `manualApproval.requiredByPolicy ===
+  true` sets `requiresApproval` + a warning; it never blocks.
+- **UNKNOWN facts become warnings, never blockers** (attendance/prerequisite/finance/
+  disciplinary unknown; period/session requested-but-missing; previous attempts
+  found). Prerequisites: the engine reads the source's `allMet` verdict
+  (`null`=unknown→warning, `false`→blocker) and never evaluates the graph itself.
+- No Academic Core reads, no Grade writes, no Transcript/Certificate touch.
+- **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
+  (105 passed) · `eslint` ✅ · `prisma validate` ✅.
+
 ---
 
 ## 19. Resolved Decisions (closed for Phase 1)
