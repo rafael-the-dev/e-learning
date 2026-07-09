@@ -25,3 +25,6 @@ export type {
   ExamEventAggregateType,
   ExamEventType,
 } from "@/modules/examinations/constants";
+
+// Phase 2 — repository record, input & filter types (persistence-shaped).
+export * from "./repository";
