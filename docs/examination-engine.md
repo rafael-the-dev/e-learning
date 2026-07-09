@@ -670,6 +670,52 @@ Core change. Delivered exactly per ADR-013:
   types) and `src/modules/examinations/types/index.ts` (re-exports) — no behaviour.
 - **Validation:** `prisma validate` ✅ · `prisma generate` ✅ · `tsc --noEmit` ✅ (0 errors).
 
+### Phase 2 — Implementation notes (2026-07-09)
+
+Persistence only — **no** commands/services/routes/UI; **no** eligibility /
+scheduling / result / publication / appeal logic; **no** events published, **no**
+audit; no schema/migration change. Delivered per the Phase-2 brief:
+
+- **13 tenant-safe, transaction-aware repositories** under
+  `src/modules/examinations/repositories/` (one per `Exam*` model + `index.ts`
+  barrel). Every function ends with an optional `client?: PrismaClientOrTx` and
+  falls back to `getDb()`, so the same code runs standalone or inside a
+  `$transaction`. Every `where` and every `create.data` carries
+  `organizationId`; reads use `findFirst`/`findMany`/`count` only — never
+  `findUnique`, never update-by-id.
+- **Persistence-shaped types** in `types/repository.ts` (`*Record` / `Create*Input`
+  / `Update*MetadataInput` / `List*Filters`), re-exported from `types/index.ts`.
+  Decimal columns (`ExamResult.score/maxScore/normalizedScore`,
+  `ExamResultRevision.previousScore/revisedScore`) map to `number | null` via a
+  copy-only `toNum` helper; JSON/NVarChar(Max) columns
+  (`eligibilitySnapshot`, `metadata`, `description`) are carried as the raw
+  stored `string` — never parsed or recomputed. No Prisma type leaks past the
+  boundary.
+- **Soft delete only where `deletedAt` exists** (ExamPeriod, ExamRoom,
+  ExamSession, ExamAttempt, ExamCandidate); `list*` excludes soft-deleted by
+  default. The other eight models expose no delete of any kind.
+- **`ExamEvent` is append-only** — create + read only; no update / delete /
+  upsert / soft delete.
+- **`updateMetadata` writes are thin primitives** (`updateMany` returning
+  `{ count }`) — they persist resolved columns and make no lifecycle/business
+  decision; the allowed transitions belong to later command phases.
+- **Scheduling conflict helpers are READ-ONLY** (`listSessionsInTimeRange`,
+  `…ByRoom…`, `…ByInvigilator…`): overlap = `startsAt < endsAt AND endsAt >
+  startsAt`, excluding CANCELLED and soft-deleted. They surface possible
+  conflicts; the Phase-4 scheduling command decides. `getNextAttemptNumberCandidate`
+  returns `max + 1` and is explicitly documented as NOT race-safe (the command +
+  filtered-unique index enforce concurrency).
+- **`findCurrentOfficialResult`** assembles the base `ExamResult` plus the
+  pointed-to current `ExamResultRevision` (D14) — assembly only, no pass/fail
+  decision, no score recomputation.
+- **Tests:** `architecture-guards.test.ts` (static: no commands/services/event/
+  audit/UI imports, no other-engine imports, no hard delete / upsert /
+  findUnique, ExamEvent append-only, every write file mentions `organizationId`)
+  + `examination-repositories.test.ts` (behavioural, incl. cross-tenant
+  isolation) using the verbatim `_fake-db.ts`.
+- **Validation:** `tsc --noEmit` ✅ (0 errors) · `vitest run src/modules/examinations`
+  ✅ (40 passed) · `eslint src/modules/examinations` ✅ · `prisma validate` ✅.
+
 ---
 
 ## 19. Resolved Decisions (closed for Phase 1)
