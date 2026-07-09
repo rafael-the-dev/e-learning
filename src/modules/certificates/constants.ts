@@ -178,3 +178,8 @@ export const CERTIFICATE_NUMBER_PREFIX = "CERT";
  *  alter the canonical content for identical inputs. Kept OUT of the checksummed
  *  content (transport/envelope concern), mirroring SNAPSHOT_BUILDER_VERSION. */
 export const CERTIFICATE_CHECKSUM_VERSION = "1.0.0";
+
+/** Shared pagination bounds for the certificate portal list read services (admin /
+ *  student / request). One definition so the three surfaces cannot drift. */
+export const CERTIFICATE_LIST_DEFAULT_PAGE_SIZE = 20;
+export const CERTIFICATE_LIST_MAX_PAGE_SIZE = 100;

@@ -1,7 +1,7 @@
 import { CertificateStatus } from "@/modules/certificates/constants";
 import type {
   CertificateDetailRecord,
-  CertificateRecord,
+  CertificateListRecord,
 } from "@/modules/certificates/types/repository";
 import type {
   AdminCertificateDetailDto,
@@ -10,6 +10,11 @@ import type {
   CertificateListItemDto,
   StudentCertificateDetailDto,
 } from "@/modules/certificates/types/portal";
+import {
+  parseSnapshot,
+  readCourseName,
+  readStudentFullName,
+} from "@/modules/certificates/lib/certificate-snapshot";
 
 // =============================================================================
 // CERTIFICATE PORTAL MAPPER (Phase 10) — pure, READ-ONLY DTO shaping
@@ -74,33 +79,6 @@ export function computeAllowedActions(
   };
 }
 
-function parseSnapshot(value: string | null): Record<string, unknown> {
-  if (!value) return {};
-  try {
-    return JSON.parse(value) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-/** Holder name from the frozen student snapshot (fullName, else first+last). */
-export function readStudentName(studentSnapshot: string | null): string | null {
-  const parsed = parseSnapshot(studentSnapshot);
-  const full = typeof parsed.fullName === "string" ? parsed.fullName.trim() : "";
-  if (full) return full;
-  const composed = [parsed.firstName, parsed.lastName]
-    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
-    .join(" ")
-    .trim();
-  return composed || null;
-}
-
-/** Course name from the frozen course snapshot (null when absent). */
-export function readCourseName(courseSnapshot: string | null): string | null {
-  const parsed = parseSnapshot(courseSnapshot);
-  return typeof parsed.courseName === "string" ? parsed.courseName : null;
-}
-
 // ─── List item ─────────────────────────────────────────────────────────────
 
 export interface ListItemContext {
@@ -110,7 +88,7 @@ export interface ListItemContext {
 }
 
 export function toListItemDto(
-  cert: CertificateRecord,
+  cert: CertificateListRecord,
   ctx: ListItemContext
 ): CertificateListItemDto {
   return {
@@ -119,7 +97,7 @@ export function toListItemDto(
     certificateType: cert.certificateType,
     status: cert.status,
     publicStatus: ctx.publicStatus,
-    studentName: readStudentName(cert.studentSnapshot),
+    studentName: readStudentFullName(cert.studentSnapshot),
     courseName: readCourseName(cert.courseSnapshot),
     issuedAt: cert.issuedAt,
     expiresAt: cert.expiresAt,
@@ -158,7 +136,7 @@ export function toAdminDetailDto(
     certificateType: record.certificateType,
     status: record.status,
     publicStatus,
-    studentName: readStudentName(record.studentSnapshot),
+    studentName: readStudentFullName(record.studentSnapshot),
     courseName: readCourseName(record.courseSnapshot),
     studentSnapshot: parseSnapshot(record.studentSnapshot),
     courseSnapshot: record.courseSnapshot ? parseSnapshot(record.courseSnapshot) : null,
@@ -203,7 +181,7 @@ export function toStudentDetailDto(
     certificateType: record.certificateType,
     status: record.status,
     publicStatus,
-    studentName: readStudentName(record.studentSnapshot),
+    studentName: readStudentFullName(record.studentSnapshot),
     courseName: readCourseName(record.courseSnapshot),
     issuedAt: record.issuedAt,
     expiresAt: record.expiresAt,

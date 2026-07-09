@@ -49,6 +49,21 @@ export interface CertificateTemplateRecord {
   deletedAt: Date | null;
 }
 
+/** The lean projection returned by `listCertificates` for paginated portal lists.
+ *  Carries ONLY the columns `toListItemDto` consumes — never the large frozen JSON
+ *  blobs (`issueBasisSnapshot`) or the `Max` reason columns — so a list page does not
+ *  transfer data it discards. Detail reads use the full `CertificateRecord`. */
+export interface CertificateListRecord {
+  id: string;
+  certificateNumber: string | null;
+  certificateType: string;
+  status: string;
+  studentSnapshot: string;
+  courseSnapshot: string | null;
+  issuedAt: Date | null;
+  expiresAt: Date | null;
+}
+
 export interface CertificateRecord {
   id: string;
   organizationId: string;

@@ -25,6 +25,10 @@ import {
   type ExportCertificateToMinistryInput,
 } from "@/modules/certificates/schemas/certificate.schema";
 import { buildVerificationUrl } from "@/modules/certificates/lib/certificate-verification-url";
+import {
+  readCourseName,
+  readStudentFullName,
+} from "@/modules/certificates/lib/certificate-snapshot";
 import { findCertificateById } from "@/modules/certificates/repositories/certificate.repository";
 import { findCertificateVerificationByCertificateId } from "@/modules/certificates/repositories/certificate-verification.repository";
 import {
@@ -77,33 +81,6 @@ export interface ExportCertificateToMinistryDeps {
   now: () => Date;
   /** Public verification base URL; defaults to the environment-resolved value. */
   baseUrl?: string;
-}
-
-function parseSnapshot(value: string | null): Record<string, unknown> {
-  if (!value) return {};
-  try {
-    return JSON.parse(value) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-/** Full holder name from the frozen student snapshot (fullName, else first+last). */
-function readFullName(studentSnapshot: string): string | null {
-  const parsed = parseSnapshot(studentSnapshot);
-  const full = typeof parsed.fullName === "string" ? parsed.fullName.trim() : "";
-  if (full) return full;
-  const composed = [parsed.firstName, parsed.lastName]
-    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
-    .join(" ")
-    .trim();
-  return composed || null;
-}
-
-function readCourseName(courseSnapshot: string | null): string | null {
-  if (!courseSnapshot) return null;
-  const parsed = parseSnapshot(courseSnapshot);
-  return typeof parsed.courseName === "string" ? parsed.courseName : null;
 }
 
 export class ExportCertificateToMinistryCommand extends BaseCommand<
@@ -187,7 +164,7 @@ export class ExportCertificateToMinistryCommand extends BaseCommand<
     const source: CertificateMinistrySourceDto = {
       certificateNumber: certificate.certificateNumber,
       certificateType: certificate.certificateType,
-      studentName: readFullName(certificate.studentSnapshot),
+      studentName: readStudentFullName(certificate.studentSnapshot),
       courseName: readCourseName(certificate.courseSnapshot),
       organizationName: (organization?.name as string | undefined) ?? null,
       issuedAt: certificate.issuedAt,

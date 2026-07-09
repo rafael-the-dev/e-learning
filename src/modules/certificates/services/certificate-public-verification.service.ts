@@ -2,6 +2,7 @@ import type { PrismaClientOrTx } from "@/server/db";
 import { CertificateStatus, CertificateVerificationPublicStatus } from "@/modules/certificates/constants";
 import { findPublicVerificationByCode } from "@/modules/certificates/repositories/certificate-public-verification.repository";
 import { incrementVerificationCount } from "@/modules/certificates/repositories/certificate-verification.repository";
+import { readCourseName, readStudentFullName } from "@/modules/certificates/lib/certificate-snapshot";
 import type {
   CertificatePublicSource,
   CertificatePublicVerificationDto,
@@ -66,36 +67,16 @@ function resolvePublicStatus(source: CertificatePublicSource): string {
   return CertificateVerificationPublicStatus.VALID;
 }
 
-/** Mask a full name to first-name + trailing initials ("Maria Santos" → "Maria S."). */
+/** Mask a full name to first-name + trailing initials ("Maria Santos" → "Maria S.").
+ *  Uses the shared frozen-snapshot reader, then masks. */
 function maskStudentName(studentSnapshotJson: string): string | null {
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(studentSnapshotJson) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-  const fromFull = typeof parsed.fullName === "string" ? parsed.fullName.trim() : "";
-  const composed = [parsed.firstName, parsed.lastName]
-    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
-    .join(" ")
-    .trim();
-  const fullName = fromFull || composed;
+  const fullName = readStudentFullName(studentSnapshotJson);
   if (!fullName) return null;
 
   const [first, ...rest] = fullName.split(/\s+/);
   if (rest.length === 0) return first;
   const initials = rest.map((part) => `${part.charAt(0).toUpperCase()}.`).join(" ");
   return `${first} ${initials}`;
-}
-
-function readCourseName(courseSnapshotJson: string | null): string | null {
-  if (!courseSnapshotJson) return null;
-  try {
-    const parsed = JSON.parse(courseSnapshotJson) as Record<string, unknown>;
-    return typeof parsed.courseName === "string" ? parsed.courseName : null;
-  } catch {
-    return null;
-  }
 }
 
 export class VerifyCertificatePublicService {
