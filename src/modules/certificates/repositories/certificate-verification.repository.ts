@@ -210,3 +210,58 @@ export async function incrementVerificationCount(
   });
   return { count: res.count };
 }
+
+// ─── Operational read helpers (Phase 14) — READ ONLY, org-scoped ──────────────
+
+/** Total verification projection rows in the tenant (§5 KPI). */
+export async function countVerifications(
+  params: { organizationId: string },
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  return db.certificateVerification.count({ where: { organizationId: params.organizationId } });
+}
+
+export interface VerificationMaintenanceRow {
+  id: string;
+  certificateId: string;
+  verificationCode: string;
+  publicStatus: string;
+  expiresAt: Date | null;
+}
+
+/** The minimal verification-projection columns the maintenance probes need (§4:
+ *  duplicate detection + projection-mismatch). ONE org-scoped scan; the service
+ *  applies the (existing-behaviour) status mapping — no rule lives here. */
+export async function listVerificationsForMaintenance(
+  params: { organizationId: string },
+  client?: PrismaClientOrTx
+): Promise<VerificationMaintenanceRow[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.certificateVerification.findMany({
+    where: { organizationId: params.organizationId },
+    select: { id: true, certificateId: true, verificationCode: true, publicStatus: true, expiresAt: true },
+  });
+  return rows.map((r) => ({
+    id: r.id as string,
+    certificateId: r.certificateId as string,
+    verificationCode: r.verificationCode as string,
+    publicStatus: r.publicStatus as string,
+    expiresAt: (r.expiresAt as Date | null) ?? null,
+  }));
+}
+
+/** The `lastVerifiedAt` timestamps of projections verified since `since` (§7 metrics
+ *  `verification` source). Counts the MOST RECENT verification per certificate in the
+ *  window (approximation — no per-hit table exists). ONE scan. */
+export async function listVerificationTimestamps(
+  params: { organizationId: string; since: Date },
+  client?: PrismaClientOrTx
+): Promise<Date[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.certificateVerification.findMany({
+    where: { organizationId: params.organizationId, lastVerifiedAt: { gte: params.since } },
+    select: { lastVerifiedAt: true },
+  });
+  return rows.map((r) => r.lastVerifiedAt as Date);
+}

@@ -11,7 +11,7 @@ import { createAbility, getUserPermissions } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { DomainAggregateType, DomainEventType } from "@/server/events/event-types";
 import type { DomainEvent } from "@/server/events/domain-event";
-import { eventPublisher } from "@/server/events/event-publisher";
+import { certificateOutbox } from "@/modules/certificates/outbox";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import {
   CertificateStatus,
@@ -291,8 +291,9 @@ export class IssueCertificateCommand extends BaseCommand<
       };
     });
 
-    // Publish domain events ONLY after the transaction commits.
-    for (const event of events) await eventPublisher.publish(event);
+    // Publish domain events ONLY after the transaction commits — via the Outbox
+    // (enqueue → publish), so delivery is recorded and replayable (Phase 14).
+    await certificateOutbox.dispatch(events);
 
     return result;
   }

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   makeFakeDb,
@@ -26,6 +28,7 @@ vi.mock("@/server/events/event-publisher", () => ({
 
 import { DomainEventType } from "@/server/events/event-types";
 import type { PersistedDomainEvent } from "@/server/events/domain-event";
+import { certificateOutbox } from "@/modules/certificates/outbox";
 import { CertificateTranscriptStalenessHandler } from "../certificate-transcript-staleness.handler";
 
 const ORG = "org-A";
@@ -98,6 +101,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.db = makeFakeDb();
   published.events.length = 0;
+  certificateOutbox.reset();
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -212,5 +216,52 @@ describe("CertificateTranscriptStalenessHandler — sources & missing targets", 
     seedCert("cert-1"); seedVerification("cert-1");
     await handler.handle(transcriptEvent(DomainEventType.TRANSCRIPT_SUPERSEDED, { payload: { transcriptVersionId: undefined } }));
     expect(certById("cert-1").status).toBe("ISSUED");
+  });
+});
+
+// ─── Phase 14 — publishes through the Outbox (single seam), not directly ───────
+describe("CertificateTranscriptStalenessHandler — Outbox routing (Phase 14)", () => {
+  it("sends the certificate.marked_stale event THROUGH the Outbox (enqueue → publish)", async () => {
+    seedCert("cert-1"); seedVerification("cert-1");
+    const dispatchSpy = vi.spyOn(certificateOutbox, "dispatch");
+
+    await handler.handle(transcriptEvent(DomainEventType.TRANSCRIPT_SUPERSEDED));
+
+    // Routed via the Outbox exactly once, carrying the marked_stale event...
+    expect(dispatchSpy).toHaveBeenCalledTimes(1);
+    const dispatched = dispatchSpy.mock.calls[0][0];
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0]).toMatchObject({
+      eventType: DomainEventType.CERTIFICATE_MARKED_STALE,
+      aggregateId: "cert-1",
+    });
+    // ...and the Outbox recorded + delivered it (no dead letter).
+    expect(certificateOutbox.summary()).toMatchObject({ total: 1, delivered: 1, failed: 0 });
+    // The underlying publisher still received it (delivery happened via the Outbox).
+    expect(staleDomain()).toHaveLength(1);
+  });
+
+  it("a loaded-but-idempotent reaction dispatches an empty batch (nothing enqueued)", async () => {
+    // A STALE certificate already carrying the SAME reason IS loaded (STALE is a
+    // relevant status) but the applier no-ops it → an empty Outbox batch.
+    seedCert("cert-1", { status: "STALE", staleReason: "TRANSCRIPT_MARKED_STALE", staleDetectedAt: FIXED });
+    seedVerification("cert-1", { publicStatus: "SUSPENDED" });
+    const dispatchSpy = vi.spyOn(certificateOutbox, "dispatch");
+
+    await handler.handle(transcriptEvent(DomainEventType.TRANSCRIPT_MARKED_STALE));
+
+    expect(dispatchSpy).toHaveBeenCalledWith([]);
+    expect(certificateOutbox.summary()).toMatchObject({ total: 0 });
+    expect(staleDomain()).toHaveLength(0);
+  });
+
+  it("the handler source publishes ONLY through the Outbox (no direct eventPublisher)", () => {
+    const src = readFileSync(
+      join(process.cwd(), "src", "server", "events", "handlers", "certificate-transcript-staleness.handler.ts"),
+      "utf8"
+    );
+    expect(src).not.toMatch(/eventPublisher/);
+    expect(src).not.toMatch(/event-publisher/);
+    expect(src).toMatch(/certificateOutbox\.dispatch/);
   });
 });

@@ -117,3 +117,32 @@ export async function listCertificateEvents(
   });
   return rows.map(toRecord);
 }
+
+// ─── Operational read helper (Phase 14) — READ ONLY, org-scoped ───────────────
+
+export interface CertificateEventTimestamp {
+  eventType: string;
+  createdAt: Date;
+}
+
+/** The `{ eventType, createdAt }` of certificate events since `since`, optionally
+ *  restricted to `eventTypes` (§7 metrics: issue/revoke/suspend/restore sources).
+ *  ONE scan of the append-only event log; the metrics service buckets in memory. */
+export async function listCertificateEventTimestamps(
+  params: { organizationId: string; since: Date; eventTypes?: string[] },
+  client?: PrismaClientOrTx
+): Promise<CertificateEventTimestamp[]> {
+  const db = client ?? (await getDb());
+  const where: Record<string, unknown> = {
+    organizationId: params.organizationId,
+    createdAt: { gte: params.since },
+  };
+  if (params.eventTypes && params.eventTypes.length > 0) {
+    where.eventType = { in: params.eventTypes };
+  }
+  const rows = await db.certificateEvent.findMany({
+    where,
+    select: { eventType: true, createdAt: true },
+  });
+  return rows.map((r) => ({ eventType: r.eventType as string, createdAt: r.createdAt as Date }));
+}

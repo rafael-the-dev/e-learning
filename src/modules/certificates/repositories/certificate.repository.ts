@@ -714,3 +714,70 @@ export async function softDeleteDraftCertificate(
   });
   return { count: res.count };
 }
+
+// ─── Operational read helpers (Phase 14) — READ ONLY, org-scoped ──────────────
+
+export interface OrgScopedParams {
+  organizationId: string;
+}
+
+/** Live-certificate count grouped by `status` (§8 `countByStatus`). ONE scan of the
+ *  minimal `{ status }` column for live rows (`deletedAt = null`), reduced in memory —
+ *  no repeated per-status scans, no N+1. Returns a `{ status: count }` map. */
+export async function countCertificatesByStatus(
+  params: OrgScopedParams,
+  client?: PrismaClientOrTx
+): Promise<Record<string, number>> {
+  const db = client ?? (await getDb());
+  const rows = await db.certificate.findMany({
+    where: { organizationId: params.organizationId, deletedAt: null },
+    select: { status: true },
+  });
+  const counts: Record<string, number> = {};
+  for (const r of rows) {
+    const status = r.status as string;
+    counts[status] = (counts[status] ?? 0) + 1;
+  }
+  return counts;
+}
+
+export interface SinceParams {
+  organizationId: string;
+  /** Inclusive lower bound on `createdAt`. */
+  since: Date;
+}
+
+/** The `createdAt` timestamps of live certificates created since `since` (§7 metrics
+ *  `generate` source). ONE scan; the metrics service buckets in memory. */
+export async function listCertificateCreatedTimestamps(
+  params: SinceParams,
+  client?: PrismaClientOrTx
+): Promise<Date[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.certificate.findMany({
+    where: { organizationId: params.organizationId, deletedAt: null, createdAt: { gte: params.since } },
+    select: { createdAt: true },
+  });
+  return rows.map((r) => r.createdAt as Date);
+}
+
+/** The `{ id, status, deletedAt }` of live certificates for a set of ids (§4 orphan /
+ *  projection-mismatch joins). ONE org-scoped query; `[]` for an empty id list. Live
+ *  rows only would hide soft-deleted certificates the maintenance probe must SEE, so
+ *  this intentionally includes soft-deleted rows and returns `deletedAt`. */
+export async function findCertificateStatusesByIds(
+  params: { organizationId: string; ids: string[] },
+  client?: PrismaClientOrTx
+): Promise<Array<{ id: string; status: string; deletedAt: Date | null }>> {
+  if (params.ids.length === 0) return [];
+  const db = client ?? (await getDb());
+  const rows = await db.certificate.findMany({
+    where: { organizationId: params.organizationId, id: { in: params.ids } },
+    select: { id: true, status: true, deletedAt: true },
+  });
+  return rows.map((r) => ({
+    id: r.id as string,
+    status: r.status as string,
+    deletedAt: (r.deletedAt as Date | null) ?? null,
+  }));
+}
