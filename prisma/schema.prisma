@@ -136,6 +136,19 @@ model Organization {
   certificateExports         CertificateExport[]
   certificateVerifications   CertificateVerification[]
   certificateRequests        CertificateRequest[]
+  examPeriods                ExamPeriod[]
+  examRooms                  ExamRoom[]
+  examSessions               ExamSession[]
+  examAttempts               ExamAttempt[]
+  examCandidates             ExamCandidate[]
+  examAttendances            ExamAttendance[]
+  examResults                ExamResult[]
+  examResultRevisions        ExamResultRevision[]
+  examAppeals                ExamAppeal[]
+  examPublications           ExamPublication[]
+  examIncidents              ExamIncident[]
+  examInvigilatorAssignments ExamInvigilatorAssignment[]
+  examEvents                 ExamEvent[]
 
   @@map("organizations")
 }
@@ -168,6 +181,9 @@ model Branch {
   classroomBookings  ClassroomBooking[]
   attendanceSessions AttendanceSession[]
   refunds            Refund[]
+  examPeriods        ExamPeriod[]
+  examRooms          ExamRoom[]
+  examSessions       ExamSession[]
 
   @@map("branches")
 }
@@ -417,6 +433,10 @@ model Student {
   academicTranscriptRequests AcademicTranscriptRequest[]
   certificates               Certificate[]
   certificateRequests        CertificateRequest[]
+  examAttempts               ExamAttempt[]
+  examCandidates             ExamCandidate[]
+  examResults                ExamResult[]
+  examAppeals                ExamAppeal[]
 
   @@index([organizationId, branchId])
   @@map("students")
@@ -593,6 +613,7 @@ model Course {
   certificatePolicies       CertificatePolicy[]
   certificateTemplates      CertificateTemplate[]
   certificates              Certificate[]
+  examSessions              ExamSession[]
 
   @@map("courses")
 }
@@ -624,6 +645,7 @@ model CourseLevel {
   fromProgressionRequests   LevelProgressionRequest[]        @relation("FromLevelRequests")
   toProgressionRequests     LevelProgressionRequest[]        @relation("ToLevelRequests")
   periodAttendanceSummaries StudentPeriodAttendanceSummary[]
+  examSessions              ExamSession[]
 
   @@map("course_levels")
 }
@@ -689,6 +711,9 @@ model LevelSubject {
   prerequisiteItemsAsPrereq LevelSubjectPrerequisiteItem[]    @relation("PrerequisiteSubject")
   prerequisiteWaivers       PrerequisiteWaiver[]
   attendanceSummaries       StudentSubjectAttendanceSummary[]
+  examSessions              ExamSession[]
+  examAttempts              ExamAttempt[]
+  examResults               ExamResult[]
 
   @@unique([courseLevelId, subjectId])
   @@index([organizationId, attendancePolicyId])
@@ -1053,6 +1078,9 @@ model Enrollment {
   academicTranscripts        AcademicTranscript[]
   academicTranscriptRequests AcademicTranscriptRequest[]
   certificates               Certificate[]
+  examAttempts               ExamAttempt[]
+  examCandidates             ExamCandidate[]
+  examResults                ExamResult[]
 
   @@unique([organizationId, enrollmentNumber])
   @@index([organizationId, courseId], name: "enrollments_org_course_idx")
@@ -3714,4 +3742,414 @@ model AcademicTranscriptRequest {
   @@index([organizationId, studentId])
   @@index([organizationId, status])
   @@map("academic_transcript_requests")
+}
+
+// =============================================================================
+// EXAMINATION ENGINE — Phase 1 data model (13 models). See docs/examination-engine.md.
+// All relations onDelete/onUpdate NoAction. Status/type fields are String (no native
+// enums). Actor/"by"/marker/reviewer/invigilator-identity fields are plain String
+// columns (NOT relations). currentRevisionId is a plain pointer (no cyclic FK).
+// Filtered-unique indexes are MIGRATION-ONLY (Prisma cannot express them; drift EXPECTED).
+// =============================================================================
+
+model ExamPeriod {
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String?
+  name           String
+  academicYear   String
+  term           String?
+  // status: DRAFT | OPEN | LOCKED | COMPLETED | CANCELLED
+  status         String    @default("DRAFT")
+  startsAt       DateTime
+  endsAt         DateTime
+  lockedAt       DateTime?
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  createdById    String?
+  lockedById     String?
+  completedById  String?
+  cancelledById  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sessions     ExamSession[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, academicYear])
+  @@index([organizationId, startsAt, endsAt])
+  @@index([organizationId, deletedAt])
+  @@map("exam_periods")
+}
+
+model ExamRoom {
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String?
+  name           String
+  code           String?
+  capacity       Int
+  // status: ACTIVE | INACTIVE
+  status         String    @default("ACTIVE")
+  description    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sessions     ExamSession[]
+
+  // Filtered-unique on (organizationId, code) among live rows -> migration only.
+  @@index([organizationId, branchId])
+  @@index([organizationId, deletedAt])
+  @@map("exam_rooms")
+}
+
+model ExamSession {
+  id             String    @id @default(cuid())
+  organizationId String
+  periodId       String
+  branchId       String?
+  courseId       String?
+  courseLevelId  String?
+  levelSubjectId String
+  roomId         String?
+  title          String
+  // status: DRAFT | SCHEDULED | LOCKED | IN_PROGRESS | COMPLETED | RESULTS_RECORDED | PUBLISHED | CANCELLED
+  status         String    @default("DRAFT")
+  startsAt       DateTime
+  endsAt         DateTime
+  capacity       Int
+  instructions   String?
+  lockedAt       DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  publishedAt    DateTime?
+  cancelledAt    DateTime?
+  createdById    String?
+  lockedById     String?
+  completedById  String?
+  publishedById  String?
+  cancelledById  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization                @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  period       ExamPeriod                  @relation(fields: [periodId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch       Branch?                     @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course       Course?                     @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  courseLevel  CourseLevel?                @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject LevelSubject                @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  room         ExamRoom?                   @relation(fields: [roomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  candidates   ExamCandidate[]
+  invigilators ExamInvigilatorAssignment[]
+  incidents    ExamIncident[]
+  publications ExamPublication[]
+
+  @@index([organizationId, periodId])
+  @@index([organizationId, levelSubjectId])
+  @@index([organizationId, status])
+  @@index([organizationId, startsAt, endsAt])
+  @@index([organizationId, roomId, startsAt, endsAt])
+  @@index([organizationId, deletedAt])
+  @@map("exam_sessions")
+}
+
+model ExamAttempt {
+  id             String    @id @default(cuid())
+  organizationId String
+  studentId      String
+  enrollmentId   String
+  levelSubjectId String
+  attemptNumber  Int
+  // status: OPEN | SAT | RESULTED | ABANDONED
+  status         String    @default("OPEN")
+  source         String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student         @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment      @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject LevelSubject    @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  candidates   ExamCandidate[]
+  results      ExamResult[]
+
+  // Filtered-unique attemptNumber per (organizationId, enrollmentId, levelSubjectId) -> migration only.
+  @@index([organizationId, studentId])
+  @@index([organizationId, enrollmentId, levelSubjectId])
+  @@index([organizationId, levelSubjectId, status])
+  @@index([organizationId, deletedAt])
+  @@map("exam_attempts")
+}
+
+model ExamCandidate {
+  id                     String    @id @default(cuid())
+  organizationId         String
+  examSessionId          String
+  examAttemptId          String
+  studentId              String
+  enrollmentId           String
+  // eligibilityStatus: PENDING_ELIGIBILITY | ELIGIBLE | INELIGIBLE
+  eligibilityStatus      String    @default("PENDING_ELIGIBILITY")
+  // status: PENDING_ELIGIBILITY | ELIGIBLE | INELIGIBLE | REGISTERED | WITHDRAWN | DISQUALIFIED
+  status                 String    @default("PENDING_ELIGIBILITY")
+  assignedSeat           String?
+  registeredAt           DateTime?
+  registeredById         String?
+  withdrawnAt            DateTime?
+  withdrawnById          String?
+  disqualifiedAt         DateTime?
+  disqualifiedById       String?
+  disqualificationReason String?
+  overriddenById         String?
+  overrideReason         String?
+  eligibilitySnapshot    String?   @db.NVarChar(Max)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  deletedAt              DateTime?
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  session      ExamSession     @relation(fields: [examSessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attempt      ExamAttempt     @relation(fields: [examAttemptId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student         @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment      @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendance   ExamAttendance?
+  result       ExamResult?
+  incidents    ExamIncident[]
+
+  // Filtered-unique active candidate per (organizationId, examSessionId, studentId) -> migration only.
+  @@index([organizationId, examSessionId])
+  @@index([organizationId, studentId])
+  @@index([organizationId, enrollmentId])
+  @@index([organizationId, status])
+  @@index([organizationId, deletedAt])
+  @@map("exam_candidates")
+}
+
+model ExamAttendance {
+  id              String    @id @default(cuid())
+  organizationId  String
+  examCandidateId String    @unique
+  // status: PRESENT | ABSENT | LATE | EXCUSED | DISQUALIFIED
+  status          String
+  checkedInAt     DateTime?
+  markedAt        DateTime?
+  markedById      String?
+  remarks         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  candidate    ExamCandidate @relation(fields: [examCandidateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, status])
+  @@index([organizationId, markedAt])
+  @@map("exam_attendances")
+}
+
+model ExamResult {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  examCandidateId    String    @unique
+  examAttemptId      String
+  studentId          String
+  enrollmentId       String
+  levelSubjectId     String
+  score              Decimal?  @db.Decimal(6, 2)
+  maxScore           Decimal   @db.Decimal(6, 2)
+  normalizedScore    Decimal?  @db.Decimal(6, 2)
+  // status: DRAFT | SUBMITTED | REVIEWED | APPROVED | PUBLISHED | INVALIDATED
+  status             String    @default("DRAFT")
+  resultCode         String?
+  markerId           String?
+  reviewedById       String?
+  approvedById       String?
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  approvedAt         DateTime?
+  publishedAt        DateTime?
+  invalidatedAt      DateTime?
+  invalidationReason String?
+  remarks            String?
+  resultChecksum     String?
+  // POINTER to the CURRENT ExamResultRevision — plain column, NOT a relation (avoids a cyclic FK).
+  currentRevisionId  String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  candidate    ExamCandidate        @relation(fields: [examCandidateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attempt      ExamAttempt          @relation(fields: [examAttemptId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student              @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enrollment   Enrollment           @relation(fields: [enrollmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  levelSubject LevelSubject         @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  revisions    ExamResultRevision[]
+  appeals      ExamAppeal[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, studentId])
+  @@index([organizationId, enrollmentId, levelSubjectId])
+  @@index([organizationId, publishedAt])
+  @@map("exam_results")
+}
+
+model ExamResultRevision {
+  id             String    @id @default(cuid())
+  organizationId String
+  examResultId   String
+  revisionNumber Int
+  previousScore  Decimal?  @db.Decimal(6, 2)
+  revisedScore   Decimal?  @db.Decimal(6, 2)
+  previousStatus String?
+  revisedStatus  String?
+  reason         String
+  // sourceType: APPEAL | RETRACTION | CORRECTION
+  sourceType     String
+  // status: DRAFT | APPROVED | CURRENT | REJECTED | CANCELLED
+  status         String    @default("DRAFT")
+  isCurrent      Boolean   @default(false)
+  createdById    String?
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  result       ExamResult   @relation(fields: [examResultId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Filtered-unique single CURRENT revision per (organizationId, examResultId) -> migration only.
+  @@unique([organizationId, examResultId, revisionNumber])
+  @@index([organizationId, examResultId])
+  @@index([organizationId, status])
+  @@index([organizationId, isCurrent])
+  @@map("exam_result_revisions")
+}
+
+model ExamAppeal {
+  id             String    @id @default(cuid())
+  organizationId String
+  examResultId   String
+  studentId      String
+  requestedById  String
+  reason         String
+  // status: PENDING | UNDER_REVIEW | APPROVED | REJECTED | CLOSED
+  status         String    @default("PENDING")
+  decision       String?
+  decisionReason String?
+  decidedById    String?
+  decidedAt      DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  result       ExamResult   @relation(fields: [examResultId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, status])
+  @@index([organizationId, studentId])
+  @@index([organizationId, examResultId])
+  @@map("exam_appeals")
+}
+
+model ExamPublication {
+  id             String    @id @default(cuid())
+  organizationId String
+  examSessionId  String
+  // status: DRAFT | PUBLISHED | RETRACTED
+  status         String    @default("DRAFT")
+  publishedAt    DateTime?
+  publishedById  String?
+  retractedAt    DateTime?
+  retractedById  String?
+  reason         String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  session      ExamSession  @relation(fields: [examSessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, examSessionId])
+  @@index([organizationId, status])
+  @@index([organizationId, publishedAt])
+  @@map("exam_publications")
+}
+
+model ExamIncident {
+  id              String    @id @default(cuid())
+  organizationId  String
+  examSessionId   String
+  examCandidateId String?
+  type            String
+  // severity: LOW | MEDIUM | HIGH | CRITICAL
+  severity        String
+  description     String    @db.NVarChar(Max)
+  actionTaken     String?
+  reportedById    String?
+  reportedAt      DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  session      ExamSession    @relation(fields: [examSessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  candidate    ExamCandidate? @relation(fields: [examCandidateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, examSessionId])
+  @@index([organizationId, examCandidateId])
+  @@index([organizationId, severity])
+  @@index([organizationId, reportedAt])
+  @@map("exam_incidents")
+}
+
+model ExamInvigilatorAssignment {
+  id             String   @id @default(cuid())
+  organizationId String
+  examSessionId  String
+  // Plain String pointers to Teacher/User — deliberately NOT relations.
+  teacherId      String?
+  userId         String?
+  // role: CHIEF | INVIGILATOR | MARKER | OBSERVER
+  role           String
+  assignedAt     DateTime @default(now())
+  assignedById   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  session      ExamSession  @relation(fields: [examSessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Filtered-uniques on (org, session, teacherId) and (org, session, userId) -> migration only.
+  @@index([organizationId, examSessionId])
+  @@index([organizationId, teacherId])
+  @@index([organizationId, userId])
+  @@index([organizationId, assignedAt])
+  @@map("exam_invigilator_assignments")
+}
+
+model ExamEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  aggregateType  String
+  aggregateId    String
+  eventType      String
+  previousStatus String?
+  newStatus      String?
+  actorId        String?
+  reason         String?
+  metadata       String?  @db.NVarChar(Max)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, aggregateType, aggregateId])
+  @@index([organizationId, eventType])
+  @@index([organizationId, createdAt])
+  @@map("exam_events")
 }
