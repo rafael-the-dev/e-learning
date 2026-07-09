@@ -65,6 +65,8 @@
 
 Ciclo de vida do certificado:
 - `GenerateCertificateCommand` — cria DRAFT/PENDING_APPROVAL a partir de um transcript emitido.
+- `ApproveCertificateCommand` — regista a provenance de aprovação (`certificate.approved`)
+  de um certificado PENDING_APPROVAL para que possa ser emitido (não altera o estado).
 - `IssueCertificateCommand` — promove a ISSUED (aloca número, checksum, cria projeção de verificação).
 - `RevokeCertificateCommand` — ISSUED|SUSPENDED → REVOKED (terminal).
 - `SuspendCertificateCommand` — ISSUED → SUSPENDED (recuperável).
@@ -127,8 +129,8 @@ Vocabulário declarado (`DomainEventType`, `event-types.ts`) e emissão real via
 | `certificate.restored` | Sim | `RestoreCertificateCommand` |
 | `certificate.exported` | Sim | Export (PDF) + Ministry export |
 | `certificate.marked_stale` | Sim | Staleness handler + `ReconcileCertificateStalenessCommand` |
-| `certificate.generated` | Não (só `CertificateEvent`/audit) | `GenerateCertificateCommand` |
-| `certificate.approved` | Não (só `CertificateEvent`/audit) | fluxo de aprovação |
+| `certificate.generated` | Não (nem bus nem `CertificateEvent`; o generate faz um único write — a linha `Certificate`) | `GenerateCertificateCommand` |
+| `certificate.approved` | Não (só `CertificateEvent`/audit — provenance de emissão) | `ApproveCertificateCommand` |
 | `certificate.verified` | Não (só contador na projeção) | verificação pública |
 
 **Outbox (Fase 14):** singleton em memória `certificateOutbox`. Fluxo Command → `enqueue()` →
