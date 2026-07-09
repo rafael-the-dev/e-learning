@@ -2444,25 +2444,26 @@ no per-item authorization.
 data is exposed.
 
 **Preview** — `BulkCertificateOperationPreviewService` (read-only, `certificates.view`): validates
-inputs BEFORE execution without mutation or eligibility recompute. `previewIssue` (batched via
-`findCertificatesByIds`) reports each certificate's `currentStatus` + `canIssue` (DRAFT/
-PENDING_APPROVAL); `previewGenerate` reports `canGenerate` via a shallow active-duplicate check
-(`findExistingActiveCertificate`) — the authoritative decision still happens in the command at
-execution time.
+inputs BEFORE execution without mutation or eligibility recompute. Both previews are BATCHED (one read
+each, no N+1): `previewIssue` (via `findCertificatesByIds`) reports each certificate's
+`currentStatus` + `canIssue` (DRAFT/PENDING_APPROVAL); `previewGenerate` (via
+`findActiveCertificatesForPairs` → in-memory key set) reports `canGenerate` from a shallow
+active-duplicate check — the authoritative decision still happens in the command at execution
+time.
 
 **Routes** (admin) — `POST /api/certificates/bulk/{generate,issue,export,revoke,suspend,restore}`.
 Thin shells: authenticate → construct the bulk command → return its `BulkOperationResult` (200 even
 with partial failures); only invalid input (422) / unauthorized (401/403) short-circuit.
 
 **No schema/migration change** (one additive read `findCertificatesByIds` for the preview). Tests:
-**+22 within `src/modules/certificates`** (→ 576) — orchestration (single/multiple/mixed,
+**+25 within `src/modules/certificates`** (→ 579) — orchestration (single/multiple/mixed,
 stopOnFailure on/off, progress, counts, error mapping, never-throws, authz, invalid input) +
 delegation (each single command constructed exactly once per item) + preview (canIssue/canGenerate,
-org-scoped, no mutation, authz) + arch guards (no Transcript/Academic Core/eligibility/repository)
-— **plus a 9-test bulk route suite** under `src/app`.
+org-scoped, no mutation, authz, one batched read/no N+1) + arch guards (no Transcript/Academic
+Core/eligibility/repository) — **plus a 9-test bulk route suite** under `src/app`.
 
-**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔ (576/576)
-+ bulk route suite ✔ · `eslint` ✔ (0 errors) · `prisma validate` ✔. No schema or migration change.
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔ (579/579)
++ bulk route suite ✔ (9/9) · `eslint` ✔ (0 errors) · `prisma validate` ✔. No schema or migration change.
 
 **Bulk operations reuse the existing commands verbatim — sequential, independent transactions,
 partial-success with per-item results, `stopOnFailure`, once-only authorization, a read-only

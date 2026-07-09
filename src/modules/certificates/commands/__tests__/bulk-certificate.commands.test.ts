@@ -41,7 +41,9 @@ vi.mock("../restore-certificate.command", () => makeMock("RestoreCertificateComm
 import { AuthorizationError, NotFoundError, ValidationError } from "@/shared/lib/command";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import type { ServiceContext } from "@/shared/types/common";
-import type { BulkProgress } from "@/modules/certificates/types/bulk";
+import type { BulkCommandDeps, BulkProgress } from "@/modules/certificates/types/bulk";
+import type { IssueCertificateInput } from "@/modules/certificates/schemas/certificate.schema";
+import type { IssueCertificateResult } from "../issue-certificate.command";
 import {
   BulkGenerateCertificatesCommand,
   BulkIssueCertificatesCommand,
@@ -53,6 +55,32 @@ import {
 
 const ctx: ServiceContext = { userId: "u-1", organizationId: "org-A" };
 const item = (id: string) => ({ certificateId: id });
+
+// The exact per-item runner signature the bulk ISSUE command accepts (constructor
+// dep). Binding the mocks to this type keeps them honest: an injected runItem MUST
+// return a full IssueCertificateResult, not a partial stub.
+type IssueRunItem = NonNullable<BulkCommandDeps<IssueCertificateInput, IssueCertificateResult>["runItem"]>;
+
+/** A complete, deterministic IssueCertificateResult for the injected runItem mocks. */
+function makeIssueResult(
+  certificateId: string,
+  overrides: Partial<IssueCertificateResult> = {}
+): IssueCertificateResult {
+  return {
+    certificateId,
+    status: "ISSUED",
+    certificateNumber: `CERT-${certificateId}`,
+    certificateType: "COURSE_COMPLETION",
+    transcriptVersionId: `ver-${certificateId}`,
+    transcriptNumber: `TRN-${certificateId}`,
+    issuedAt: new Date("2026-01-01T00:00:00.000Z"),
+    checksum: `checksum-${certificateId}`,
+    verificationCode: `vc-${certificateId}`,
+    verificationUrl: null,
+    publicStatus: "VALID",
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -69,7 +97,7 @@ afterEach(() => vi.restoreAllMocks());
 
 // ─── Orchestration (injected runItem) ────────────────────────────────────────
 describe("bulk orchestration (via BulkIssue with an injected runItem)", () => {
-  const runOk = vi.fn(async (i: { certificateId: string }) => ({ certificateId: i.certificateId, status: "ISSUED" }));
+  const runOk = vi.fn<IssueRunItem>(async (i) => makeIssueResult(i.certificateId));
 
   it("1. a single success", async () => {
     const res = await new BulkIssueCertificatesCommand({ items: [item("c1")] }, ctx, { runItem: runOk }).run();
@@ -83,9 +111,9 @@ describe("bulk orchestration (via BulkIssue with an injected runItem)", () => {
   });
 
   it("3/10. mixed success/failure maps a typed error to { code, message } and never throws", async () => {
-    const runMixed = vi.fn(async (i: { certificateId: string }) => {
+    const runMixed = vi.fn<IssueRunItem>(async (i) => {
       if (i.certificateId === "bad") throw new NotFoundError("Certificate", "bad");
-      return { certificateId: i.certificateId, status: "ISSUED" };
+      return makeIssueResult(i.certificateId);
     });
     const res = await new BulkIssueCertificatesCommand({ items: [item("a"), item("bad"), item("c")] }, ctx, { runItem: runMixed }).run();
     expect(res).toMatchObject({ total: 3, succeeded: 2, failed: 1, skipped: 0 });
@@ -94,18 +122,18 @@ describe("bulk orchestration (via BulkIssue with an injected runItem)", () => {
   });
 
   it("4. stopOnFailure=false continues past a failure (all attempted)", async () => {
-    const runMixed = vi.fn(async (i: { certificateId: string }) => {
+    const runMixed = vi.fn<IssueRunItem>(async (i) => {
       if (i.certificateId === "bad") throw new NotFoundError("Certificate", "bad");
-      return { certificateId: i.certificateId, status: "ISSUED" };
+      return makeIssueResult(i.certificateId);
     });
     const res = await new BulkIssueCertificatesCommand({ items: [item("bad"), item("a")], stopOnFailure: false }, ctx, { runItem: runMixed }).run();
     expect(res).toMatchObject({ total: 2, succeeded: 1, failed: 1, skipped: 0 });
   });
 
   it("5. stopOnFailure=true stops and marks the rest skipped", async () => {
-    const runMixed = vi.fn(async (i: { certificateId: string }) => {
+    const runMixed = vi.fn<IssueRunItem>(async (i) => {
       if (i.certificateId === "bad") throw new NotFoundError("Certificate", "bad");
-      return { certificateId: i.certificateId, status: "ISSUED" };
+      return makeIssueResult(i.certificateId);
     });
     const res = await new BulkIssueCertificatesCommand({ items: [item("a"), item("bad"), item("c"), item("d")], stopOnFailure: true }, ctx, { runItem: runMixed }).run();
     expect(res).toMatchObject({ total: 4, succeeded: 1, failed: 1, skipped: 2 });
@@ -125,9 +153,9 @@ describe("bulk orchestration (via BulkIssue with an injected runItem)", () => {
   });
 
   it("8. progress callback fires once per attempted item with running counts", async () => {
-    const runMixed = vi.fn(async (i: { certificateId: string }) => {
+    const runMixed = vi.fn<IssueRunItem>(async (i) => {
       if (i.certificateId === "bad") throw new NotFoundError("Certificate", "bad");
-      return { certificateId: i.certificateId, status: "ISSUED" };
+      return makeIssueResult(i.certificateId);
     });
     const events: BulkProgress[] = [];
     await new BulkIssueCertificatesCommand({ items: [item("a"), item("bad")] }, ctx, {
@@ -140,9 +168,9 @@ describe("bulk orchestration (via BulkIssue with an injected runItem)", () => {
   });
 
   it("9. counts always satisfy total === succeeded + failed + skipped", async () => {
-    const runMixed = vi.fn(async (i: { certificateId: string }) => {
+    const runMixed = vi.fn<IssueRunItem>(async (i) => {
       if (i.certificateId === "bad") throw new NotFoundError("Certificate", "bad");
-      return { certificateId: i.certificateId, status: "ISSUED" };
+      return makeIssueResult(i.certificateId);
     });
     const res = await new BulkIssueCertificatesCommand({ items: [item("a"), item("bad"), item("c")], stopOnFailure: true }, ctx, { runItem: runMixed }).run();
     expect(res.succeeded + res.failed + res.skipped).toBe(res.total);

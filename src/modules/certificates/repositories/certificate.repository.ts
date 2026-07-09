@@ -273,6 +273,48 @@ export async function findExistingActiveCertificate(
   return row ? toRecord(row) : null;
 }
 
+export interface ActiveCertificatePairKey {
+  transcriptVersionId: string;
+  certificateType: string;
+}
+
+export interface FindActiveCertificatesForPairsParams {
+  organizationId: string;
+  pairs: ActiveCertificatePairKey[];
+}
+
+/** Batch duplicate-check for the Phase 13 bulk-GENERATE preview: in ONE query,
+ *  the ACTIVE certificates whose `(transcriptVersionId, certificateType)` falls
+ *  within `pairs`. Same predicate as {@link findExistingActiveCertificate} (live
+ *  rows, `status NOT IN [REVOKED, STALE]`), so the caller's per-pair decision is
+ *  identical to calling that method once per pair — just batched (no N+1). Filters
+ *  by the DISTINCT version ids AND the DISTINCT types; the over-set never matters
+ *  because the caller only looks up the exact requested pairs. Returns the two key
+ *  columns only. `[]` for an empty pair set. No transcript/academic read. */
+export async function findActiveCertificatesForPairs(
+  params: FindActiveCertificatesForPairsParams,
+  client?: PrismaClientOrTx
+): Promise<ActiveCertificatePairKey[]> {
+  if (params.pairs.length === 0) return [];
+  const db = client ?? (await getDb());
+  const transcriptVersionIds = Array.from(new Set(params.pairs.map((p) => p.transcriptVersionId)));
+  const certificateTypes = Array.from(new Set(params.pairs.map((p) => p.certificateType)));
+  const rows = await db.certificate.findMany({
+    where: {
+      organizationId: params.organizationId,
+      transcriptVersionId: { in: transcriptVersionIds },
+      certificateType: { in: certificateTypes },
+      deletedAt: null,
+      status: { notIn: ["REVOKED", "STALE"] },
+    },
+    select: { transcriptVersionId: true, certificateType: true },
+  });
+  return rows.map((r) => ({
+    transcriptVersionId: r.transcriptVersionId,
+    certificateType: r.certificateType,
+  }));
+}
+
 export interface FindCertificatesByTranscriptVersionParams {
   organizationId: string;
   transcriptVersionId: string;
