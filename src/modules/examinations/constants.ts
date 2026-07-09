@@ -153,6 +153,40 @@ export const ExamInvigilatorRole = {
 export type ExamInvigilatorRole =
   (typeof ExamInvigilatorRole)[keyof typeof ExamInvigilatorRole];
 
+/** Reasons the ExaminationEligibilityEngine (Phase 3B) blocks generation/registration.
+ *  ACADEMIC/ADMINISTRATIVE only — race-sensitive operational blockers (SESSION_FULL,
+ *  ALREADY_REGISTERED, room/invigilator/seat/timetable conflicts) are NOT here; they
+ *  are decided by commands via conditional writes (E-3a / §5 command-level blockers). */
+export const ExaminationEligibilityBlocker = {
+  NO_STUDENT: "NO_STUDENT",
+  NO_ACTIVE_ENROLLMENT: "NO_ACTIVE_ENROLLMENT",
+  LEVEL_SUBJECT_NOT_FOUND: "LEVEL_SUBJECT_NOT_FOUND",
+  SUBJECT_NOT_REGISTERED: "SUBJECT_NOT_REGISTERED",
+  SUBJECT_ALREADY_PASSED: "SUBJECT_ALREADY_PASSED",
+  ATTENDANCE_BELOW_REQUIRED: "ATTENDANCE_BELOW_REQUIRED",
+  PREREQUISITE_NOT_MET: "PREREQUISITE_NOT_MET",
+  FINANCIAL_CLEARANCE_REQUIRED: "FINANCIAL_CLEARANCE_REQUIRED",
+  DISCIPLINARY_BLOCK: "DISCIPLINARY_BLOCK",
+  EXAM_PERIOD_CLOSED: "EXAM_PERIOD_CLOSED",
+  EXAM_SESSION_NOT_AVAILABLE: "EXAM_SESSION_NOT_AVAILABLE",
+} as const;
+export type ExaminationEligibilityBlocker =
+  (typeof ExaminationEligibilityBlocker)[keyof typeof ExaminationEligibilityBlocker];
+
+/** Informational signals the engine surfaces without blocking eligibility. */
+export const ExaminationEligibilityWarning = {
+  FINANCIAL_CLEARANCE_UNKNOWN: "FINANCIAL_CLEARANCE_UNKNOWN",
+  DISCIPLINARY_STATUS_UNKNOWN: "DISCIPLINARY_STATUS_UNKNOWN",
+  ATTENDANCE_UNKNOWN: "ATTENDANCE_UNKNOWN",
+  PREREQUISITE_STATUS_UNKNOWN: "PREREQUISITE_STATUS_UNKNOWN",
+  MANUAL_APPROVAL_REQUIRED: "MANUAL_APPROVAL_REQUIRED",
+  PREVIOUS_ATTEMPTS_FOUND: "PREVIOUS_ATTEMPTS_FOUND",
+  EXAM_PERIOD_MISSING: "EXAM_PERIOD_MISSING",
+  EXAM_SESSION_MISSING: "EXAM_SESSION_MISSING",
+} as const;
+export type ExaminationEligibilityWarning =
+  (typeof ExaminationEligibilityWarning)[keyof typeof ExaminationEligibilityWarning];
+
 /** Aggregate a domain/audit event refers to (ExamEvent.aggregateType, §3.13). */
 export const ExamEventAggregateType = {
   EXAM_PERIOD: "EXAM_PERIOD",

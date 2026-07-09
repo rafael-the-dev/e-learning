@@ -5,7 +5,9 @@
 //   • Phase 1 — constants (domain vocabularies + derived union types).
 //   • Phase 2 — tenant-safe, persistence-only repositories for the 13 Exam*
 //     models, plus their record / input / filter types.
-// No commands, services, routes, or UI are exported (later phases).
+//   • Phase 3A — ExaminationEligibilitySource (read-aggregation façade) + its
+//     input/facts contracts. Loads facts only; decides nothing.
+// No commands, routes, or UI are exported (later phases).
 //
 // `./constants` already exports both the const objects and their derived union
 // types, so it is the single source for the Phase-1 vocabulary here (re-exporting
@@ -15,3 +17,6 @@
 export * from "./constants";
 export * from "./types/repository";
 export * from "./repositories";
+// Phase 3A — eligibility-source facts contracts + the read-aggregation service.
+export * from "./types/eligibility-source";
+export * from "./services";
