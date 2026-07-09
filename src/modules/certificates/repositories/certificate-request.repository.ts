@@ -292,3 +292,38 @@ export async function softDeleteCertificateRequest(
   });
   return { count: res.count };
 }
+
+// ─── Operational read helpers (Phase 14) — READ ONLY, org-scoped ──────────────
+
+/** Live-request count grouped by `status` (§8 `countRequests`). ONE scan of live
+ *  rows (`deletedAt = null`), reduced in memory. Returns a `{ status: count }` map. */
+export async function countRequestsByStatus(
+  params: { organizationId: string },
+  client?: PrismaClientOrTx
+): Promise<Record<string, number>> {
+  const db = client ?? (await getDb());
+  const rows = await db.certificateRequest.findMany({
+    where: { organizationId: params.organizationId, deletedAt: null },
+    select: { status: true },
+  });
+  const counts: Record<string, number> = {};
+  for (const r of rows) {
+    const status = r.status as string;
+    counts[status] = (counts[status] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** The `createdAt` timestamps of live requests created since `since` (§7 metrics
+ *  `request` source). ONE scan; the metrics service buckets in memory. */
+export async function listRequestCreatedTimestamps(
+  params: { organizationId: string; since: Date },
+  client?: PrismaClientOrTx
+): Promise<Date[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.certificateRequest.findMany({
+    where: { organizationId: params.organizationId, deletedAt: null, createdAt: { gte: params.since } },
+    select: { createdAt: true },
+  });
+  return rows.map((r) => r.createdAt as Date);
+}

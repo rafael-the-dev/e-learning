@@ -29,3 +29,9 @@ export * from "./certificate-student-read.service";
 export * from "./certificate-request-read.service";
 // Phase 13 — bulk operation preview (read-only input validation before execution).
 export * from "./certificate-bulk-preview.service";
+// Phase 14 — operational hardening read services (health / maintenance / metrics /
+// dashboard). All READ-ONLY; the Outbox (the one mutable seam) lives under `../outbox`.
+export * from "./certificate-health.service";
+export * from "./certificate-maintenance.service";
+export * from "./certificate-metrics.service";
+export * from "./certificate-operational.service";

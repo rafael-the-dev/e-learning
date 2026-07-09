@@ -12,7 +12,7 @@ import { createAbility, getUserPermissions } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { DomainAggregateType, DomainEventType } from "@/server/events/event-types";
 import type { DomainEvent } from "@/server/events/domain-event";
-import { eventPublisher } from "@/server/events/event-publisher";
+import { certificateOutbox } from "@/modules/certificates/outbox";
 import { auditService } from "@/modules/audit-logs/services/audit.service";
 import { findOrganizationById } from "@/modules/organizations/repositories/organization.repository";
 import {
@@ -328,7 +328,7 @@ export class ExportCertificateToMinistryCommand extends BaseCommand<
     }
 
     // 9. Publish the domain event ONLY after commit.
-    for (const event of events) await eventPublisher.publish(event);
+    await certificateOutbox.dispatch(events);
 
     return {
       exportId: exportRow.id,

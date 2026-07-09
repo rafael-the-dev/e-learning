@@ -3,7 +3,7 @@ import type { PrismaClientOrTx } from "@/server/db";
 import type { DomainEventHandler } from "../event-handlers";
 import type { DomainEvent, PersistedDomainEvent } from "../domain-event";
 import { DomainAggregateType, DomainEventType } from "../event-types";
-import { eventPublisher } from "../event-publisher";
+import { certificateOutbox } from "@/modules/certificates/outbox";
 import { findCertificatesByTranscriptVersion } from "@/modules/certificates/repositories/certificate.repository";
 import {
   applyCertificateStalenessInTx,
@@ -82,7 +82,10 @@ export class CertificateTranscriptStalenessHandler implements DomainEventHandler
       }
     }
 
-    // Publish only after every per-certificate transaction has committed.
-    for (const evt of toPublish) await eventPublisher.publish(evt);
+    // Publish only after every per-certificate transaction has committed — via the
+    // certificate Outbox (enqueue → publish), so this reactive publish path shares the
+    // single, recorded, replayable Outbox seam with the commands (Phase 14). `dispatch`
+    // over an empty list is a no-op.
+    await certificateOutbox.dispatch(toPublish);
   }
 }

@@ -2469,3 +2469,87 @@ Core/eligibility/repository) — **plus a 9-test bulk route suite** under `src/a
 partial-success with per-item results, `stopOnFailure`, once-only authorization, a read-only
 preview, and zero duplicated business logic / Academic Core / Transcript reads.** Queues, retries,
 and parallel execution remain out of scope.
+
+## 48. Phase 14 — Implementation Notes (Operational Hardening, 2026-07-09)
+
+Phase 14 adds reliability / observability / recovery **without changing any business
+behaviour, lifecycle, or domain rule** — it introduces NO new event payloads, NO eligibility,
+NO Academic Core / Transcript read. Everything is READ-ONLY **except the Outbox** (the single
+mutable seam). Explicitly out of scope (unchanged): queue workers, distributed schedulers,
+Kafka/RabbitMQ/BullMQ/Redis Streams, persistence.
+
+**Outbox** (`outbox/certificate-outbox.service.ts` → `certificateOutbox` singleton). The in-process,
+in-memory seam every certificate command now publishes post-commit events through: the flow is
+**Command → Outbox.enqueue() → Outbox.publish()** (commands call the ergonomic `dispatch(events)` =
+enqueue-all + publish). API: `enqueue` / `listPending` / `listFailed` / `markDelivered` /
+`markFailed` / `publish` / `retry` / `summary` / `reset`. Delivery is done by an injectable
+`deliver` fn (default wraps `eventPublisher.publish`, which never throws → entries deliver on the
+first attempt in production; tests inject a throwing `deliver` to exercise retry / dead-letter).
+Event payloads are UNCHANGED. All 8 certificate publish-after-commit sites (the 7 commands — issue,
+revoke, suspend, restore, export, ministry export, staleness reconcile — plus the reactive
+`CertificateTranscriptStalenessHandler`) now go through the Outbox instead of calling
+`eventPublisher` directly — the Outbox is the ONLY place that references the publisher.
+
+**Retry policy** (`outbox/retry-policy.ts`) — pure, schedules NOTHING (no timers). `OUTBOX_MAX_RETRIES`
+= 3; `canRetry(retryCount)` = `retryCount < 3`; `retryDelayMs(n)` = `1000 * 2^(n-1)` (exponential);
+`nextRetryAt(now, retryCount)` = advisory next-due time. A failed delivery bumps `retryCount` and
+stays PENDING (retryable) until the budget is exhausted.
+
+**Dead letter (§3).** Once the retry budget is exhausted the entry becomes **FAILED**, stays queryable
+(`listFailed` / `summary.deadLetter`), and is never auto-deleted or re-attempted.
+
+**Maintenance** (`services/certificate-maintenance.service.ts`) — READ-ONLY detection, `certificates.view`,
+no mutation. Detects: orphaned exports (owning certificate missing / soft-deleted), stuck PENDING
+exports (older than a threshold, default 60 min), failed exports, duplicate verification rows
+(structural integrity probe — normally empty behind the unique indexes; a `verificationCode` duplicate
+group's `key` is emitted as `"[REDACTED]"` so a raw verification code never leaves via the report,
+while a `certificateId` group keeps its internal-id key — §10), and verification-projection
+mismatches. The mismatch check MIRRORS the publicStatus values the existing lifecycle already maintains
+(issued→VALID|EXPIRED, suspended/stale→SUSPENDED, revoked→REVOKED) — it introduces no new rule; the
+mapping lives in `expectedPublicStatuses`. One export scan + batched certificate/verification reads (no N+1).
+
+**Health** (`services/certificate-health.service.ts`) — READ-ONLY KPIs, `certificates.view`, counts only,
+no Academic read: total/issued/revoked/suspended/stale/pendingApproval/draft, exports ready/failed,
+verification rows + mismatches, requests pending/approved/fulfilled. Each count is a single batched read
+(status maps built in one scan per table).
+
+**Metrics** (`services/certificate-metrics.service.ts`) — READ-ONLY, existing tables only, **no event replay**.
+Windowed action counts (today / last 7 / last 30 days): generate←`Certificate.createdAt`;
+issue/revoke/suspend/restore←`CertificateEvent.createdAt` by eventType; export←`CertificateExport.createdAt`;
+verification←`CertificateVerification.lastVerifiedAt`; request←`CertificateRequest.createdAt`. Each source is
+scanned ONCE over the widest (30-day) window and bucketed in memory — no repeated scans, no N+1. NOTE: the
+`verification` metric is sourced from the projection's `lastVerifiedAt` and therefore counts the MOST RECENT
+verification per certificate within the window (an approximation — there is no per-hit table).
+
+**Operational dashboard DTO (§6)** — `CertificateOperationalDashboard` (`services/certificate-operational.service.ts`):
+health KPIs + maintenance report + a SANITIZED outbox summary + windowed metrics (today/7d/30d), composed
+under one `generatedAt`. No UI.
+
+**Repository additions (§8).** READ-only helpers only, appended to the EXISTING repositories (no new repo file,
+so the repository-count guard is untouched): `countCertificatesByStatus` / `listCertificateCreatedTimestamps`
+/ `findCertificateStatusesByIds` (certificate); `countExportsByStatus` / `listExportCreatedTimestamps` (export);
+`countVerifications` / `listVerificationsForMaintenance` / `listVerificationTimestamps` (verification);
+`countRequestsByStatus` / `listRequestCreatedTimestamps` (request); `listCertificateEventTimestamps` (event).
+
+**Routes (§9)** (admin) — `GET /api/certificates/{health,maintenance,metrics,outbox}`. Thin shells:
+authenticate → read service (which authorizes `certificates.view` + scopes by tenant) → JSON. No repository
+logic, no business rules, no command imports.
+
+**Security (§10).** Every route/service requires `certificates.view` and is tenant-scoped. Only AGGREGATES /
+structural anomaly ids are exposed — never checksums, storage paths / fileUrls, verification codes, student PII,
+or transcript pointers. The outbox summary is sanitized (routing envelope + delivery bookkeeping; never the
+event `payload`).
+
+**Tests: +40 within `src/modules/certificates`** (→ 619) — outbox (enqueue/publish/dispatch, retry, max-retries→dead
+letter, markDelivered/markFailed, sanitized summary + pure retry-policy maths), maintenance (orphan/stuck/failed/
+duplicate/projection-mismatch + scoping + authz), health (counts + authz), metrics (today/7d/30d + event-type
+routing + 30-day cutoff + authz), operational dashboard/outbox summary + authz, and Phase 14 architecture guards
+(no Academic/Transcript/eligibility, no command imports in services/outbox, no repository/command in routes,
+read-only except the Outbox) — **plus a 6-test operational route suite** under `src/app`.
+
+**Validation:** `tsc --noEmit` ✔ (0 errors) · `vitest run src/modules/certificates` ✔ + operational route suite ✔
+· `eslint` ✔ (0 errors) · `prisma validate` ✔. **No schema or migration change.**
+
+**Future persistence note.** The Outbox is in-memory this phase. A later phase may back it with an outbox table
++ a delivery worker (and real backoff scheduling) WITHOUT changing its API (`enqueue`/`publish`/`retry`/`list*`/
+`mark*`) — the seam and the retry policy are already in place; only the storage and the trigger change.

@@ -51,3 +51,7 @@ export * from "./export";
 // Ministry export contracts (Phase 11) — the minimized source, the normalized
 // payload, the formatter/transport/storage adapter interfaces, and the result DTO.
 export * from "./ministry";
+
+// Operational hardening contracts (Phase 14) — Outbox entry/summary, maintenance
+// report, health KPIs, metrics, and the composed operational dashboard DTO.
+export * from "./operational";

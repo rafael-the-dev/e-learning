@@ -240,3 +240,38 @@ export async function updateCertificateExportStatus(
   });
   return { count: res.count };
 }
+
+// ─── Operational read helpers (Phase 14) — READ ONLY, org-scoped ──────────────
+
+/** Export count grouped by `status` (§8 `countExports`). ONE scan of `{ status }`,
+ *  reduced in memory. Returns a `{ status: count }` map. */
+export async function countExportsByStatus(
+  params: { organizationId: string },
+  client?: PrismaClientOrTx
+): Promise<Record<string, number>> {
+  const db = client ?? (await getDb());
+  const rows = await db.certificateExport.findMany({
+    where: { organizationId: params.organizationId },
+    select: { status: true },
+  });
+  const counts: Record<string, number> = {};
+  for (const r of rows) {
+    const status = r.status as string;
+    counts[status] = (counts[status] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** The `createdAt` timestamps of exports created since `since` (§7 metrics `export`
+ *  source). ONE scan; the metrics service buckets in memory. */
+export async function listExportCreatedTimestamps(
+  params: { organizationId: string; since: Date },
+  client?: PrismaClientOrTx
+): Promise<Date[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.certificateExport.findMany({
+    where: { organizationId: params.organizationId, createdAt: { gte: params.since } },
+    select: { createdAt: true },
+  });
+  return rows.map((r) => r.createdAt as Date);
+}
