@@ -109,6 +109,19 @@ export const issueCertificateSchema = z
   .strict();
 export type IssueCertificateInput = z.infer<typeof issueCertificateSchema>;
 
+/** Input for `ApproveCertificateCommand` — records the approval provenance for a
+ *  PENDING_APPROVAL certificate so it becomes issuable (Phase 5 gate). The approval
+ *  does NOT change the certificate status; it appends a `certificate.approved`
+ *  CertificateEvent that `IssueCertificateCommand` reads as provenance. The
+ *  certificate is addressed by id only. */
+export const approveCertificateSchema = z
+  .object({
+    certificateId: z.string().min(1, "O identificador do certificado é obrigatório"),
+    reason: z.string().max(500, "O motivo não pode exceder 500 caracteres").optional(),
+  })
+  .strict();
+export type ApproveCertificateInput = z.infer<typeof approveCertificateSchema>;
+
 /** Input for `RevokeCertificateCommand` — ISSUED | SUSPENDED → REVOKED (terminal).
  *  A reason is mandatory (revocation changes historical truth). */
 export const revokeCertificateSchema = z

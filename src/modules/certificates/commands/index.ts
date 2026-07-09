@@ -9,6 +9,9 @@
 // certificate from an issued transcript.
 // Phase 5 — `IssueCertificateCommand`: promotes a generated certificate to the
 // official ISSUED record (number + checksum + verification row, event post-commit).
+// Phase 5 — `ApproveCertificateCommand`: records the `certificate.approved`
+// provenance event for a PENDING_APPROVAL certificate so `IssueCertificateCommand`
+// can issue it (authority: certificates.generate; no status change, audit-only event).
 // Phase 6 — post-issue lifecycle: `RevokeCertificateCommand` (ISSUED|SUSPENDED →
 // REVOKED, terminal), `SuspendCertificateCommand` (ISSUED → SUSPENDED),
 // `RestoreCertificateCommand` (SUSPENDED → ISSUED).
@@ -25,6 +28,7 @@
 
 export * from "./generate-certificate.command";
 export * from "./issue-certificate.command";
+export * from "./approve-certificate.command";
 export * from "./revoke-certificate.command";
 export * from "./suspend-certificate.command";
 export * from "./restore-certificate.command";
