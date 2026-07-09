@@ -3,8 +3,8 @@ import type { AuthContext } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { CertificateStatus } from "@/modules/certificates/constants";
 import {
+  findActiveCertificatesForPairs,
   findCertificatesByIds,
-  findExistingActiveCertificate,
 } from "@/modules/certificates/repositories/certificate.repository";
 
 // =============================================================================
@@ -76,29 +76,36 @@ export class BulkCertificateOperationPreviewService {
 
   /** Preview a bulk GENERATE: per item, whether an ACTIVE certificate already exists
    *  for the (transcriptVersion, type) — a shallow duplicate check, NOT eligibility.
-   *  The engine still owns the real generation decision at execution time. */
+   *  ONE batched read loads every potentially-conflicting active certificate; an
+   *  in-memory key set then decides each request. The engine still owns the real
+   *  generation decision at execution time. */
   async previewGenerate(
     context: AuthContext,
     items: Array<{ transcriptVersionId: string; certificateType: string }>
   ): Promise<BulkGeneratePreviewItem[]> {
     this.assertCanView(context);
-    const { organizationId } = context;
-    const out: BulkGeneratePreviewItem[] = [];
-    for (const item of items) {
-      const existing = await findExistingActiveCertificate({
-        organizationId,
+    const active = await findActiveCertificatesForPairs({
+      organizationId: context.organizationId,
+      pairs: items,
+    });
+    const activeKeys = new Set(active.map((p) => pairKey(p.transcriptVersionId, p.certificateType)));
+
+    return items.map((item) => {
+      const exists = activeKeys.has(pairKey(item.transcriptVersionId, item.certificateType));
+      return {
         transcriptVersionId: item.transcriptVersionId,
         certificateType: item.certificateType,
-      });
-      out.push({
-        transcriptVersionId: item.transcriptVersionId,
-        certificateType: item.certificateType,
-        canGenerate: !existing,
-        reason: existing ? "CERTIFICATE_ALREADY_ACTIVE" : undefined,
-      });
-    }
-    return out;
+        canGenerate: !exists,
+        reason: exists ? "CERTIFICATE_ALREADY_ACTIVE" : undefined,
+      };
+    });
   }
+}
+
+/** Composite lookup key for a `(transcriptVersionId, certificateType)` pair. The `::`
+ *  separator cannot collide because certificate types are a fixed const-object set. */
+function pairKey(transcriptVersionId: string, certificateType: string): string {
+  return `${transcriptVersionId}::${certificateType}`;
 }
 
 export const bulkCertificateOperationPreviewService = new BulkCertificateOperationPreviewService();

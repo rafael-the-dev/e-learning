@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { asClient, makeFakeDb, seed, type FakeDb } from "./_fake-db";
 import {
   createCertificate,
+  findActiveCertificatesForPairs,
   findCertificateById,
   findCertificateByNumber,
   findCertificateByVerificationCode,
@@ -85,6 +86,33 @@ describe("certificate repository", () => {
       asClient(db)
     );
     expect(active?.id).toBe("issued");
+  });
+
+  it("19b. findActiveCertificatesForPairs batches the same predicate as findExistingActiveCertificate", async () => {
+    const db = makeFakeDb();
+    // active pair (blocks), and non-active variants of the same pair (do NOT block)
+    seedCert(db, { id: "a", transcriptVersionId: "ver-1", certificateType: "COURSE_COMPLETION", status: "ISSUED" });
+    seedCert(db, { id: "revoked", transcriptVersionId: "ver-2", certificateType: "COURSE_COMPLETION", status: "REVOKED" });
+    seedCert(db, { id: "stale", transcriptVersionId: "ver-3", certificateType: "COURSE_COMPLETION", status: "STALE" });
+    // another org's active pair must not leak
+    seedCert(db, { id: "foreign", organizationId: OTHER, transcriptVersionId: "ver-4", certificateType: "COURSE_COMPLETION", status: "ISSUED" });
+
+    const found = await findActiveCertificatesForPairs(
+      {
+        organizationId: ORG,
+        pairs: [
+          { transcriptVersionId: "ver-1", certificateType: "COURSE_COMPLETION" },
+          { transcriptVersionId: "ver-2", certificateType: "COURSE_COMPLETION" },
+          { transcriptVersionId: "ver-3", certificateType: "COURSE_COMPLETION" },
+          { transcriptVersionId: "ver-4", certificateType: "COURSE_COMPLETION" },
+        ],
+      },
+      asClient(db)
+    );
+    // only the ISSUED, in-org pair comes back
+    expect(found).toEqual([{ transcriptVersionId: "ver-1", certificateType: "COURSE_COMPLETION" }]);
+    // empty input → no query result
+    expect(await findActiveCertificatesForPairs({ organizationId: ORG, pairs: [] }, asClient(db))).toEqual([]);
   });
 
   it("20. update metadata is tenant-scoped", async () => {

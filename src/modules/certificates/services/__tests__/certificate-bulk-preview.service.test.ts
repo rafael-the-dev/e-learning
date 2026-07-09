@@ -80,4 +80,20 @@ describe("previewGenerate", () => {
     const res = await service.previewGenerate(ctx(), [{ transcriptVersionId: "ver-1", certificateType: "COURSE_COMPLETION" }]);
     expect(res[0].canGenerate).toBe(true);
   });
+
+  it("performs ONE batched read regardless of item count (no N+1)", async () => {
+    const findMany = vi.spyOn(h.db.certificate, "findMany");
+    await service.previewGenerate(ctx(), [
+      { transcriptVersionId: "ver-1", certificateType: "COURSE_COMPLETION" },
+      { transcriptVersionId: "ver-2", certificateType: "COURSE_COMPLETION" },
+      { transcriptVersionId: "ver-3", certificateType: "DIPLOMA" },
+    ]);
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires certificates.view", async () => {
+    await expect(
+      service.previewGenerate(ctx([]), [{ transcriptVersionId: "ver-1", certificateType: "COURSE_COMPLETION" }])
+    ).rejects.toBeInstanceOf(AuthorizationError);
+  });
 });
