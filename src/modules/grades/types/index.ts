@@ -103,6 +103,10 @@ export const GRADE_CHANGE_SOURCE = {
   INVALIDATE: "INVALIDATE",
   RECOVERY: "RECOVERY",
   BULK: "BULK",
+  // Examination Engine integration (Phase 11B / ADR-014): a canonical grade write
+  // originating from an official PUBLISHED exam result. Additive — all existing
+  // sources are preserved and unchanged.
+  EXAMINATION: "EXAMINATION",
 } as const;
 export type GradeChangeSource = (typeof GRADE_CHANGE_SOURCE)[keyof typeof GRADE_CHANGE_SOURCE];
 

@@ -53,3 +53,8 @@ export * from "./appeals.commands";
 // / Certificate write, no final-grade / pass-fail logic, no domain-event bus.
 export * from "./integration-shared";
 export * from "./integration.commands";
+// Phase 11B — canonical exam→grade-component binding (ADR-014). Bind / archive the
+// explicit mapping an ExamSession's results integrate into (one active per session,
+// compatibility-validated, no heuristic, blocked once the session's results were
+// consumed). Records an event-only transition; NEVER writes a grade itself.
+export * from "./binding.commands";

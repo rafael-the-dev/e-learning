@@ -12,3 +12,5 @@ export * from "./examination-eligibility.engine";
 export * from "./official-exam-result.service";
 // Phase 11 — read-only grade-integration source (engine-neutral integratable facts).
 export * from "./examination-grade-integration.source";
+// Phase 11B — canonical exam→grade-component resolver (explicit binding; no heuristic).
+export * from "./exam-grade-component-resolver.service";

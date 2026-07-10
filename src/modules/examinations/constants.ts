@@ -250,6 +250,10 @@ export const ExamEventType = {
   EXAM_RESULT_INTEGRATED: "exam_result.integrated",
   EXAM_RESULT_INTEGRATION_RECONCILED: "exam_result.integration_reconciled",
   EXAM_SESSION_RESULTS_INTEGRATED: "exam_session.results_integrated",
+  // Phase 11B — canonical exam→grade-component binding (ADR-014). Event-only labels
+  // (no ExamSession status write): the binding aggregate is EXAM_SESSION.
+  EXAM_SESSION_GRADE_COMPONENT_BOUND: "exam_session.grade_component_bound",
+  EXAM_SESSION_GRADE_COMPONENT_BINDING_ARCHIVED: "exam_session.grade_component_binding_archived",
   EXAM_APPEAL_CREATED: "exam_appeal.created",
   EXAM_APPEAL_REVIEWED: "exam_appeal.reviewed",
   EXAM_APPEAL_APPROVED: "exam_appeal.approved",

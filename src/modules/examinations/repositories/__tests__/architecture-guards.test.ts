@@ -40,8 +40,9 @@ const FORBIDDEN: Array<{ label: string; patterns: RegExp[] }> = [
 ];
 
 describe("examination repositories — discovery", () => {
-  it("finds exactly the 13 Exam* repository files", () => {
-    expect(REPO_FILES.length).toBe(13);
+  it("finds exactly the 14 Exam* repository files", () => {
+    // 13 Phase-1/2 models + the Phase-11B ExamGradeComponentBinding (ADR-014).
+    expect(REPO_FILES.length).toBe(14);
     expect(REPO_FILES).toContain(EVENT_FILE);
   });
 });

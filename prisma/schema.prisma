@@ -149,6 +149,7 @@ model Organization {
   examIncidents              ExamIncident[]
   examInvigilatorAssignments ExamInvigilatorAssignment[]
   examEvents                 ExamEvent[]
+  examGradeComponentBindings ExamGradeComponentBinding[]
 
   @@map("organizations")
 }
@@ -3846,10 +3847,11 @@ model ExamSession {
   courseLevel  CourseLevel?                @relation(fields: [courseLevelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   levelSubject LevelSubject                @relation(fields: [levelSubjectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   room         ExamRoom?                   @relation(fields: [roomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  candidates   ExamCandidate[]
-  invigilators ExamInvigilatorAssignment[]
-  incidents    ExamIncident[]
-  publications ExamPublication[]
+  candidates       ExamCandidate[]
+  invigilators     ExamInvigilatorAssignment[]
+  incidents        ExamIncident[]
+  publications     ExamPublication[]
+  gradeComponentBindings ExamGradeComponentBinding[]
 
   @@index([organizationId, periodId])
   @@index([organizationId, levelSubjectId])
@@ -4152,4 +4154,33 @@ model ExamEvent {
   @@index([organizationId, eventType])
   @@index([organizationId, createdAt])
   @@map("exam_events")
+}
+
+// Phase 11B / ADR-014 — the CANONICAL, explicit binding of an ExamSession to the
+// Grade Engine's target AssessmentComponent. There is NO heuristic fallback: a SCORED
+// exam result can only be integrated once its session is bound here. `assessmentComponentId`
+// and `createdById` are PLAIN string pointers (NO FK) — mirroring ADR-013's bounded-context
+// convention (exam schema never hard-couples to Grade / User internals; the bind command
+// validates the component against the real AssessmentComponent + LevelSubject at write time).
+// Only `organizationId` and `examSessionId` are real (NoAction) FKs. Soft-delete via
+// `deletedAt`; at most ONE active binding per session (filtered-unique index, migration-only).
+model ExamGradeComponentBinding {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  examSessionId         String
+  assessmentComponentId String
+  createdById           String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  session      ExamSession  @relation(fields: [examSessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Filtered-unique one-active-binding-per-session (organizationId, examSessionId WHERE
+  // deletedAt IS NULL) is declared in the migration only — Prisma cannot express it.
+  @@index([organizationId, examSessionId])
+  @@index([organizationId, assessmentComponentId])
+  @@index([organizationId, deletedAt])
+  @@map("exam_grade_component_bindings")
 }

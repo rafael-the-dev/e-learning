@@ -1292,7 +1292,16 @@ schema / migration / Prisma change** — the whole phase is a scaffold gated beh
   (`IntegrateExamSessionResultsCommand`) delegates to the single command **per result, each in
   its own tx** (no shared giant tx), with `stopOnFailure` + partial-success counts
   (`total === succeeded + failed + skipped`).
-#### Limitation (v1) — the Grade target assessment component is intentionally unresolved
+#### Limitation (v1) — the Grade target assessment component is intentionally unresolved — **RESOLVED (Phase 11B / ADR-014)**
+
+> **UPDATE (2026-07-10): this gap is CLOSED.** [ADR-014](./adr/ADR-014-exam-grade-component-binding.md)
+> introduces the explicit `ExamGradeComponentBinding` (per session, one active mapping to a Grade
+> `assessmentComponentId`) and the `EXAMINATION` grade change-source. The three `production-ports.ts`
+> bodies are now LIVE: the resolver returns the bound component (or `null` → UNSUPPORTED only when a
+> session is **unbound**), the grade port performs the REAL canonical write, and the progression port
+> confirms the cascade. **The no-heuristics prohibition below remains normative and is now enforced by
+> the explicit binding + static guards** — see "### Phase 11B — Implementation notes". The text below is
+> retained for historical context (it describes the pre-11B state).
 
 Phase 11 delivers the **complete integration boundary** (source, ports, pure mapping, ledger,
 reconciliation, retraction guard, session batch — all test-covered). It deliberately does **not**
@@ -1318,6 +1327,86 @@ today — it simply, and honestly, refuses to guess.
 - **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅ (660 passed;
   56 Phase-11 command tests + 7 Phase-11 architecture guards) · `eslint` (Phase-11 files) ✅ ·
   `prisma validate` ✅.
+
+### Phase 11B — Implementation notes (2026-07-10)
+
+**Phase 11B: IMPLEMENTED.** Activates the write-gated Phase-11 integration by resolving the Grade
+target from an **explicit binding** and wiring the production ports to the REAL Grade / Progression
+services. **No schema / migration / Prisma change beyond the pre-created `ExamGradeComponentBinding`
+model + migration** (foundation); the client was already generated. Governed by
+[ADR-014](./adr/ADR-014-exam-grade-component-binding.md).
+
+- **Chosen binding model (not a nullable column).** `ExamGradeComponentBinding` records, per
+  `ExamSession`, the single active `assessmentComponentId` its results integrate into.
+  `assessmentComponentId` / `createdById` are **string pointers (no FK)** — only `organizationId`
+  and `examSessionId` are real FKs (ADR-013 bounded-context convention). Soft-delete (`deletedAt`) +
+  a migration-only filtered-unique index give **one active binding per session** while preserving
+  archived history. A thin, tenant-scoped, tx-aware repository
+  (`exam-grade-component-binding.repository.ts`) does create / findActive / findById / list / archive
+  — no rules, no grade calls.
+- **Explicit resolver — NO heuristic (the prohibition is now enforced).**
+  `resolveCanonicalAssessmentComponentForExamSession` returns the session's single active binding's
+  component **only when** the bound component's `AssessmentPolicy.levelSubjectId` **equals** the exam
+  session's `levelSubjectId`, then resolves `subjectId` from that `LevelSubject`. It **never** inspects
+  component name / weight / order / componentType (asserted by a static guard). A missing or
+  incompatible binding ⇒ `null` ⇒ `EXAM_RESULT_INTEGRATION_UNSUPPORTED` upstream. Unbound sessions
+  remain honestly UNSUPPORTED.
+- **Binding command (`BindExamSessionToGradeComponentCommand`, authorize
+  `exams.integrateResults`).** One `db.$transaction`: session exists (else `EXAM_SESSION_NOT_FOUND`)
+  → component exists (else `ASSESSMENT_COMPONENT_NOT_FOUND`) → compatibility
+  (`policy.levelSubjectId === session.levelSubjectId`, else `ASSESSMENT_COMPONENT_NOT_COMPATIBLE`) →
+  **consumed guard** (any session result with an `exam_result.integrated` / `integration_reconciled`
+  event ⇒ `EXAM_GRADE_BINDING_ALREADY_CONSUMED`) → duplicate guard
+  (`EXAM_GRADE_BINDING_ALREADY_EXISTS`) → create → **event-only** transition
+  (`exam_session.grade_component_bound`, no ExamSession status write). Actor from the ServiceContext
+  only. `ArchiveExamSessionGradeComponentBindingCommand` mirrors it (consumed guard, conditional
+  soft-delete `count === 1` else `EXAM_GRADE_BINDING_CONCURRENTLY_CHANGED`,
+  `exam_session.grade_component_binding_archived`).
+- **`GRADE_CHANGE_SOURCE.EXAMINATION`.** The canonical grade mutation now accepts an
+  examination-originated write (additive; all existing sources unchanged). No `sourceId` /
+  `sourceVersion` columns were added to the Grade Engine — idempotency stays the natural-key upsert
+  `(enrollmentId, assessmentComponentId)`; exam-side staleness stays the ExamEvent `officialVersion`
+  ledger (Phase 11).
+- **LIVE SCORED write path through the single writer.** `productionGradeWritePort.apply` now
+  replicates `BulkGradeAssessmentCommand` **1:1**: it loads the bound component, requires the exam
+  `maxScore` to equal the component `maxGrade` (**never rescale-guesses** — a mismatch throws
+  `EXAM_RESULT_INTEGRATION_UNSUPPORTED`), then `grade = score`, `maxGrade = component.maxGrade`,
+  `normalizedGrade = gradeCalculationService.normalizeGrade(score, maxGrade)`, captures `previous =
+  findResultByEnrollmentAndComponent(...)`, `upsertStudentAssessmentResult({ sourceType:
+  "SCHEDULED_EVENT", status: "GRADED", gradedBy: actorId, gradedAt })`, then
+  `gradeMutationService.handleGradeMutation(context, { result, previous, source:
+  GRADE_CHANGE_SOURCE.EXAMINATION, reason, client, events: [] })`. (Math mirrored from
+  `bulk-grade-assessment.command.ts`: `maxGrade = assessment.maxScore`,
+  `normalizedGrade = gradeCalculationService.normalizeGrade(score, maxScore)`.)
+- **Progression confirmed, NOT re-run (single owner, no double cascade).**
+  `handleGradeMutation` already cascades subject→level→course; `productionProgressionConfirmPort.confirm`
+  performs a tenant-scoped, **tx-aware read** of the resulting `StudentSubjectProgress` status on the
+  same `client` (so the just-written cascade is visible) and returns `{ recalculated: true, status }`.
+  It does **not** call `RecalculateStudentSubjectProgressCommand`.
+- **Idempotency + revision reconciliation unchanged.** ExamEvent `officialVersion` ledger + the
+  natural-key upsert; a superseding revision still reconciles through the same canonical grade path
+  via `ReconcileExamResultIntegrationCommand`.
+- **Retraction + binding-change blocked after consumption.** A consumed publication cannot be
+  retracted (`PUBLICATION_ALREADY_CONSUMED`, Phase 11) and a consumed session cannot be re-bound or
+  archived (`EXAM_GRADE_BINDING_ALREADY_CONSUMED`) — an integrated result never silently moves
+  component.
+- **Supported-outcome matrix (unchanged): only SCORED.** ABSENT / EXCUSED / DISQUALIFIED remain
+  `EXAM_RESULT_INTEGRATION_UNSUPPORTED`, never a silent 0 (ADR-014 matrix).
+- **Adapter seam confinement.** The grade WRITE (grade mutation + upsert) lives ONLY in
+  `integrations/production-ports.ts` (the sanctioned seam, which MAY import Grade / Assessment but
+  never Transcript / Certificate). The resolver + binding command / repo import NO Grade / Progression
+  / Transcript / Certificate module and write no Grade / Progression table (static guards); the
+  resolver reads only the Assessment component/policy config repos for compatibility.
+- **Validation:** `prisma validate` ✅ · `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
+  **710 passed** (was 660; **+50** Phase-11B tests: 28 binding command/resolver + 8 architecture
+  guards + 14 live production-resolver integration) · `vitest run src/modules/grades
+  src/modules/prerequisites src/modules/assessments` ✅ **216 passed** (unchanged — touched their
+  services only via calls + the additive `EXAMINATION` enum) · `eslint` (all Phase-11B files) ✅.
+- **Production grade port status: LIVE.** It calls the real
+  `gradeMutationService.handleGradeMutation` / `upsertStudentAssessmentResult`. In exam unit tests
+  the grade WRITE is kept FAKE (the real Grade cascade is out of the exam suite's scope); a focused
+  pair of tests drives the production grade port's `maxScore`/`maxGrade` reconciliation directly
+  (mismatch + missing-component ⇒ UNSUPPORTED, before any cascade).
 
 ---
 

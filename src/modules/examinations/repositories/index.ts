@@ -22,3 +22,5 @@ export * from "./exam-publication.repository";
 export * from "./exam-incident.repository";
 export * from "./exam-invigilator-assignment.repository";
 export * from "./exam-event.repository";
+// Phase 11B — exam→grade-component binding (ADR-014); persistence only.
+export * from "./exam-grade-component-binding.repository";
