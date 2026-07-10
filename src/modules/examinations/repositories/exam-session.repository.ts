@@ -7,8 +7,11 @@ import type {
   MarkExamSessionCancelledParams,
   MarkExamSessionCompletedParams,
   MarkExamSessionLockedParams,
+  MarkExamSessionPublishedParams,
+  MarkExamSessionResultsRecordedParams,
   MarkExamSessionScheduledParams,
   MarkExamSessionStartedParams,
+  ReturnExamSessionToResultsRecordedParams,
   UpdateExamSessionMetadataInput,
 } from "@/modules/examinations/types/repository";
 
@@ -265,6 +268,51 @@ export async function markSessionCancelled(
       deletedAt: null,
     },
     data: { status: "CANCELLED", cancelledAt: new Date(), cancelledById: params.cancelledById ?? null },
+  });
+  return { count: res.count };
+}
+
+// ─── PHASE 9 — publication transitions (conditional writes) ───────────────────
+// Same race-safe pattern as Phase 4: `where` pins the expected current status so a
+// wrong/concurrently-moved state matches zero rows → `{ count: 0 }`; the command
+// asserts the expected count. No readiness / visibility decision, no event / audit
+// here — the Phase-9 publication command owns those.
+
+/** COMPLETED → RESULTS_RECORDED. */
+export async function markExamSessionResultsRecorded(
+  params: MarkExamSessionResultsRecordedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examSession.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "COMPLETED", deletedAt: null },
+    data: { status: "RESULTS_RECORDED" },
+  });
+  return { count: res.count };
+}
+
+/** RESULTS_RECORDED → PUBLISHED (stamps `publishedAt` / `publishedById`). */
+export async function markExamSessionPublished(
+  params: MarkExamSessionPublishedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examSession.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "RESULTS_RECORDED", deletedAt: null },
+    data: { status: "PUBLISHED", publishedAt: new Date(), publishedById: params.publishedById ?? null },
+  });
+  return { count: res.count };
+}
+
+/** PUBLISHED → RESULTS_RECORDED (retraction; clears the publication stamps). */
+export async function returnExamSessionToResultsRecorded(
+  params: ReturnExamSessionToResultsRecordedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examSession.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "PUBLISHED", deletedAt: null },
+    data: { status: "RESULTS_RECORDED", publishedAt: null, publishedById: null },
   });
   return { count: res.count };
 }

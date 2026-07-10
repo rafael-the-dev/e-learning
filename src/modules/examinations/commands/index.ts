@@ -33,3 +33,9 @@ export * from "./result-entry.commands";
 // transcript / certificate / appeal / revision.
 export * from "./result-review-shared";
 export * from "./result-review.commands";
+// Phase 9 — exam result publication (publish / retract). Session-level visibility
+// boundary: APPROVED → PUBLISHED results + session COMPLETED→RESULTS_RECORDED→PUBLISHED
+// + ExamPublication in one tx; retraction is a pre-integration escape hatch. No grade
+// / progression / transcript / certificate / appeal / revision.
+export * from "./publication-shared";
+export * from "./publication.commands";

@@ -7,8 +7,10 @@ import type {
   ListExamResultsFilters,
   MarkExamResultApprovedParams,
   MarkExamResultReviewedParams,
+  MarkExamResultsPublishedConditionallyParams,
   MarkExamResultSubmittedParams,
   ResultsBySessionParams,
+  ReturnExamResultsToApprovedConditionallyParams,
   ReturnExamResultToDraftParams,
   UpdateDraftExamResultConditionallyParams,
   UpdateExamResultMetadataInput,
@@ -400,6 +402,49 @@ export async function returnExamResultToDraft(
       status: "DRAFT",
       ...(params.clearReviewMetadata ? { reviewedById: null, reviewedAt: null } : {}),
     },
+  });
+  return { count: res.count };
+}
+
+// =============================================================================
+// PHASE 9 — RESULT-PUBLICATION PRIMITIVES (batch conditional; no rule / decision)
+// -----------------------------------------------------------------------------
+// Batch conditional writes pinning the expected current status in `where` so any
+// row not in that status matches zero rows; the caller supplies the exact id set
+// and asserts `count === ids.length`. They ONLY flip status + stamp / clear
+// `publishedAt` — the score / maxScore / normalizedScore / resultCode / markerId /
+// reviewedById / approvedById / remarks content columns are NEVER touched. No
+// readiness / visibility decision lives here — the Phase-9 command owns it.
+// =============================================================================
+
+/** Conditional APPROVED → PUBLISHED for a fixed id set (stamps `publishedAt`).
+ *  Only still-APPROVED rows match; the caller asserts `count === ids.length`. */
+export async function markExamResultsPublishedConditionally(
+  params: MarkExamResultsPublishedConditionallyParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  if (params.ids.length === 0) return { count: 0 };
+  const res = await db.examResult.updateMany({
+    where: { organizationId: params.organizationId, id: { in: params.ids }, status: "APPROVED" },
+    data: { status: "PUBLISHED", publishedAt: new Date() },
+  });
+  return { count: res.count };
+}
+
+/** Conditional PUBLISHED → APPROVED for a fixed id set (retraction; clears
+ *  `publishedAt`). Only still-PUBLISHED rows match; the caller asserts
+ *  `count === ids.length`. NEVER touches score / maxScore / normalizedScore /
+ *  resultCode / markerId / reviewedById / approvedById / remarks. */
+export async function returnExamResultsToApprovedConditionally(
+  params: ReturnExamResultsToApprovedConditionallyParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  if (params.ids.length === 0) return { count: 0 };
+  const res = await db.examResult.updateMany({
+    where: { organizationId: params.organizationId, id: { in: params.ids }, status: "PUBLISHED" },
+    data: { status: "APPROVED", publishedAt: null },
   });
   return { count: res.count };
 }

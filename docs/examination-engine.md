@@ -1080,6 +1080,83 @@ routes / UI; no domain-event bus / Outbox.
 
 ---
 
+### Phase 9 — Implementation notes (2026-07-10)
+
+Exam **result publication** — the SESSION-LEVEL **visibility boundary** (D9). Before a
+session is published its official results are internal-only; publishing makes the
+**whole session's results visible AT ONCE**. It records exam **facts** only: it does
+**not** calculate a final subject grade, decide pass/fail, touch `StudentSubject`/
+`Level`/`Course` progress, write a Transcript/Certificate, or run appeals / revisions
+(all later phases / out of scope, asserted by a static guard). **No schema / migration
+change**; it uses the pre-existing `exams.publishResults` / `exams.retractPublication`
+permissions and `exam_session.published` event type, extends `CreateExamPublicationInput`
+with `publishedAt` / `publishedById`, and adds no new column. No routes / UI; no
+domain-event bus / Outbox.
+
+- **Publish** (`PublishExamSessionResultsCommand`, perm `exams.publishResults`) opens
+  only from a **COMPLETED | RESULTS_RECORDED** session (else
+  `SESSION_NOT_READY_FOR_PUBLICATION`). It re-validates the WHOLE session via a pure
+  readiness helper (`evaluatePublicationReadiness`): the required set is the **active
+  (REGISTERED)** roster (`listRegisteredCandidatesBySession` — WITHDRAWN / DISQUALIFIED
+  are excluded); **every** required candidate must have a result (`RESULTS_MISSING`),
+  **every** result must be `APPROVED` (`RESULTS_NOT_APPROVED`), and **none** may be
+  stale against the current attendance — `resultCodeForAttendance(status)` must still
+  equal each row's `resultCode` (`RESULT_STALE`). Blockers are raised in a fixed
+  priority order (`PUBLICATION_ALREADY_EXISTS` → nothing-to-publish → missing →
+  not-approved → stale) with **detail id lists** (`missingCandidateIds` /
+  `nonApprovedResultIds` / `staleResultIds` / `publicationId`); publication is
+  **admin-only**, so surfacing those ids is safe.
+- **Atomic transition in ONE tx:** a COMPLETED session is first advanced **COMPLETED →
+  RESULTS_RECORDED**, then **every** result flips **APPROVED → PUBLISHED**
+  (`markExamResultsPublishedConditionally`, caller asserts `count === ids.length`), a
+  **PUBLISHED `ExamPublication`** is created (provenance stamped at creation), and the
+  session moves **RESULTS_RECORDED → PUBLISHED** (`markExamSessionPublished`). No
+  per-result event is emitted — the session + publication events carry the
+  `publishedResultIds` / `resultCount`.
+- **Single-active-publication is enforced by a LOOKUP** (`findActivePublicationBySession`)
+  — there is **NO filtered-unique index** on `ExamPublication`. This leaves a narrow
+  read-check race window (two concurrent publishes both seeing "no active"); it is
+  **closed by the conditional session / result writes** — the second writer's
+  `markExamSessionResultsRecorded` / `markExamSessionPublished` / result batch matches
+  zero / fewer rows and aborts `RESULT_CONCURRENTLY_CHANGED` before a duplicate
+  publication becomes durable (the mid-tx create is rolled back).
+- **Retraction** (`RetractExamSessionPublicationCommand`, perm `exams.retractPublication`)
+  is a **PRE-INTEGRATION v1 escape hatch**: publication **PUBLISHED → RETRACTED**,
+  results **PUBLISHED → APPROVED**, session **PUBLISHED → RESULTS_RECORDED**, the
+  `reason` is **REQUIRED** (schema-enforced), and it **NEVER deletes** a row (the
+  RETRACTED publication + APPROVED results remain). It resolves the target by
+  `publicationId` (which must belong to the session, else `NotFound`) or the session's
+  active publication; a non-PUBLISHED publication ⇒ `PUBLICATION_NOT_PUBLISHED`, a
+  non-PUBLISHED session ⇒ `SESSION_NOT_PUBLISHED`. **This must be revisited once Phase 11
+  Grade / Progression integration exists** (downstream reconciliation / staleness once a
+  published result has fed a grade / progression).
+- **Post-publication content is immutable:** publish AND retract move only the lifecycle
+  status + publish/retract stamps (`publishedAt` / `publishedById` / `retractedAt` /
+  `retractedById` / `reason`). `score` / `maxScore` / `normalizedScore` / `resultCode` /
+  `markerId` / `reviewedById` / `approvedById` / `remarks` are **NEVER mutated** (asserted
+  behaviourally). Candidate / attendance rows are never touched.
+- **Conditional-write concurrency:** every session / result / publication mark is a
+  conditional `updateMany` pinning the expected status, so a concurrently-moved row
+  matches zero / fewer rows and aborts (`RESULT_CONCURRENTLY_CHANGED` /
+  `PUBLICATION_CONCURRENTLY_CHANGED`). Double-publish (2nd ⇒ `PUBLICATION_ALREADY_EXISTS`
+  or session-not-ready), double-retract (2nd ⇒ `PUBLICATION_NOT_PUBLISHED`), and
+  publish-after-retract (succeeds with a NEW publication) are all covered.
+- **Actor ids come only from the `ServiceContext`** — the `.strict()` schemas reject any
+  `publishedById` / `retractedById` / individual result id on input. **`ExamEvent`
+  (append-only) + `AuditLog` are written INSIDE the same tx** via `recordExamTransition`
+  (`exam_session.results_recorded` / `exam_publication.published` / `exam_session.published`
+  on publish; `exam_publication.retracted` / `exam_session.results_recorded` on retract);
+  a rollback discards both (proven by the fake-DB rollback tests). There is **NO bus**
+  (Phase 14). The repository additions stay thin persistence (static guard: no
+  `BusinessRuleError` / authorization / `resultCodeForAttendance` /
+  `evaluatePublicationReadiness` in the repos).
+- **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
+  (511 passed, of which 49 are the Phase-9 publication command tests + 8 architecture
+  guards) · `eslint` (Phase-9 files) ✅ · `prisma validate` ✅.
+
+---
+
+
 ## 19. Resolved Decisions (closed for Phase 1)
 
 All schema-blocking decisions are **closed**. No open decision remains.
