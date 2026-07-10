@@ -245,6 +245,11 @@ export const ExamEventType = {
   EXAM_RESULT_INVALIDATED: "exam_result.invalidated",
   EXAM_RESULT_REVISION_CREATED: "exam_result.revision_created",
   EXAM_RESULT_SUPERSEDED: "exam_result.superseded",
+  // Phase 11 — Grade / Progression integration (durable success events only; a
+  // failure is recorded in the AuditLog, never as a success event).
+  EXAM_RESULT_INTEGRATED: "exam_result.integrated",
+  EXAM_RESULT_INTEGRATION_RECONCILED: "exam_result.integration_reconciled",
+  EXAM_SESSION_RESULTS_INTEGRATED: "exam_session.results_integrated",
   EXAM_APPEAL_CREATED: "exam_appeal.created",
   EXAM_APPEAL_REVIEWED: "exam_appeal.reviewed",
   EXAM_APPEAL_APPROVED: "exam_appeal.approved",

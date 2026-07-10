@@ -52,6 +52,10 @@ export interface ExamTransition {
   /** Extra columns to record in the audit `oldValues` / `newValues` payloads. */
   extraOld?: Record<string, unknown>;
   extraNew?: Record<string, unknown>;
+  /** Structured payload persisted on the append-only ExamEvent's `metadata` column
+   *  (JSON). Used by the Phase-11 integration ledger to read back the integrated
+   *  `officialVersion` from the durable event stream (no separate ledger table). */
+  metadata?: Record<string, unknown>;
 }
 
 /** Append the transition's ExamEvent + audit-log row inside the given tx. */
@@ -70,6 +74,7 @@ export async function recordExamTransition(
       newStatus: t.newStatus,
       actorId: context.userId,
       reason: t.reason ?? null,
+      metadata: t.metadata ? JSON.stringify(t.metadata) : null,
     },
     tx
   );

@@ -46,3 +46,10 @@ export * from "./publication.commands";
 // INTERNAL to approve.
 export * from "./appeals-shared";
 export * from "./appeals.commands";
+// Phase 11 — Grade / Progression integration (integrate / reconcile / session batch).
+// Anti-corruption boundary: pushes an official PUBLISHED result into the Grade &
+// Progression engines via INJECTED PORTS (Examination never writes their tables);
+// idempotency / staleness via the append-only ExamEvent metadata ledger. No Transcript
+// / Certificate write, no final-grade / pass-fail logic, no domain-event bus.
+export * from "./integration-shared";
+export * from "./integration.commands";
