@@ -133,7 +133,7 @@ export function evaluateExaminationEligibility(
   }
 
   // 5.12 Exam session — only when the caller requested one. NO capacity /
-  //      existingCandidate check here (command-level, E-3a).
+  //      duplicate-candidate check here (command-level, E-3a).
   if (facts.metadata.requestedExamSessionId) {
     if (!facts.examSession) {
       warnings.push(ExaminationEligibilityWarning.EXAM_SESSION_MISSING);

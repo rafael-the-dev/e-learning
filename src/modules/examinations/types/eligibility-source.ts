@@ -184,14 +184,6 @@ export interface ExaminationSessionFact {
   capacity: number;
 }
 
-/** Loaded only when `examSessionId` is supplied. A FACT only — the source does not
- *  decide ALREADY_REGISTERED. */
-export interface ExaminationExistingCandidateFact {
-  candidateId: string;
-  status: string;
-  examSessionId: string;
-}
-
 /** Manual-approval fact. Phase 3A: no exam policy/override model exists, so the
  *  policy requirement is unknown and overrides is empty. */
 export interface ExaminationManualApprovalFact {
@@ -226,7 +218,6 @@ export interface ExaminationEligibilityFacts {
   previousAttempts: ExaminationPreviousAttemptsFact;
   examPeriod: ExaminationPeriodFact | null;
   examSession: ExaminationSessionFact | null;
-  existingCandidate: ExaminationExistingCandidateFact | null;
   manualApproval: ExaminationManualApprovalFact;
   metadata: ExaminationEligibilityFactsMetadata;
 }

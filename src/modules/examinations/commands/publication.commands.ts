@@ -41,8 +41,8 @@ import {
   findExamPublicationById,
   markExamPublicationRetracted,
 } from "@/modules/examinations/repositories/exam-publication.repository";
-import { listExamEventsByAggregate } from "@/modules/examinations/repositories/exam-event.repository";
 import { recordExamTransition } from "./scheduling-shared";
+import { isSessionConsumed } from "./integration-shared";
 import {
   evaluatePublicationReadiness,
   type PublishExamSessionResultsResult,
@@ -382,19 +382,11 @@ export class RetractExamSessionPublicationCommand extends BaseCommand<
       //     integrated into the Grade/Progression engines the publication is CONSUMED
       //     and can no longer be retracted here — we never roll Grade/Progression
       //     backwards. A superseding correction goes through reconciliation instead.
-      for (const r of results) {
-        const evts = await listExamEventsByAggregate(
-          { organizationId, aggregateType: ExamEventAggregateType.EXAM_RESULT, aggregateId: r.id },
-          tx
-        );
-        const consumed = evts.some(
-          (e) =>
-            e.eventType === ExamEventType.EXAM_RESULT_INTEGRATED ||
-            e.eventType === ExamEventType.EXAM_RESULT_INTEGRATION_RECONCILED
-        );
-        if (consumed) {
-          throw new BusinessRuleError("PUBLICATION_ALREADY_CONSUMED", { examResultId: r.id });
-        }
+      //     Shared with the binding guard via `isSessionConsumed` (integration-shared).
+      if (await isSessionConsumed({ organizationId, examSessionId: input.examSessionId }, tx)) {
+        throw new BusinessRuleError("PUBLICATION_ALREADY_CONSUMED", {
+          examSessionId: input.examSessionId,
+        });
       }
 
       // 5. Conditional PUBLISHED → RETRACTED for the publication.

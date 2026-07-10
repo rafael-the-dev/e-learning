@@ -42,7 +42,6 @@ function makeFacts(overrides: Partial<ExaminationEligibilityFacts> = {}): Examin
     previousAttempts: { attempts: [], count: 0, lastAttemptStatus: null, maxAttemptNumber: null, source: "ExamAttempt" },
     examPeriod: null,
     examSession: null,
-    existingCandidate: null,
     manualApproval: { requiredByPolicy: null, overrides: [] },
     metadata: {
       sourceVersion: "examination-eligibility-source.v1",
@@ -309,11 +308,10 @@ describe("forbidden operational blockers are NOT engine blockers", () => {
     const values = new Set(Object.values(ExaminationEligibilityBlocker));
     for (const f of forbidden) expect(values.has(f as never)).toBe(false);
   });
-  it("33/34. existingCandidate + session capacity never block", () => {
+  it("33/34. session capacity never blocks (command-level, E-3a)", () => {
     const facts = makeFacts({
       metadata: { ...makeFacts().metadata, requestedExamSessionId: "s-1" },
       examSession: { id: "s-1", status: "SCHEDULED", periodId: "p-1", startsAt: LOADED_AT, endsAt: LOADED_AT, capacity: 0 },
-      existingCandidate: { candidateId: "c-1", status: "REGISTERED", examSessionId: "s-1" },
     });
     const r = evaluateExaminationEligibility(facts);
     expect(r.eligible).toBe(true);

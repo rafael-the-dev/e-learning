@@ -13,8 +13,6 @@ import {
   ExamEventType,
 } from "@/modules/examinations/constants";
 import { findExamSessionById } from "@/modules/examinations/repositories/exam-session.repository";
-import { findResultsBySession } from "@/modules/examinations/repositories/exam-result.repository";
-import { listExamEventsByAggregate } from "@/modules/examinations/repositories/exam-event.repository";
 import {
   archiveExamGradeComponentBinding,
   createExamGradeComponentBinding,
@@ -28,6 +26,7 @@ import {
   bindExamSessionToGradeComponentSchema,
 } from "@/modules/examinations/schemas/binding.schema";
 import { recordExamTransition } from "./scheduling-shared";
+import { isSessionConsumed } from "./integration-shared";
 
 // =============================================================================
 // EXAMINATION ENGINE — EXAM→GRADE-COMPONENT BINDING COMMANDS (Phase 11B; ADR-014)
@@ -62,28 +61,6 @@ async function authorizeBinding(userId: string, organizationId: string): Promise
   if (!createAbility(perms).can(PERMISSIONS.EXAMS_INTEGRATE_RESULTS)) {
     throw new AuthorizationError();
   }
-}
-
-/** True when ANY result of the session carries an integration event (consumed). */
-async function isSessionConsumed(
-  organizationId: string,
-  examSessionId: string,
-  tx: PrismaClientOrTx
-): Promise<boolean> {
-  const results = await findResultsBySession({ organizationId, examSessionId }, tx);
-  for (const r of results) {
-    const evts = await listExamEventsByAggregate(
-      { organizationId, aggregateType: ExamEventAggregateType.EXAM_RESULT, aggregateId: r.id },
-      tx
-    );
-    const consumed = evts.some(
-      (e) =>
-        e.eventType === ExamEventType.EXAM_RESULT_INTEGRATED ||
-        e.eventType === ExamEventType.EXAM_RESULT_INTEGRATION_RECONCILED
-    );
-    if (consumed) return true;
-  }
-  return false;
 }
 
 // ─── Bind a session to a grade component ──────────────────────────────────────
@@ -135,7 +112,7 @@ export class BindExamSessionToGradeComponentCommand extends BaseCommand<
       }
 
       // 4. Consumed guard — a session whose results were integrated cannot be (re)bound.
-      if (await isSessionConsumed(organizationId, input.examSessionId, tx)) {
+      if (await isSessionConsumed({ organizationId, examSessionId: input.examSessionId }, tx)) {
         throw new BusinessRuleError("EXAM_GRADE_BINDING_ALREADY_CONSUMED", {
           examSessionId: input.examSessionId,
         });
@@ -229,7 +206,7 @@ export class ArchiveExamSessionGradeComponentBindingCommand extends BaseCommand<
       }
 
       // 2. Consumed guard — cannot archive once the session's results were integrated.
-      if (await isSessionConsumed(organizationId, binding.examSessionId, tx)) {
+      if (await isSessionConsumed({ organizationId, examSessionId: binding.examSessionId }, tx)) {
         throw new BusinessRuleError("EXAM_GRADE_BINDING_ALREADY_CONSUMED", {
           examSessionId: binding.examSessionId,
         });

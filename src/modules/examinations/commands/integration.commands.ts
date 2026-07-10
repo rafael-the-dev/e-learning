@@ -181,7 +181,8 @@ export class IntegratePublishedExamResultCommand extends BaseCommand<
         throw new BusinessRuleError("EXAM_RESULT_INTEGRATION_UNSUPPORTED", { resultCode: dto.resultCode });
       }
 
-      // 4. Resolve the target grade component (production returns null — documented gap).
+      // 4. Resolve the target grade component from the session's explicit binding
+      //    (production resolver; `null` only when the session is unbound → UNSUPPORTED).
       const target = await this.resolver.resolve(dto, tx);
       if (!target) {
         throw new BusinessRuleError("EXAM_RESULT_INTEGRATION_UNSUPPORTED", { reason: "no grade component mapping" });
