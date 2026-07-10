@@ -8,3 +8,5 @@
 
 export * from "./examination-eligibility-source.service";
 export * from "./examination-eligibility.engine";
+// Phase 10 — read-only current-official-result projection (ExamResult + currentRevision).
+export * from "./official-exam-result.service";

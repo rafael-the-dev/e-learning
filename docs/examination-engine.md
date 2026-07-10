@@ -1156,6 +1156,73 @@ domain-event bus / Outbox.
 
 ---
 
+### Phase 10 — Implementation notes (2026-07-10)
+
+Exam **appeals & result revisions** — the post-publication **recourse** workflow (D4 /
+D14). An appeal is a student's (or an admin's) request to review a **PUBLISHED** result;
+an accepted appeal produces a correction. It records exam **facts** only: it does **not**
+calculate a final subject grade, decide pass/fail, touch `StudentSubject` / `Level` /
+`Course` progress, write a Transcript / Certificate, or (re)publish a session (all later
+phases / out of scope, asserted by a static guard). **No schema / migration change**; it
+uses the pre-existing `exams.createAppeal` / `exams.reviewAppeal` / `exams.approveAppeal`
+/ `exams.rejectAppeal` / `exams.withdrawAppeal` permissions, the `ExamAppealStatus.WITHDRAWN`
+status, and the `exam_appeal.created` / `.reviewed` / `.approved` / `.rejected` / `.withdrawn`
++ `exam_result.revision_created` event types — no new column. No routes / UI; no
+domain-event bus / Outbox.
+
+- **Full workflow:** **Create** (`CreateExamAppealCommand`, perm `exams.createAppeal`)
+  opens a `PENDING` appeal only for a **PUBLISHED** result (else `APPEAL_RESULT_NOT_PUBLISHED`);
+  a second **active** (`PENDING | UNDER_REVIEW`) appeal is blocked (`APPEAL_ALREADY_EXISTS`,
+  via `findActiveAppealByResult`). **Review** (perm `exams.reviewAppeal`) moves `PENDING →
+  UNDER_REVIEW`. **Approve** (perm `exams.approveAppeal`) moves `UNDER_REVIEW → APPROVED`
+  and creates the correction. **Reject** (perm `exams.rejectAppeal`) moves `UNDER_REVIEW →
+  REJECTED` with **no** revision / result change. **Withdraw** (perm `exams.withdrawAppeal`)
+  moves `PENDING → WITHDRAWN` (only before review opens).
+- **Append-only correction — the `ExamResult` is never rewritten.** Every accepted
+  correction is a new **`ExamResultRevision`** row; the original result columns are
+  immutable. There is exactly **ONE CURRENT revision** per result (a filtered-unique index
+  in the migration): approve **clears** any existing `isCurrent` (`clearCurrentRevisionForResult`)
+  **then creates** the new `CURRENT` revision, so the index is never violated. The
+  `revisionNumber` is `max(existing) + 1` (1-based, monotonic, never reused); `previousScore`
+  chains from the prior current revision's `revisedScore` (else the base result's `score`).
+- **The `ExamResult` is immutable except `currentRevisionId`.** The only write Phase 10
+  performs on the result is `updateExamResultCurrentRevision` repointing the pointer at the
+  new revision (caller asserts `count === 1`, else `RESULT_CONCURRENTLY_CHANGED`). `score` /
+  `maxScore` / `normalizedScore` / `resultCode` / `status` / `publishedAt` / marker /
+  reviewer / approver stay exactly as approved (asserted behaviourally).
+- **A revision stores a SCORE correction only.** The model has **no** `normalizedScore` /
+  `resultCode` / `remarks` columns. The **official result** is resolved via
+  `resolveOfficialExamResult` (pure): `score = currentRevision.revisedScore ?? result.score`,
+  and the normalized percentage is **RE-derived purely** from that score against the result's
+  own `maxScore` (SCORED + positive maxScore only) — a stored normalized is never read back;
+  `resultCode` / lifecycle `status` always come from the base result. `getOfficialExamResult`
+  is a **read-only** service over `findCurrentOfficialResult` + the resolver (no consumer
+  outside the Examination Engine yet). The revised score is bounded `0 ≤ revisedScore ≤
+  maxScore` at approve time (`SCORE_OUT_OF_RANGE`; `MAX_SCORE_INVALID` when `maxScore ≤ 0`).
+- **Student ownership is enforced server-side.** Create / withdraw resolve the **acting
+  Student** from the session (`getStudentByUserId` — the students read is allowed; not a
+  forbidden engine); a linked student may act only on **their own** result / appeal (else
+  `AuthorizationError`), while a non-student **admin** (`actingStudentId === null`) skips the
+  pin and may review / approve / reject **org-scoped**. `studentId` / `requestedById` /
+  `decidedById` / all actor ids come only from the `ServiceContext` — the `.strict()` schemas
+  reject any such key on input.
+- **Conditional-write concurrency:** every appeal transition is a conditional `updateMany`
+  pinning the expected status, so a concurrently-moved row matches zero rows and aborts
+  (`APPEAL_CONCURRENTLY_CHANGED`); a lost result-pointer race aborts `RESULT_CONCURRENTLY_CHANGED`.
+  Double-review (2nd ⇒ `APPEAL_NOT_PENDING`), double-approve (2nd ⇒ `APPEAL_NOT_UNDER_REVIEW`),
+  and approve-then-reject are all covered. **`ExamEvent` (append-only) + `AuditLog` are written
+  INSIDE the same tx** via `recordExamTransition`; a rollback discards both (proven by the
+  fake-DB rollback tests). There is **NO bus** (Phase 14). The repository additions stay thin
+  persistence (static guard: no `BusinessRuleError` / authorization in the appeal / revision repos).
+- **Deviation from §1:** revision creation is **INTERNAL to approve** — there is **no**
+  standalone route-exposed `CreateExamResultRevisionCommand` (spec §6). A correction can only
+  arise from an approved appeal, so exposing a bare revision command would let a caller mutate
+  the official result outside the recourse workflow; it is deliberately omitted.
+- **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
+  (597 passed, of which 79 are the Phase-10 appeal command tests + 7 architecture
+  guards) · `eslint` (Phase-10 files) ✅ · `prisma validate` ✅.
+
+---
 
 ## 19. Resolved Decisions (closed for Phase 1)
 

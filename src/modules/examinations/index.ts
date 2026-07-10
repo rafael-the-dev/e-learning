@@ -32,4 +32,7 @@ export * from "./schemas/result-entry.schema";
 export * from "./schemas/result-review.schema";
 // Phase 9 — result-publication input schemas (publish / retract).
 export * from "./schemas/publication.schema";
+// Phase 10 — appeal workflow input schemas (create / review / approve / reject /
+// withdraw). The official-exam-result service is re-exported via `./services`.
+export * from "./schemas/appeal.schema";
 export * from "./commands";

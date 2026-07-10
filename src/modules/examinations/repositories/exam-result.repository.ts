@@ -13,6 +13,7 @@ import type {
   ReturnExamResultsToApprovedConditionallyParams,
   ReturnExamResultToDraftParams,
   UpdateDraftExamResultConditionallyParams,
+  UpdateExamResultCurrentRevisionParams,
   UpdateExamResultMetadataInput,
 } from "@/modules/examinations/types/repository";
 
@@ -480,6 +481,29 @@ export async function findResultsBySession(
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
   });
   return rows.map(toRecord);
+}
+
+// =============================================================================
+// PHASE 10 — CURRENT-REVISION POINTER (the ONLY Phase-10 ExamResult mutation)
+// -----------------------------------------------------------------------------
+// Appeals NEVER edit an ExamResult's content; the sole write Phase 10 performs on
+// the result is repointing `currentRevisionId` at the newly-created CURRENT
+// ExamResultRevision. This writes NOTHING else — score / maxScore / normalizedScore
+// / resultCode / status / publishedAt / marker/reviewer/approver stamps stay
+// exactly as approved. Org-scoped by id; the caller asserts `count === 1`.
+// =============================================================================
+
+/** Repoint the result's `currentRevisionId` (no content mutation). */
+export async function updateExamResultCurrentRevision(
+  params: UpdateExamResultCurrentRevisionParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examResult.updateMany({
+    where: { id: params.id, organizationId: params.organizationId },
+    data: { currentRevisionId: params.currentRevisionId },
+  });
+  return { count: res.count };
 }
 
 /** Count of results recorded for a session's candidates (read-only). */

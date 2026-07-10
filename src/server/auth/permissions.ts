@@ -497,6 +497,15 @@ export const PERMISSIONS = {
   // retractedById from input.
   EXAMS_PUBLISH_RESULTS: "exams.publishResults",
   EXAMS_RETRACT_PUBLICATION: "exams.retractPublication",
+  // Phase 10 — appeals & result revisions. STUDENT holds createAppeal / withdrawAppeal
+  // (own results only — enforced server-side by resolving the acting Student, never
+  // from input). review / approve / reject stay admin-only (auto-granted to
+  // SUPER_ADMIN / ORG_ADMIN via Object.values; SECRETARY / TEACHER deferred).
+  EXAMS_CREATE_APPEAL: "exams.createAppeal",
+  EXAMS_REVIEW_APPEAL: "exams.reviewAppeal",
+  EXAMS_APPROVE_APPEAL: "exams.approveAppeal",
+  EXAMS_REJECT_APPEAL: "exams.rejectAppeal",
+  EXAMS_WITHDRAW_APPEAL: "exams.withdrawAppeal",
 
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",
@@ -802,6 +811,11 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
 
   STUDENT: [
     PERMISSIONS.STUDENT_PORTAL_VIEW,
+    // Examination Engine (Phase 10): a student appeals / withdraws an appeal against
+    // their OWN published exam result. Ownership is enforced server-side (acting
+    // Student resolved from the session), never from input.
+    PERMISSIONS.EXAMS_CREATE_APPEAL,
+    PERMISSIONS.EXAMS_WITHDRAW_APPEAL,
     PERMISSIONS.GRADES_VIEW,
     PERMISSIONS.ASSESSMENT_RESULTS_VIEW,
     PERMISSIONS.STUDENT_SUBJECT_PROGRESS_VIEW,

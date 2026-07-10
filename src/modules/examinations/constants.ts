@@ -109,6 +109,7 @@ export const ExamAppealStatus = {
   UNDER_REVIEW: "UNDER_REVIEW",
   APPROVED: "APPROVED",
   REJECTED: "REJECTED",
+  WITHDRAWN: "WITHDRAWN",
   CLOSED: "CLOSED",
 } as const;
 export type ExamAppealStatus = (typeof ExamAppealStatus)[keyof typeof ExamAppealStatus];
@@ -245,6 +246,10 @@ export const ExamEventType = {
   EXAM_RESULT_REVISION_CREATED: "exam_result.revision_created",
   EXAM_RESULT_SUPERSEDED: "exam_result.superseded",
   EXAM_APPEAL_CREATED: "exam_appeal.created",
+  EXAM_APPEAL_REVIEWED: "exam_appeal.reviewed",
+  EXAM_APPEAL_APPROVED: "exam_appeal.approved",
+  EXAM_APPEAL_REJECTED: "exam_appeal.rejected",
+  EXAM_APPEAL_WITHDRAWN: "exam_appeal.withdrawn",
   EXAM_APPEAL_DECIDED: "exam_appeal.decided",
   EXAM_PUBLICATION_PUBLISHED: "exam_publication.published",
   EXAM_PUBLICATION_RETRACTED: "exam_publication.retracted",

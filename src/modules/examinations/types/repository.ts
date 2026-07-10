@@ -1000,3 +1000,50 @@ export interface MarkExamPublicationRetractedParams {
   retractedAt: Date;
   reason: string;
 }
+
+// =============================================================================
+// PHASE 10 — APPEALS & RESULT-REVISION PARAM TYPES (thin conditional-write / read)
+// -----------------------------------------------------------------------------
+// Param shapes for the Phase-10 ExamAppeal / ExamResult primitives. Each is
+// org-scoped; the conditional appeal-status marks PIN the expected current status in
+// their `where` (the guard lives in the repo body) so a concurrently-moved row
+// matches zero rows and the command aborts (`APPEAL_CONCURRENTLY_CHANGED`). They make
+// NO workflow decision — the command owns the PENDING → UNDER_REVIEW → APPROVED /
+// REJECTED / WITHDRAWN lifecycle and the append-only revision orchestration.
+// =============================================================================
+
+// ─── ExamAppeal conditional status transitions ──────────────────────────────
+
+export interface MarkAppealUnderReviewParams {
+  organizationId: string;
+  id: string;
+}
+
+/** Shared shape for the two terminal decisions (APPROVED | REJECTED): both stamp
+ *  `decidedById` / `decidedAt` / `decisionReason` and require UNDER_REVIEW. */
+export interface MarkAppealDecidedParams {
+  organizationId: string;
+  id: string;
+  decidedById: string;
+  decidedAt: Date;
+  decisionReason: string;
+}
+
+export interface MarkAppealWithdrawnParams {
+  organizationId: string;
+  id: string;
+  closedAt: Date;
+}
+
+export interface FindActiveAppealByResultParams {
+  organizationId: string;
+  examResultId: string;
+}
+
+// ─── ExamResult current-revision pointer (the ONLY Phase-10 ExamResult mutation) ─
+
+export interface UpdateExamResultCurrentRevisionParams {
+  organizationId: string;
+  id: string;
+  currentRevisionId: string | null;
+}
