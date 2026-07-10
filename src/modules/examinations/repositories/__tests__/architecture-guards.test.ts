@@ -13,14 +13,24 @@ import { describe, expect, it } from "vitest";
 // =============================================================================
 
 const REPO_DIR = join(process.cwd(), "src", "modules", "examinations", "repositories");
+const CMD_DIR = join(process.cwd(), "src", "modules", "examinations", "commands");
 const EVENT_FILE = "exam-event.repository.ts";
 
 const REPO_FILES = readdirSync(REPO_DIR).filter(
   (f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && f !== "index.ts"
 );
 
+const CMD_FILES = readdirSync(CMD_DIR).filter(
+  (f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && f !== "index.ts"
+);
+
 function read(file: string): string {
   return readFileSync(join(REPO_DIR, file), "utf8");
+}
+
+/** Strip block and line comments so only executable code is scanned. */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
 // Forbidden dependencies — matched as substrings against real symbol / path names.
@@ -86,6 +96,38 @@ describe("the ExamEvent repository is append-only", () => {
     expect(content).not.toMatch(/\.deleteMany\(/);
     expect(content).not.toMatch(/\.upsert\(/);
   });
+});
+
+// =============================================================================
+// H1 hardening (ADR-013): the metadata helpers must never be a lifecycle back door.
+// No command may import or call any `update*Metadata` helper — lifecycle transitions
+// belong exclusively to the dedicated conditional-write marks. This guard scans EVERY
+// command source (comments stripped so doc-comments naming these helpers don't false-
+// positive) and fails if any of the five surfaces the review flagged is referenced.
+// =============================================================================
+const FORBIDDEN_METADATA_HELPERS = [
+  "updateExamPeriodMetadata",
+  "updateExamSessionMetadata",
+  "updateExamCandidateMetadata",
+  "updateExamResultMetadata",
+  "updateExamAppealMetadata",
+] as const;
+
+describe("no command reaches a metadata helper (H1)", () => {
+  it("discovers the command sources to scan", () => {
+    expect(CMD_FILES.length).toBeGreaterThan(0);
+  });
+
+  for (const helper of FORBIDDEN_METADATA_HELPERS) {
+    it(`no command imports or calls ${helper}`, () => {
+      for (const file of CMD_FILES) {
+        const code = stripComments(readFileSync(join(CMD_DIR, file), "utf8"));
+        expect(code, `${file} must not reference ${helper}`).not.toMatch(
+          new RegExp(`\\b${helper}\\b`)
+        );
+      }
+    });
+  }
 });
 
 describe("every write is tenant-scoped", () => {

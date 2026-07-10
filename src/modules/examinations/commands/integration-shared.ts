@@ -26,10 +26,10 @@ import type { OfficialExamResultIntegrationDto } from "@/modules/examinations/se
 
 // ─── Ports (dependency-injection seams) ──────────────────────────────────────
 
-/** Resolves the exam result to a Grade Engine assessment component + subject. The
- *  production default returns `null` (the exam→component link is not modeled yet — a
- *  documented gap), so integration honestly returns UNSUPPORTED today; tests inject a
- *  fake that returns a component to exercise the write path. */
+/** Resolves the exam result to a Grade Engine assessment component + subject. Since
+ *  Phase 11B the production default resolves the session's explicit
+ *  `ExamGradeComponentBinding` (returning `null` only when the session is unbound →
+ *  EXAM_RESULT_INTEGRATION_UNSUPPORTED, never a heuristic); tests may inject a fake. */
 export interface ExamGradeComponentResolverPort {
   resolve(
     dto: OfficialExamResultIntegrationDto,

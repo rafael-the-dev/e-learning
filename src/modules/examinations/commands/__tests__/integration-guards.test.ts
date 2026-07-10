@@ -10,9 +10,10 @@ import { describe, expect, it } from "vitest";
 // Examination Engine's integration boundary NEVER writes the Grade / Progression
 // tables directly and NEVER reaches the Transcript / Certificate engines: the pure +
 // command + source layers depend only on INJECTED PORTS. The production adapter
-// (`integrations/production-ports.ts`) is the SANCTIONED seam — it MAY import the
-// Grade / Progression modules (it does not today, as the write path is gated by a
-// null resolver) but must STILL never touch Transcript / Certificate.
+// (`integrations/production-ports.ts`) is the SANCTIONED seam — since Phase 11B it
+// IS live: it routes the real canonical Grade write through `gradeMutationService`
+// (and reads back the cascaded progression), but must STILL never touch the
+// Transcript / Certificate engines.
 // =============================================================================
 
 const MOD_DIR = join(process.cwd(), "src", "modules", "examinations");

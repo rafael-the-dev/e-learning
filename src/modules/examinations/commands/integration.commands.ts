@@ -55,10 +55,14 @@ import {
 // ExamEvent + AuditLog pair is written INSIDE the command transaction. Actor ids come from
 // the server ServiceContext only, never from input.
 //
-// Today the production component resolver returns `null` (the exam→component link is not
-// modeled — a documented gap), so every production run returns
-// EXAM_RESULT_INTEGRATION_UNSUPPORTED and no grade / progression write occurs. The gated
-// write path is fully covered by tests injecting fake ports.
+// Since Phase 11B / ADR-014 the production component resolver is LIVE: it resolves the
+// exam session's explicit `ExamGradeComponentBinding` (or returns `null` → a bound-less
+// session integrates as EXAM_RESULT_INTEGRATION_UNSUPPORTED — never a heuristic). For a
+// bound, scale-compatible SCORED result the production grade port performs the REAL
+// canonical Grade write (via `gradeMutationService`) and the progression port confirms
+// the cascaded status. The gated write path is covered by unit tests (fake ports) AND by
+// a live-database integration script exercising the real production adapter end-to-end
+// (`__tests__/grade-integration-production.integration.ts`).
 // =============================================================================
 
 const EXAM_RESULT = ExamEventAggregateType.EXAM_RESULT;

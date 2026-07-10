@@ -1,6 +1,8 @@
 # ADR-013 — Examination Engine Architecture (v1.0 design freeze)
 
-- **Status:** **Accepted**
+- **Status:** **Accepted** · **Implemented & frozen v1.0** (2026-07-10) — see
+  [release notes](../releases/examination-engine-v1.0.0.md). Phases 0–11B + 13 delivered;
+  Phases 12 (portals/API) and 14 (Outbox) deferred beyond v1.0.
 - **Date:** 2026-07-09
 - **Scope:** Examination Engine (new bounded context)
 - **Builds on:** [ADR-001](./ADR-001-academic-core-freeze.md) (Academic Core),
