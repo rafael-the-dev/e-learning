@@ -3,7 +3,11 @@ import type { PrismaClientOrTx } from "@/server/db";
 import type {
   CreateExamAppealInput,
   ExamAppealRecord,
+  FindActiveAppealByResultParams,
   ListExamAppealsFilters,
+  MarkAppealDecidedParams,
+  MarkAppealUnderReviewParams,
+  MarkAppealWithdrawnParams,
   UpdateExamAppealMetadataInput,
 } from "@/modules/examinations/types/repository";
 
@@ -137,4 +141,99 @@ export async function updateExamAppealMetadata(
     data: { ...params.patch },
   });
   return { count: res.count };
+}
+
+// =============================================================================
+// PHASE 10 — APPEAL WORKFLOW PRIMITIVES (thin, org-scoped, conditional)
+// -----------------------------------------------------------------------------
+// Conditional status transitions that PIN the expected current status in `where`
+// so a concurrently-moved row matches zero rows → `{ count: 0 }`; the command
+// asserts `count === 1` (else `APPEAL_CONCURRENTLY_CHANGED`). NO workflow / rule
+// decision lives here — the command owns the PENDING → UNDER_REVIEW → APPROVED /
+// REJECTED / WITHDRAWN lifecycle and passes the resolved columns.
+// =============================================================================
+
+/** Conditional PENDING → UNDER_REVIEW mark. Only a still-PENDING row matches. */
+export async function markAppealUnderReview(
+  params: MarkAppealUnderReviewParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examAppeal.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "PENDING" },
+    data: { status: "UNDER_REVIEW" },
+  });
+  return { count: res.count };
+}
+
+/** Conditional UNDER_REVIEW → APPROVED mark (stamps decision + decidedBy/At).
+ *  Only a still-UNDER_REVIEW row matches. */
+export async function markAppealApproved(
+  params: MarkAppealDecidedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examAppeal.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "UNDER_REVIEW" },
+    data: {
+      status: "APPROVED",
+      decision: "APPROVED",
+      decisionReason: params.decisionReason,
+      decidedById: params.decidedById,
+      decidedAt: params.decidedAt,
+    },
+  });
+  return { count: res.count };
+}
+
+/** Conditional UNDER_REVIEW → REJECTED mark (stamps decision + decidedBy/At).
+ *  Only a still-UNDER_REVIEW row matches. */
+export async function markAppealRejected(
+  params: MarkAppealDecidedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examAppeal.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "UNDER_REVIEW" },
+    data: {
+      status: "REJECTED",
+      decision: "REJECTED",
+      decisionReason: params.decisionReason,
+      decidedById: params.decidedById,
+      decidedAt: params.decidedAt,
+    },
+  });
+  return { count: res.count };
+}
+
+/** Conditional PENDING → WITHDRAWN mark (stamps `closedAt`). Only a still-PENDING
+ *  row matches — a student may withdraw only before review opens. */
+export async function markAppealWithdrawn(
+  params: MarkAppealWithdrawnParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examAppeal.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "PENDING" },
+    data: { status: "WITHDRAWN", closedAt: params.closedAt },
+  });
+  return { count: res.count };
+}
+
+/** The active (PENDING | UNDER_REVIEW) appeal for a result, if any — the duplicate
+ *  guard the create command reads. Read-only; decides nothing. */
+export async function findActiveAppealByResult(
+  params: FindActiveAppealByResultParams,
+  client?: PrismaClientOrTx
+): Promise<ExamAppealRecord | null> {
+  const db = client ?? (await getDb());
+  const row = await db.examAppeal.findFirst({
+    where: {
+      organizationId: params.organizationId,
+      examResultId: params.examResultId,
+      status: { in: ["PENDING", "UNDER_REVIEW"] },
+    },
+    select: appealSelect,
+  });
+  return row ? toRecord(row) : null;
 }

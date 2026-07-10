@@ -39,3 +39,10 @@ export * from "./result-review.commands";
 // / progression / transcript / certificate / appeal / revision.
 export * from "./publication-shared";
 export * from "./publication.commands";
+// Phase 10 — appeals & result revisions (create / review / approve / reject /
+// withdraw). Post-publication recourse via append-only ExamResultRevision (single
+// CURRENT); the official result is ExamResult + currentRevision. No grade /
+// progression / transcript / certificate / (re)publication; revision creation is
+// INTERNAL to approve.
+export * from "./appeals-shared";
+export * from "./appeals.commands";
