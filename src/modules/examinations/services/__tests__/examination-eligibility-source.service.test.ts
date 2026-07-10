@@ -59,7 +59,6 @@ describe("core facts", () => {
     expect(f.manualApproval.requiredByPolicy).toBeNull();
     expect(f.examPeriod).toBeNull();
     expect(f.examSession).toBeNull();
-    expect(f.existingCandidate).toBeNull();
   });
 
   it("4. loads attendance summary facts verbatim + copies requiredPercentage from levelSubject", async () => {
@@ -93,15 +92,13 @@ describe("previous attempts (count / max / last)", () => {
 });
 
 describe("optional exam facts load only when ids provided", () => {
-  it("6/7/8. loads period, session, and existing candidate when ids given", async () => {
+  it("6/7. loads period and session when ids given", async () => {
     seedCore();
     seed(db, "examPeriod", { id: "p-1", organizationId: ORG, status: "OPEN", startsAt: new Date("2026-07-01"), endsAt: new Date("2026-07-31"), deletedAt: null });
     seed(db, "examSession", { id: "sess-1", organizationId: ORG, periodId: "p-1", status: "SCHEDULED", startsAt: new Date("2026-07-10"), endsAt: new Date("2026-07-10"), capacity: 30, deletedAt: null });
-    seed(db, "examCandidate", { id: "cand-1", organizationId: ORG, examSessionId: "sess-1", studentId: "stu-1", status: "REGISTERED", deletedAt: null });
     const f = await loadExaminationEligibilityFacts({ ...BASE, examPeriodId: "p-1", examSessionId: "sess-1" }, asClient(db));
     expect(f.examPeriod).toMatchObject({ id: "p-1", status: "OPEN" });
     expect(f.examSession).toMatchObject({ id: "sess-1", periodId: "p-1", capacity: 30 });
-    expect(f.existingCandidate).toMatchObject({ candidateId: "cand-1", status: "REGISTERED", examSessionId: "sess-1" });
   });
 });
 
@@ -109,7 +106,6 @@ describe("no decisions (facts only)", () => {
   it("9/10/11/12/15/16/17/18. output has NO decision fields", async () => {
     seedCore();
     seed(db, "examSession", { id: "sess-1", organizationId: ORG, periodId: "p-1", status: "SCHEDULED", startsAt: new Date(), endsAt: new Date(), capacity: 1, deletedAt: null });
-    seed(db, "examCandidate", { id: "cand-1", organizationId: ORG, examSessionId: "sess-1", studentId: "stu-1", status: "REGISTERED", deletedAt: null });
     const f = await loadExaminationEligibilityFacts({ ...BASE, examSessionId: "sess-1" }, asClient(db));
     const keys = new Set(Object.keys(f));
     for (const forbidden of ["eligible", "blockingReasons", "warnings", "requiresApproval", "decision", "canRegister", "canSchedule", "canOverride"]) {
@@ -117,8 +113,6 @@ describe("no decisions (facts only)", () => {
     }
     const json = JSON.stringify(f);
     expect(json).not.toMatch(/SESSION_FULL|ALREADY_REGISTERED|ATTENDANCE_BELOW_REQUIRED|SUBJECT_ALREADY_PASSED/);
-    // existingCandidate is a FACT — present, but no ALREADY_REGISTERED decision.
-    expect(f.existingCandidate).not.toBeNull();
   });
 });
 

@@ -3,14 +3,12 @@ import type { PrismaClientOrTx } from "@/server/db";
 import { listExamAttempts } from "@/modules/examinations/repositories/exam-attempt.repository";
 import { findExamPeriodById } from "@/modules/examinations/repositories/exam-period.repository";
 import { findExamSessionById } from "@/modules/examinations/repositories/exam-session.repository";
-import { findCandidateBySessionStudent } from "@/modules/examinations/repositories/exam-candidate.repository";
 import type {
   ExaminationAttendanceFact,
   ExaminationDisciplinaryFact,
   ExaminationEligibilityFacts,
   ExaminationEligibilitySourceInput,
   ExaminationEnrollmentFact,
-  ExaminationExistingCandidateFact,
   ExaminationFinancialClearanceFact,
   ExaminationLevelSubjectFact,
   ExaminationManualApprovalFact,
@@ -252,7 +250,7 @@ export async function loadExaminationEligibilityFacts(
     source: "ExamAttempt",
   };
 
-  // ── Exam period / session / existing candidate (only when ids provided) ───────
+  // ── Exam period / session (only when ids provided) ────────────────────────────
   let examPeriod: ExaminationPeriodFact | null = null;
   if (input.examPeriodId) {
     const p = await findExamPeriodById({ organizationId, id: input.examPeriodId }, db);
@@ -262,7 +260,6 @@ export async function loadExaminationEligibilityFacts(
   }
 
   let examSession: ExaminationSessionFact | null = null;
-  let existingCandidate: ExaminationExistingCandidateFact | null = null;
   if (input.examSessionId) {
     const s = await findExamSessionById({ organizationId, id: input.examSessionId }, db);
     if (s) {
@@ -273,18 +270,6 @@ export async function loadExaminationEligibilityFacts(
         startsAt: s.startsAt,
         endsAt: s.endsAt,
         capacity: s.capacity,
-      };
-    }
-    // A FACT only — the source does NOT decide ALREADY_REGISTERED.
-    const candidate = await findCandidateBySessionStudent(
-      { organizationId, examSessionId: input.examSessionId, studentId },
-      db
-    );
-    if (candidate) {
-      existingCandidate = {
-        candidateId: candidate.id,
-        status: candidate.status,
-        examSessionId: candidate.examSessionId,
       };
     }
   }
@@ -307,7 +292,6 @@ export async function loadExaminationEligibilityFacts(
     previousAttempts,
     examPeriod,
     examSession,
-    existingCandidate,
     manualApproval,
     metadata: {
       sourceVersion: SOURCE_VERSION,

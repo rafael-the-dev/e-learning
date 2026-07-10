@@ -12,8 +12,9 @@ import {
 // the ExamResult + its CURRENT ExamResultRevision (via `findCurrentOfficialResult`)
 // and returns the resolved view (`resolveOfficialExamResult` — revised score with a
 // purely-recomputed normalized percentage). It performs NO write, decides nothing,
-// grades nothing, and is not yet consumed outside the Examination Engine (Grade /
-// Progression / Transcript integration is a later phase).
+// and grades nothing. The Grade/Progression integration boundary reads the official
+// result through its own engine-neutral source (`loadOfficialResultForIntegration`);
+// this façade is the read API for any caller that needs the resolved official view.
 // =============================================================================
 
 export interface GetOfficialExamResultParams {

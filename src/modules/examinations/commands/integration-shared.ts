@@ -7,15 +7,19 @@ import {
   ValidationError,
 } from "@/shared/lib/command";
 import type { ExamEventRecord } from "@/modules/examinations/types/repository";
-import { ExamEventType, ExamResultCode } from "@/modules/examinations/constants";
+import { ExamEventAggregateType, ExamEventType, ExamResultCode } from "@/modules/examinations/constants";
+import { findResultsBySession } from "@/modules/examinations/repositories/exam-result.repository";
+import { listExamEventsByAggregate } from "@/modules/examinations/repositories/exam-event.repository";
 import type { OfficialExamResultIntegrationDto } from "@/modules/examinations/services/examination-grade-integration.source";
 
 // =============================================================================
 // EXAMINATION ENGINE — GRADE/PROGRESSION INTEGRATION SHARED (Phase 11; pure)
 // -----------------------------------------------------------------------------
 // Pure helpers + injected PORTS + DTOs for the official published-result integration
-// boundary (E-13). Everything here is side-effect-free: the pure functions never do IO
-// and never throw; the ports are INTERFACES the command depends on so production wires
+// boundary (E-13). The pure functions are side-effect-free (no IO, never throw); the
+// one exception is `isSessionConsumed`, a tenant-scoped READ helper (no writes) shared
+// by the binding + retraction consumption guards. The ports are INTERFACES the command
+// depends on so production wires
 // the real (isolated) Grade/Progression adapters and tests inject fakes. This module
 // NEVER imports the Grade / Progression / Transcript / Certificate engines, never writes
 // their tables, and carries NO final-grade / pass-fail / weighting logic — a SCORED exam
@@ -158,6 +162,37 @@ export type ExamGradeState = "MISSING" | "CURRENT" | "STALE";
 export function gradeStateFor(currentVersion: string, ledgerVersion: string | null): ExamGradeState {
   if (ledgerVersion === null) return "MISSING";
   return ledgerVersion === currentVersion ? "CURRENT" : "STALE";
+}
+
+// ─── Session consumption guard (tenant-scoped READ; no writes) ────────────────
+
+/**
+ * True when ANY result of the session already carries an integration event
+ * (`exam_result.integrated` / `exam_result.integration_reconciled`) — i.e. the
+ * session's grade write has been CONSUMED downstream. Shared by the binding
+ * commands (bind / archive) and the publication retraction guard so the
+ * "never move/rollback a consumed result" rule has a single implementation. A
+ * read only — the caller owns the transaction; it writes nothing.
+ */
+export async function isSessionConsumed(
+  params: { organizationId: string; examSessionId: string },
+  client: PrismaClientOrTx
+): Promise<boolean> {
+  const { organizationId, examSessionId } = params;
+  const results = await findResultsBySession({ organizationId, examSessionId }, client);
+  for (const r of results) {
+    const events = await listExamEventsByAggregate(
+      { organizationId, aggregateType: ExamEventAggregateType.EXAM_RESULT, aggregateId: r.id },
+      client
+    );
+    const consumed = events.some(
+      (e) =>
+        e.eventType === ExamEventType.EXAM_RESULT_INTEGRATED ||
+        e.eventType === ExamEventType.EXAM_RESULT_INTEGRATION_RECONCILED
+    );
+    if (consumed) return true;
+  }
+  return false;
 }
 
 // ─── Per-item error sanitiser (pure classification; never throws) ─────────────

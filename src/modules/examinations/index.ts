@@ -1,16 +1,13 @@
 // =============================================================================
-// EXAMINATION ENGINE — MODULE BARREL
+// EXAMINATION ENGINE — MODULE BARREL (v1.0)
 // -----------------------------------------------------------------------------
-// Single import site for the module's public surface delivered so far:
-//   • Phase 1 — constants (domain vocabularies + derived union types).
-//   • Phase 2 — tenant-safe, persistence-only repositories for the 13 Exam*
-//     models, plus their record / input / filter types.
-//   • Phase 3A — ExaminationEligibilitySource (read-aggregation façade) + its
-//     input/facts contracts. Loads facts only; decides nothing.
-// No commands, routes, or UI are exported (later phases).
+// Single import site for the module's public surface (Phases 0–11B + 13):
+// constants (domain vocabularies), the 14 tenant-safe Exam* repositories + their
+// record/input/filter types, the eligibility source + engine and the other
+// services, every phase's input schemas, and all commands.
 //
 // `./constants` already exports both the const objects and their derived union
-// types, so it is the single source for the Phase-1 vocabulary here (re-exporting
+// types, so it is the single source for the vocabulary here (re-exporting
 // `./types` as well would make those union names ambiguous under `export *`).
 // =============================================================================
 

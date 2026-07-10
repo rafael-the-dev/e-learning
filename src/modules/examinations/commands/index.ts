@@ -1,13 +1,13 @@
 // =============================================================================
-// EXAMINATION ENGINE — COMMANDS (Phase 4: Scheduling)
+// EXAMINATION ENGINE — COMMANDS (v1.0: Phases 4–11B + 13)
 // -----------------------------------------------------------------------------
-// Scheduling commands only: ExamPeriod + ExamSession lifecycle, ExamRoom
-// create/update/archive, and invigilator assignment. Every command follows the
-// BaseCommand pattern (validate → authorize(`exams.schedule`) → execute in ONE
-// db.$transaction), decides conflicts/capacity at command time via conditional
-// writes + reads (E-3a), and writes ExamEvent + audit inside the tx. No candidate
-// registration, eligibility execution, attendance, results, publication, appeals,
-// bulk, routes/UI, or domain-event bus — those are later phases.
+// All command surfaces: scheduling (period/session/room/invigilator), candidate
+// registration + status, attendance, result entry, review/approval, publication +
+// retraction, appeals + revisions, Grade/Progression integration + reconciliation,
+// exam→grade-component binding, and the bulk runners. Every command follows the
+// BaseCommand pattern (validate → authorize → execute in ONE db.$transaction) and
+// writes ExamEvent + audit inside the tx. No routes/UI and no domain-event bus /
+// Outbox (Phase 12 / Phase 14 — deferred beyond v1.0).
 // =============================================================================
 
 export * from "./scheduling-shared";
