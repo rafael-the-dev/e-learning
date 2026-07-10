@@ -873,6 +873,61 @@ Certificate/Attendance touch; no routes/UI; no domain-event bus/Outbox.
 
 ---
 
+### Phase 6 — Implementation notes (2026-07-10)
+
+Exam **attendance** — records attendance for a REGISTERED candidate as an
+Examination Engine fact. **COMPLETELY SEPARATE from the class Attendance Engine
+(E-10):** it **never** writes class attendance and imports no `modules/attendance`
+(static guard). It records ONLY — no results, no grades, no pass/fail, no
+progression/transcript/certificate, no candidate-status mutation. No schema/
+migration/constants change; no routes/UI; no domain-event bus/Outbox.
+
+- **Mark** (`MarkExamCandidateAttendanceCommand`, perm `exams.markAttendance`)
+  loads the candidate org-scoped (→ NotFound), requires `status = REGISTERED`
+  (else `CANDIDATE_NOT_REGISTERED`), requires the session to be **LOCKED or
+  IN_PROGRESS** (else `SESSION_NOT_OPEN_FOR_ATTENDANCE`), and creates the single
+  attendance row. A **duplicate is rejected, never overwritten** —
+  `ATTENDANCE_ALREADY_MARKED`, raised BOTH by the find-guard AND by a `P2002` on
+  the `@unique examCandidateId` insert. `EXCUSED` requires a justification
+  (`remarks` OR `reason`); `DISQUALIFIED` requires a `reason` (Zod `.strict()`).
+- **Correct** (`CorrectExamCandidateAttendanceCommand`, perm
+  `exams.correctAttendance`, **mandatory reason**) loads the existing row (missing
+  ⇒ `ATTENDANCE_NOT_FOUND`), allows a **LOCKED / IN_PROGRESS / COMPLETED** session
+  (rejects `RESULTS_RECORDED` / `PUBLISHED` / `CANCELLED` ⇒
+  `SESSION_NOT_OPEN_FOR_CORRECTION`), and writes via a **conditional `updateMany`
+  pinning the previously-read status**; the command asserts `count === 1` (a lost
+  race ⇒ `count 0` ⇒ `ATTENDANCE_CORRECTION_CONFLICT`). The previous status is
+  preserved in the ExamEvent (`previousStatus`) and the audit `oldValues`.
+- **Bulk mark** (`BulkMarkExamAttendanceCommand`, perm `exams.markAttendance`,
+  authorized **ONCE up-front**) is a **self-contained sequential runner** that
+  re-uses the single Mark command once per item, **each in its OWN transaction** —
+  no shared tx, the mark rules are never re-implemented. Per-item errors are
+  captured (`{ code, message }`), never thrown; domain errors keep their code +
+  message, unknown errors are sanitised to `INTERNAL_ERROR` with a generic
+  message. `stopOnFailure` (default `false`) continues past failures; `true` skips
+  the remaining items. Returns `{ total, succeeded, failed, skipped, items }` with
+  the invariant `total === succeeded + failed + skipped`. It does NOT import the
+  Certificate bulk runner.
+- **`ExamAttendance.status = DISQUALIFIED` ≠ `ExamCandidate.status`:** a
+  disqualified *attendance* row is an attendance fact only — the command **never**
+  mutates the candidate (asserted) and **never** creates an `ExamResult`
+  (asserted). No result derivation / pass-fail lives here (that is Phase 7+).
+- **`ExamEvent` (append-only) + `AuditLog` are written INSIDE the same tx** via
+  `recordExamTransition` (`exam_attendance.marked` / `exam_attendance.corrected`);
+  a rollback (failed write / lost race) discards both — proven behaviourally by
+  the fake-DB rollback test. There is **NO bus** (Phase 14).
+- **Teacher assignment-scoped marking is DEFERRED:** Phase 6 restricts attendance
+  to holders of `exams.markAttendance` / `exams.correctAttendance` (SUPER_ADMIN /
+  ORG_ADMIN / SECRETARY). No `teacherId` is ever trusted from input; a permission
+  test asserts a caller without the permission is denied. The repository additions
+  (`updateExamAttendanceConditionally`, session-scoped roster reads,
+  `listRegisteredCandidatesBySession`) are thin, org-scoped, and decide nothing
+  (static guard: no throw / authorization / BusinessRuleError).
+- **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
+  (286 passed) · `eslint src/modules/examinations` ✅ · `prisma validate` ✅.
+
+---
+
 ## 19. Resolved Decisions (closed for Phase 1)
 
 All schema-blocking decisions are **closed**. No open decision remains.

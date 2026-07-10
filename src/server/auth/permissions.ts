@@ -475,6 +475,9 @@ export const PERMISSIONS = {
   // overrideEligibility stays admin-only (bypasses eligibility, never operational safety).
   EXAMS_REGISTER_CANDIDATES: "exams.registerCandidates",
   EXAMS_OVERRIDE_ELIGIBILITY: "exams.overrideEligibility",
+  // Phase 6 — exam attendance (SEPARATE from class attendance). SECRETARY gets both.
+  EXAMS_MARK_ATTENDANCE: "exams.markAttendance",
+  EXAMS_CORRECT_ATTENDANCE: "exams.correctAttendance",
 
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",
@@ -583,6 +586,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.EXAMS_VIEW,
     PERMISSIONS.EXAMS_SCHEDULE,
     PERMISSIONS.EXAMS_REGISTER_CANDIDATES,
+    PERMISSIONS.EXAMS_MARK_ATTENDANCE,
+    PERMISSIONS.EXAMS_CORRECT_ATTENDANCE,
     PERMISSIONS.STUDENT_TIMELINE_VIEW,
     PERMISSIONS.STUDENT_TIMELINE_CREATE_NOTE,
     PERMISSIONS.CLASSROOMS_VIEW,

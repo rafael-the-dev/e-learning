@@ -831,3 +831,44 @@ export interface MarkExamCandidateDisqualifiedParams {
   disqualifiedById?: string | null;
   disqualificationReason: string;
 }
+
+// =============================================================================
+// PHASE 6 — ATTENDANCE PARAM TYPES (thin read / conditional write)
+// -----------------------------------------------------------------------------
+// Param shapes for the Phase-6 ExamAttendance / ExamCandidate primitives. Each is
+// org-scoped; the conditional write pins the expected current attendance status in
+// its `where` (the guard lives in the repo body). They make NO business decision —
+// the command decides the session-state gate, duplicate guard, and asserts
+// `count === 1` on the conditional correction. Exam attendance is SEPARATE from the
+// class Attendance Engine (E-10): these types never reference it.
+// =============================================================================
+
+/** Columns a conditional attendance correction may write. `status` / `markedAt`
+ *  are always set; `checkedInAt` / `remarks` only when the caller supplies them. */
+export interface ExamAttendanceConditionalPatch {
+  status: string;
+  checkedInAt?: Date | null;
+  remarks?: string | null;
+  markedAt: Date;
+  markedById?: string | null;
+}
+
+export interface UpdateExamAttendanceConditionallyParams {
+  organizationId: string;
+  examCandidateId: string;
+  /** The status the row must currently hold for the write to match (race pin). */
+  expectedStatus: string;
+  patch: ExamAttendanceConditionalPatch;
+}
+
+export interface AttendanceBySessionParams {
+  organizationId: string;
+  examSessionId: string;
+}
+
+export interface ListRegisteredCandidatesBySessionParams {
+  organizationId: string;
+  examSessionId: string;
+  skip?: number;
+  take?: number;
+}

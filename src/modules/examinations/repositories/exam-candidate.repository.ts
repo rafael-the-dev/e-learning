@@ -7,6 +7,7 @@ import type {
   FindActiveCandidateBySessionSeatParams,
   FindActiveCandidateBySessionStudentParams,
   ListExamCandidatesFilters,
+  ListRegisteredCandidatesBySessionParams,
   MarkExamCandidateDisqualifiedParams,
   MarkExamCandidateWithdrawnParams,
   UpdateExamCandidateMetadataInput,
@@ -193,6 +194,24 @@ export async function listCandidatesBySession(
     {
       organizationId: params.organizationId,
       examSessionId: params.examSessionId,
+      skip: params.skip,
+      take: params.take,
+    },
+    client
+  );
+}
+
+/** REGISTERED live candidates of a session (Phase 6 attendance roster read). A
+ *  thin filter over `listExamCandidates`; decides nothing. */
+export async function listRegisteredCandidatesBySession(
+  params: ListRegisteredCandidatesBySessionParams,
+  client?: PrismaClientOrTx
+): Promise<ExamCandidateRecord[]> {
+  return listExamCandidates(
+    {
+      organizationId: params.organizationId,
+      examSessionId: params.examSessionId,
+      status: "REGISTERED",
       skip: params.skip,
       take: params.take,
     },
