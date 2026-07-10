@@ -238,6 +238,7 @@ export const ExamEventType = {
   EXAM_RESULT_SUBMITTED: "exam_result.submitted",
   EXAM_RESULT_REVIEWED: "exam_result.reviewed",
   EXAM_RESULT_APPROVED: "exam_result.approved",
+  EXAM_RESULT_RETURNED_FOR_CORRECTION: "exam_result.returned_for_correction",
   EXAM_RESULT_PUBLISHED: "exam_result.published",
   EXAM_RESULT_INVALIDATED: "exam_result.invalidated",
   EXAM_RESULT_REVISION_CREATED: "exam_result.revision_created",

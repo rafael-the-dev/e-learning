@@ -27,3 +27,9 @@ export * from "./attendance.commands";
 // progression / transcript / certificate / review / approval / publication / appeal.
 export * from "./result-entry-shared";
 export * from "./result-entry.commands";
+// Phase 8 — exam result review / approval (review / approve / return-for-correction
+// + bulk review / approve). Advances SUBMITTED → REVIEWED → APPROVED under a strict
+// marker ≠ reviewer ≠ approver control; no publication / grade / progression /
+// transcript / certificate / appeal / revision.
+export * from "./result-review-shared";
+export * from "./result-review.commands";

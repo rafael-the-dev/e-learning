@@ -1012,6 +1012,73 @@ already existed). No routes / UI; no domain-event bus / Outbox.
 
 ---
 
+### Phase 8 — Implementation notes (2026-07-10)
+
+Exam **result review & approval** — advances the OFFICIAL EXAM RESULT from
+**SUBMITTED → REVIEWED → APPROVED** under a two-eyes control, with a return-to-DRAFT
+escape hatch for correction. It records exam **facts** only: it does **not** publish,
+calculate a final subject grade, decide pass/fail, touch `StudentSubject`/`Level`/
+`Course` progress, write a Transcript/Certificate, or run appeals / revisions (all
+later phases / out of scope, asserted by a static guard). **No schema / migration
+change**; it adds the `exams.reviewResults` / `exams.approveResults` /
+`exams.returnResultsForCorrection` permissions and the `exam_result.returned_for_correction`
+event type (`exam_result.reviewed` / `exam_result.approved` already existed). No
+routes / UI; no domain-event bus / Outbox.
+
+- **Review** (`ReviewExamResultCommand`, perm `exams.reviewResults`) moves **SUBMITTED
+  → REVIEWED**. It requires a recorded `markerId` (`MARKER_REQUIRED`), a **STRICT
+  marker ≠ reviewer** separation (`SELF_REVIEW_NOT_ALLOWED`), an open session
+  (**COMPLETED | RESULTS_RECORDED** — only `COMPLETED` occurs today, else
+  `SESSION_NOT_OPEN_FOR_RESULTS`), an internally-consistent row (`RESULT_INCOMPLETE`),
+  and attendance that **STILL aligns** with the recorded `resultCode` (`RESULT_STALE`;
+  missing attendance ⇒ `ATTENDANCE_NOT_MARKED`). It stamps `reviewedById` /
+  `reviewedAt` via a **conditional `updateMany` pinning status = 'SUBMITTED'**.
+- **Approve** (`ApproveExamResultCommand`, perm `exams.approveResults`) moves **REVIEWED
+  → APPROVED** — a **direct SUBMITTED → APPROVED is blocked** (`RESULT_NOT_REVIEWED`).
+  It requires a recorded `reviewedById` (`REVIEWER_REQUIRED`) and a **STRICT marker ≠
+  approver ≠ reviewer** separation (`APPROVER_IS_MARKER` / `APPROVER_IS_REVIEWER`).
+  Attendance + internal consistency are **RE-VALIDATED** (they could change between
+  review and approval — same `RESULT_STALE` / `RESULT_INCOMPLETE` gates), and the same
+  session gate applies. It stamps `approvedById` / `approvedAt` via a conditional
+  `updateMany` pinning status = 'REVIEWED'.
+- **Return-for-correction** (`ReturnExamResultForCorrectionCommand`, perm
+  `exams.returnResultsForCorrection`) moves **SUBMITTED | REVIEWED → DRAFT** (else
+  `RESULT_NOT_RETURNABLE`); the `reason` is **REQUIRED** (schema-enforced). No
+  attendance / session / consistency check is needed — returning to DRAFT is always
+  safe; the content correction happens later via `UpdateDraftExamResultCommand`.
+  Returning **from REVIEWED clears** `reviewedById` / `reviewedAt`; **`markerId` and
+  the `score` / `resultCode` columns are NEVER written here**. The conditional
+  `updateMany` pins the **observed** status (`SUBMITTED` | `REVIEWED`).
+- **Immutability & concurrency:** an **APPROVED / PUBLISHED / INVALIDATED** result is
+  immutable in Phase 8 (rejected by every command's status gate). Each mark is a
+  conditional write pinning the expected status, so a concurrently-moved row matches
+  zero rows and is rejected `RESULT_CONCURRENTLY_CHANGED` (double-review / double-approve
+  race-safe).
+- **Bulk review / approve** (`BulkReviewExamResultsCommand` /
+  `BulkApproveExamResultsCommand`, authorized **ONCE up-front**) are **self-contained
+  sequential runners** that re-use the single command once per item, **each in its OWN
+  transaction**, and do **NOT** import the Certificate bulk runner. The `examSessionId`
+  contract is **enforced**: each runner loads the session's live result ids ONCE
+  up-front and fails any item that does not belong to the indicated session per-item
+  (`RESULT_NOT_IN_SESSION`) — it never reaches the single command. Per-item errors are
+  captured (`{ code, message }`), never thrown; unknown errors are sanitised to
+  `INTERNAL_ERROR`. `stopOnFailure` (default `false`) continues past failures; `true`
+  skips the rest. Returns `{ total, succeeded, failed, skipped, items }` with `total
+  === succeeded + failed + skipped`. There is **no bulk return-for-correction**.
+- **Actor ids come only from the `ServiceContext`** — the `.strict()` schemas reject
+  any `reviewedById` / `approvedById` / `markerId` / actor key on input. **Never mutates
+  the candidate / session status** and **writes no `StudentSubject`/`Level`/`Course`
+  progress row** (asserted behaviourally + static guard). **`ExamEvent` (append-only) +
+  `AuditLog` are written INSIDE the same tx** via `recordExamTransition`; a rollback
+  discards both (proven by the fake-DB rollback tests). There is **NO bus** (Phase 14).
+- **TEACHER reviewer support is DEFERRED:** Phase 8 restricts review / approval to
+  holders of the new permissions (admin / secretary). No `teacherId` is trusted from
+  input.
+- **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
+  (454 passed, of which 65 are the Phase-8 review command tests + 10 architecture
+  guards) · `eslint` (Phase-8 files) ✅ · `prisma validate` ✅.
+
+---
 
 ## 19. Resolved Decisions (closed for Phase 1)
 
