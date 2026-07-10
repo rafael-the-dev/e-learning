@@ -5,8 +5,11 @@ import type {
   ExamResultRecord,
   ExamResultRevisionRecord,
   ListExamResultsFilters,
+  MarkExamResultApprovedParams,
+  MarkExamResultReviewedParams,
   MarkExamResultSubmittedParams,
   ResultsBySessionParams,
+  ReturnExamResultToDraftParams,
   UpdateDraftExamResultConditionallyParams,
   UpdateExamResultMetadataInput,
 } from "@/modules/examinations/types/repository";
@@ -335,6 +338,67 @@ export async function markExamResultSubmitted(
       status: "SUBMITTED",
       submittedAt: params.submittedAt,
       ...(params.markerId !== undefined ? { markerId: params.markerId } : {}),
+    },
+  });
+  return { count: res.count };
+}
+
+/** Conditional SUBMITTED → REVIEWED mark (stamps `reviewedById` / `reviewedAt`).
+ *  Only a still-SUBMITTED row matches, so a lost race / double-review ⇒ `{ count: 0 }`.
+ *  No lifecycle / separation / attendance decision — the command owns those. */
+export async function markExamResultReviewed(
+  params: MarkExamResultReviewedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examResult.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "SUBMITTED" },
+    data: {
+      status: "REVIEWED",
+      reviewedById: params.reviewedById,
+      reviewedAt: params.reviewedAt,
+    },
+  });
+  return { count: res.count };
+}
+
+/** Conditional REVIEWED → APPROVED mark (stamps `approvedById` / `approvedAt`).
+ *  Only a still-REVIEWED row matches, so a lost race / double-approve ⇒ `{ count: 0 }`. */
+export async function markExamResultApproved(
+  params: MarkExamResultApprovedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examResult.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "REVIEWED" },
+    data: {
+      status: "APPROVED",
+      approvedById: params.approvedById,
+      approvedAt: params.approvedAt,
+    },
+  });
+  return { count: res.count };
+}
+
+/** Conditional return to DRAFT from the observed status (SUBMITTED | REVIEWED),
+ *  pinned in `where` so a concurrently-moved row matches zero rows. When
+ *  `clearReviewMetadata` is set (returning from REVIEWED) the review stamps are
+ *  cleared. `markerId` and the score/resultCode columns are NEVER touched here —
+ *  content correction happens later via `UpdateDraftExamResultCommand`. */
+export async function returnExamResultToDraft(
+  params: ReturnExamResultToDraftParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examResult.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      status: params.expectedStatus,
+    },
+    data: {
+      status: "DRAFT",
+      ...(params.clearReviewMetadata ? { reviewedById: null, reviewedAt: null } : {}),
     },
   });
   return { count: res.count };

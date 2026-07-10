@@ -482,6 +482,14 @@ export const PERMISSIONS = {
   // TEACHER assignment-scoped entry/submit is deferred until session-scoping lands).
   EXAMS_ENTER_RESULTS: "exams.enterResults",
   EXAMS_SUBMIT_RESULTS: "exams.submitResults",
+  // Phase 8 — result review & approval. Admin-only in Phase 8 with STRICT separation
+  // of duties enforced at the command layer (marker ≠ reviewer ≠ approver). SECRETARY
+  // gets neither review nor approval by default; TEACHER reviewer support (review only
+  // when assigned as reviewer, never own marked result) is DEFERRED until reviewer-
+  // assignment scoping lands. Never trust reviewerId / approverId from input.
+  EXAMS_REVIEW_RESULTS: "exams.reviewResults",
+  EXAMS_APPROVE_RESULTS: "exams.approveResults",
+  EXAMS_RETURN_RESULTS_FOR_CORRECTION: "exams.returnResultsForCorrection",
 
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",

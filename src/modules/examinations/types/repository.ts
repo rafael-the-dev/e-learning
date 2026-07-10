@@ -911,3 +911,31 @@ export interface ResultsBySessionParams {
   organizationId: string;
   examSessionId: string;
 }
+
+// ─── Phase 8 — review / approval / return conditional-transition params ─────────
+// Each pins the expected current status in the repo `where` so a concurrently-moved
+// row matches zero rows (`count 0`); the command asserts `count === 1`. The repo
+// makes NO lifecycle / separation / attendance decision — the command owns those.
+
+export interface MarkExamResultReviewedParams {
+  organizationId: string;
+  id: string;
+  reviewedById: string;
+  reviewedAt: Date;
+}
+
+export interface MarkExamResultApprovedParams {
+  organizationId: string;
+  id: string;
+  approvedById: string;
+  approvedAt: Date;
+}
+
+export interface ReturnExamResultToDraftParams {
+  organizationId: string;
+  id: string;
+  /** The status the caller observed (SUBMITTED | REVIEWED) — pinned in `where`. */
+  expectedStatus: string;
+  /** When true, `reviewedById` / `reviewedAt` are cleared (returning from REVIEWED). */
+  clearReviewMetadata: boolean;
+}

@@ -28,4 +28,6 @@ export * from "./schemas/registration.schema";
 export * from "./schemas/attendance.schema";
 // Phase 7 — result-entry input schemas.
 export * from "./schemas/result-entry.schema";
+// Phase 8 — result-review input schemas (review / approve / return-for-correction).
+export * from "./schemas/result-review.schema";
 export * from "./commands";
