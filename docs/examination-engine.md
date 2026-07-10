@@ -780,6 +780,46 @@ clock/random/env.
 - **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
   (105 passed) · `eslint` ✅ · `prisma validate` ✅.
 
+### Phase 4 — Implementation notes (2026-07-10)
+
+First **mutating** phase — **scheduling only**. Delivered per ADR-013 (E-3a / §5 / §6):
+
+- **Scheduling commands** (`src/modules/examinations/commands/`), all `BaseCommand`
+  (`validate → authorize → execute`), all authorizing `PERMISSIONS.EXAMS_SCHEDULE`,
+  each running in ONE `db.$transaction`:
+  - **ExamPeriod:** `CreateExamPeriodCommand` (→ DRAFT), `Open`/`Lock`/`Complete`/
+    `CancelExamPeriodCommand` (DRAFT→OPEN→LOCKED→COMPLETED and \*→CANCELLED).
+  - **ExamRoom:** `Create`/`Update`/`ArchiveExamRoomCommand`. Archive is guarded by a
+    command-level `findFutureSessionsByRoom` read (non-empty ⇒ `BusinessRuleError`) then
+    a conditional archive (status → INACTIVE + `deletedAt`, freeing the filtered-unique code).
+  - **ExamSession:** `CreateExamSessionCommand` (→ DRAFT after validating period exists +
+    status ∈ {OPEN,LOCKED}, window inside the period, `LevelSubject` exists, and — when a
+    room is given — capacity ≤ room and no overlapping non-cancelled session), plus
+    `Schedule`/`Lock`/`Start`/`Complete`/`CancelExamSessionCommand`
+    (DRAFT→SCHEDULED→LOCKED→IN_PROGRESS→COMPLETED and \*→CANCELLED).
+  - **Invigilator:** `AssignExamInvigilatorCommand` — session assignable (DRAFT|SCHEDULED|
+    LOCKED), exactly one of `teacherId`/`userId` (schema-enforced), duplicate + time-overlap
+    command-level blocks.
+- **Conflict / capacity / overlap checks are command-level (E-3a / E-9)**, not engine
+  decisions: a read-check followed by a write. The overlap reads (room + invigilator) carry
+  a **documented narrow read-race window** — the DB cannot range-exclude, so the filtered-
+  unique indexes and a future operational reconciliation pass (Phase 14) are the backstop.
+- **State transitions are race-safe conditional writes**: each `mark*` pins the expected
+  current status in its `where`; the command asserts `count === 1`, else `BusinessRuleError`
+  (a wrong / terminal / concurrently-moved state ⇒ `count 0`). Terminal-state rejection is
+  enforced purely by the conditional `where`, not an ad-hoc status branch.
+- **`ExamEvent` (append-only) + `AuditLog` are written INSIDE the same tx** (creates emit an
+  audit row only — §13 events are transition-based). A rollback (lost race or a failed
+  event/audit write) discards both — proven behaviourally by the fake-DB rollback tests.
+  There is **NO domain-event bus / Outbox** here (deferred to Phase 14).
+- **No** eligibility execution, candidate registration, attendance, results, publication,
+  appeals, bulk, or routes/UI; **no** Grade/Progression/Transcript/Certificate import — a
+  static `architecture-guards.test.ts` enforces the exclusions against comment-stripped source.
+- Repository layer stays thin: new primitives are org-scoped conditional `updateMany`
+  (returning `{ count }`) + `findFirst`/`findMany` reads with no business rule.
+- **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
+  (169 passed) · `eslint` ✅ · `prisma validate` ✅.
+
 ---
 
 ## 19. Resolved Decisions (closed for Phase 1)

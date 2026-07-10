@@ -20,3 +20,6 @@ export * from "./repositories";
 // Phase 3A — eligibility-source facts contracts + the read-aggregation service.
 export * from "./types/eligibility-source";
 export * from "./services";
+// Phase 4 — scheduling input schemas + scheduling commands.
+export * from "./schemas/scheduling.schema";
+export * from "./commands";

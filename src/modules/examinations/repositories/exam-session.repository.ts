@@ -4,6 +4,11 @@ import type {
   CreateExamSessionInput,
   ExamSessionRecord,
   ListExamSessionsFilters,
+  MarkExamSessionCancelledParams,
+  MarkExamSessionCompletedParams,
+  MarkExamSessionLockedParams,
+  MarkExamSessionScheduledParams,
+  MarkExamSessionStartedParams,
   UpdateExamSessionMetadataInput,
 } from "@/modules/examinations/types/repository";
 
@@ -184,6 +189,82 @@ export async function softDeleteExamSession(
   const res = await db.examSession.updateMany({
     where: { id: params.id, organizationId: params.organizationId, deletedAt: null },
     data: { deletedAt: new Date() },
+  });
+  return { count: res.count };
+}
+
+// ─── PHASE 4 — lifecycle transitions (conditional writes) ─────────────────────
+// Race-safe conditional writes: `where` pins the expected current status so a
+// wrong/terminal/concurrently-moved state matches zero rows → `{ count: 0 }`.
+// The command asserts `count === 1`; no decision, no event/audit here. ExamSession
+// has NO `scheduledAt` and NO `startedById` column — those are intentionally not set.
+
+/** DRAFT → SCHEDULED. */
+export async function markSessionScheduled(
+  params: MarkExamSessionScheduledParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examSession.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "DRAFT", deletedAt: null },
+    data: { status: "SCHEDULED" },
+  });
+  return { count: res.count };
+}
+
+/** SCHEDULED → LOCKED. */
+export async function markSessionLocked(
+  params: MarkExamSessionLockedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examSession.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "SCHEDULED", deletedAt: null },
+    data: { status: "LOCKED", lockedAt: new Date(), lockedById: params.lockedById ?? null },
+  });
+  return { count: res.count };
+}
+
+/** LOCKED → IN_PROGRESS. */
+export async function markSessionStarted(
+  params: MarkExamSessionStartedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examSession.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "LOCKED", deletedAt: null },
+    data: { status: "IN_PROGRESS", startedAt: new Date() },
+  });
+  return { count: res.count };
+}
+
+/** IN_PROGRESS → COMPLETED. */
+export async function markSessionCompleted(
+  params: MarkExamSessionCompletedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examSession.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "IN_PROGRESS", deletedAt: null },
+    data: { status: "COMPLETED", completedAt: new Date(), completedById: params.completedById ?? null },
+  });
+  return { count: res.count };
+}
+
+/** DRAFT | SCHEDULED | LOCKED → CANCELLED. */
+export async function markSessionCancelled(
+  params: MarkExamSessionCancelledParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examSession.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      status: { in: ["DRAFT", "SCHEDULED", "LOCKED"] },
+      deletedAt: null,
+    },
+    data: { status: "CANCELLED", cancelledAt: new Date(), cancelledById: params.cancelledById ?? null },
   });
   return { count: res.count };
 }

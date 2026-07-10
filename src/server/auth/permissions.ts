@@ -463,6 +463,15 @@ export const PERMISSIONS = {
   CERTIFICATE_POLICIES_MANAGE: "certificatePolicies.manage",
   CERTIFICATE_TEMPLATES_MANAGE: "certificateTemplates.manage",
 
+  // Examination Engine (Phase 4 — scheduling). SUPER_ADMIN / ORG_ADMIN auto-grant
+  // via Object.values; SECRETARY gets view + schedule (below); manage / override /
+  // operations stay admin-only by default (granted via custom roles only).
+  EXAMS_VIEW: "exams.view",
+  EXAMS_MANAGE: "exams.manage",
+  EXAMS_SCHEDULE: "exams.schedule",
+  EXAMS_OVERRIDE_SCHEDULING: "exams.overrideScheduling",
+  EXAMS_OPERATIONS_VIEW: "exams.operationsView",
+
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",
   PREREQUISITES_VIEW: "prerequisites.view",
@@ -565,6 +574,10 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.CERTIFICATES_EXPORT,
     PERMISSIONS.CERTIFICATES_REQUEST,
     PERMISSIONS.CERTIFICATES_VERIFY,
+    // Examination Engine: secretaries view + schedule sessions/rooms/periods.
+    // manage / override-scheduling / operations stay admin-only by default.
+    PERMISSIONS.EXAMS_VIEW,
+    PERMISSIONS.EXAMS_SCHEDULE,
     PERMISSIONS.STUDENT_TIMELINE_VIEW,
     PERMISSIONS.STUDENT_TIMELINE_CREATE_NOTE,
     PERMISSIONS.CLASSROOMS_VIEW,

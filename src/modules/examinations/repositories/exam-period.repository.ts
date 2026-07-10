@@ -4,6 +4,10 @@ import type {
   CreateExamPeriodInput,
   ExamPeriodRecord,
   ListExamPeriodsFilters,
+  MarkExamPeriodCancelledParams,
+  MarkExamPeriodCompletedParams,
+  MarkExamPeriodLockedParams,
+  MarkExamPeriodOpenParams,
   UpdateExamPeriodMetadataInput,
 } from "@/modules/examinations/types/repository";
 
@@ -162,6 +166,69 @@ export async function softDeleteExamPeriod(
   const res = await db.examPeriod.updateMany({
     where: { id: params.id, organizationId: params.organizationId, deletedAt: null },
     data: { deletedAt: new Date() },
+  });
+  return { count: res.count };
+}
+
+// ─── PHASE 4 — lifecycle transitions (conditional writes) ─────────────────────
+// Each is a race-safe conditional write: the `where` pins the expected current
+// status so an unexpected state (terminal, wrong step, concurrently moved) matches
+// zero rows and returns `{ count: 0 }`. The command asserts `count === 1`; this
+// layer makes NO decision and emits NO event/audit.
+
+/** DRAFT → OPEN. */
+export async function markExamPeriodOpen(
+  params: MarkExamPeriodOpenParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examPeriod.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "DRAFT", deletedAt: null },
+    data: { status: "OPEN" },
+  });
+  return { count: res.count };
+}
+
+/** OPEN → LOCKED. */
+export async function markExamPeriodLocked(
+  params: MarkExamPeriodLockedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examPeriod.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "OPEN", deletedAt: null },
+    data: { status: "LOCKED", lockedAt: new Date(), lockedById: params.lockedById ?? null },
+  });
+  return { count: res.count };
+}
+
+/** LOCKED → COMPLETED. */
+export async function markExamPeriodCompleted(
+  params: MarkExamPeriodCompletedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examPeriod.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "LOCKED", deletedAt: null },
+    data: { status: "COMPLETED", completedAt: new Date(), completedById: params.completedById ?? null },
+  });
+  return { count: res.count };
+}
+
+/** DRAFT | OPEN | LOCKED → CANCELLED. */
+export async function markExamPeriodCancelled(
+  params: MarkExamPeriodCancelledParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examPeriod.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      status: { in: ["DRAFT", "OPEN", "LOCKED"] },
+      deletedAt: null,
+    },
+    data: { status: "CANCELLED", cancelledAt: new Date(), cancelledById: params.cancelledById ?? null },
   });
   return { count: res.count };
 }

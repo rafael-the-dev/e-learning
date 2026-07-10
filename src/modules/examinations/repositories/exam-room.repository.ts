@@ -1,8 +1,11 @@
 import { getDb } from "@/server/db";
 import type { PrismaClientOrTx } from "@/server/db";
 import type {
+  ArchiveExamRoomParams,
   CreateExamRoomInput,
+  ExamRoomFutureSessionRef,
   ExamRoomRecord,
+  FindFutureSessionsByRoomParams,
   ListExamRoomsFilters,
   UpdateExamRoomMetadataInput,
 } from "@/modules/examinations/types/repository";
@@ -164,4 +167,49 @@ export async function softDeleteExamRoom(
     data: { deletedAt: new Date() },
   });
   return { count: res.count };
+}
+
+// ─── PHASE 4 — archive + future-session read ──────────────────────────────────
+
+/** Conditional soft delete: archives a live room (status → INACTIVE + stamps
+ *  `deletedAt`), freeing its filtered-unique code. `where deletedAt: null` makes a
+ *  double-archive / missing-room a race-safe no-op (`{ count: 0 }`); the command
+ *  asserts `count === 1`. NO decision here. */
+export async function archiveExamRoom(
+  params: ArchiveExamRoomParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examRoom.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, deletedAt: null },
+    data: { status: "INACTIVE", deletedAt: new Date() },
+  });
+  return { count: res.count };
+}
+
+/** READ-ONLY. Live, non-CANCELLED sessions in this room that end after `after`
+ *  (i.e. still upcoming / in-flight). The archive command decides whether a
+ *  non-empty result blocks archival; this layer applies no rule. */
+export async function findFutureSessionsByRoom(
+  params: FindFutureSessionsByRoomParams,
+  client?: PrismaClientOrTx
+): Promise<ExamRoomFutureSessionRef[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.examSession.findMany({
+    where: {
+      organizationId: params.organizationId,
+      roomId: params.roomId,
+      deletedAt: null,
+      status: { notIn: ["CANCELLED"] },
+      endsAt: { gt: params.after },
+    },
+    select: { id: true, status: true, startsAt: true, endsAt: true },
+    orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+  });
+  return rows.map((r) => ({
+    id: r.id as string,
+    status: r.status as string,
+    startsAt: r.startsAt as Date,
+    endsAt: r.endsAt as Date,
+  }));
 }
