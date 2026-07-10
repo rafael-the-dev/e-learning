@@ -26,4 +26,6 @@ export * from "./schemas/scheduling.schema";
 export * from "./schemas/registration.schema";
 // Phase 6 — exam-attendance input schemas.
 export * from "./schemas/attendance.schema";
+// Phase 7 — result-entry input schemas.
+export * from "./schemas/result-entry.schema";
 export * from "./commands";

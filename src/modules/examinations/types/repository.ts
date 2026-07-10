@@ -872,3 +872,42 @@ export interface ListRegisteredCandidatesBySessionParams {
   skip?: number;
   take?: number;
 }
+
+// =============================================================================
+// PHASE 7 — RESULT-ENTRY PARAM TYPES (thin read / conditional write)
+// -----------------------------------------------------------------------------
+// Param shapes for the Phase-7 ExamResult primitives. Each is org-scoped; the
+// conditional writes pin `status = 'DRAFT'` in their `where` (the guard lives in
+// the repo body). They make NO decision — the command derives the resultCode /
+// score / normalizedScore from the attendance fact and asserts `count === 1`.
+// NO normalization, NO pass/fail, NO progression lives in the repository.
+// =============================================================================
+
+/** Columns a conditional DRAFT result edit may write. All are resolved by the
+ *  command; `markerId` is written only when the caller supplies it. */
+export interface DraftExamResultPatch {
+  score: number | null;
+  maxScore: number;
+  normalizedScore: number | null;
+  resultCode: string;
+  remarks?: string | null;
+  markerId?: string | null;
+}
+
+export interface UpdateDraftExamResultConditionallyParams {
+  organizationId: string;
+  id: string;
+  patch: DraftExamResultPatch;
+}
+
+export interface MarkExamResultSubmittedParams {
+  organizationId: string;
+  id: string;
+  submittedAt: Date;
+  markerId?: string | null;
+}
+
+export interface ResultsBySessionParams {
+  organizationId: string;
+  examSessionId: string;
+}

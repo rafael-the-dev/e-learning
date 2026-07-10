@@ -478,6 +478,10 @@ export const PERMISSIONS = {
   // Phase 6 — exam attendance (SEPARATE from class attendance). SECRETARY gets both.
   EXAMS_MARK_ATTENDANCE: "exams.markAttendance",
   EXAMS_CORRECT_ATTENDANCE: "exams.correctAttendance",
+  // Phase 7 — result entry. Admin-only in Phase 7 (SECRETARY has no result entry;
+  // TEACHER assignment-scoped entry/submit is deferred until session-scoping lands).
+  EXAMS_ENTER_RESULTS: "exams.enterResults",
+  EXAMS_SUBMIT_RESULTS: "exams.submitResults",
 
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",
