@@ -506,6 +506,12 @@ export const PERMISSIONS = {
   EXAMS_APPROVE_APPEAL: "exams.approveAppeal",
   EXAMS_REJECT_APPEAL: "exams.rejectAppeal",
   EXAMS_WITHDRAW_APPEAL: "exams.withdrawAppeal",
+  // Phase 11 — Grade / Progression integration boundary. Admin-only: integrating a
+  // published exam outcome into the Grade Engine (and cascading Progression) is a
+  // downstream-affecting operation, auto-granted only to SUPER_ADMIN / ORG_ADMIN via
+  // Object.values. The Examination Engine NEVER writes Grade / Progression tables
+  // directly — it calls the official Grade/Progression services via an adapter (E-13).
+  EXAMS_INTEGRATE_RESULTS: "exams.integrateResults",
 
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",

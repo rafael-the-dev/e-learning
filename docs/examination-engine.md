@@ -1224,6 +1224,103 @@ domain-event bus / Outbox.
 
 ---
 
+### Phase 11 — Implementation notes (2026-07-10)
+
+The one-way, anti-corruption **integration boundary (E-13)** that pushes an official
+published exam result into the existing **Grade** and **Progression** engines. **No
+schema / migration / Prisma change** — the whole phase is a scaffold gated behind ports.
+
+- **Only the current official PUBLISHED result integrates.** `loadOfficialResultForIntegration`
+  (read-only source) loads via `findCurrentOfficialResult` and returns `null` unless
+  `status === PUBLISHED`; the current revision is always respected through
+  `resolveOfficialExamResult` (revised score + purely re-derived normalized). The source
+  emits an **engine-neutral DTO** — ids + the resolved score / `resultCode` overlay only,
+  **no** Prisma entity / snapshot / PII / attendance internals (asserted by a "no-leak"
+  key-set test).
+- **The Grade Engine stays the single grade writer and the Progression Engine the single
+  owner.** The Examination Engine **never** writes their tables — it calls **injected ports**
+  (`ExamGradeComponentResolverPort` / `ExamGradeWritePort` / `ExamProgressionConfirmPort`).
+  Static guards forbid any `db.studentAssessmentResult` / `studentSubjectProgress` / … write
+  and any `@/modules/{grades,prerequisites,assessments,transcripts,certificates}` import in
+  the command / pure / source layers. Progression is **confirmed, not re-run** — the canonical
+  grade mutation already cascades subject→level→course, so re-triggering would double-cascade.
+- **The exam→grade-component link is NOT modeled (documented gap).** An `ExamResult` keys on
+  `levelSubjectId`, but the Grade Engine keys grades on `assessmentComponentId`; there is no
+  mapping today. The **production component resolver returns `null`**, so
+  `IntegratePublishedExamResultCommand` honestly returns **`EXAM_RESULT_INTEGRATION_UNSUPPORTED`**
+  in production and **no grade / progression write ever happens**. The gated write path is
+  fully exercised by tests injecting **fake ports**. The real write lands with a future schema
+  link + ADR (option A: an explicit `ExamResult → AssessmentComponent` mapping). The production
+  grade / progression ports themselves **throw `EXAM_RESULT_INTEGRATION_UNSUPPORTED`** today
+  (they are unreachable behind the null resolver) rather than wire a grade write against a
+  change-source the Grade Engine's `GradeChangeSource` union does not model — the sanctioned
+  adapter seam (`integrations/production-ports.ts`) is where the real bodies will replace them.
+- **Non-scored codes are UNSUPPORTED, never a silent 0.** `mapExamOutcomeToGrade` supports
+  **only** `SCORED` with a non-null score AND resolved normalized (grade = score 1:1);
+  `ABSENT` / `EXCUSED` / `DISQUALIFIED` → `NON_SCORED_OUTCOME`. There is **no** final-grade /
+  pass-fail / weighting logic in the Examination Engine (D13 unchanged; static guard).
+- **Idempotency + staleness = the append-only ExamEvent metadata ledger (no ledger table).**
+  A successful integration writes an `exam_result.integrated` / `exam_result.integration_reconciled`
+  `ExamEvent` whose JSON `metadata` carries `{ officialVersion, gradeRecordId, gradeAction,
+  progressionStatus, currentRevisionId }`. `latestIntegratedVersion` reads the aggregate's
+  events and returns the last recorded `officialVersion`; equal to the current one ⇒ the repeat
+  is **`UNCHANGED`** (no second event). `officialVersion` = `result:<id>` or
+  `result:<id>:revision:<revId>`, so a superseding appeal revision makes a prior integration
+  **STALE**.
+- **`ReconcileExamResultIntegrationCommand`** (dryRun **default true**) reports
+  `gradeState ∈ {MISSING, CURRENT, STALE, UNSUPPORTED}` × `progressionState ∈ {NOT_RUN, CURRENT,
+  REQUIRES_RECALCULATION}`. A live (`dryRun:false`) run **repairs** a `MISSING` / `STALE`
+  supported result by re-running the same grade + progression apply and writing an
+  `integration_reconciled` event; recoverable failures are **collected (sanitised) into
+  `errors[]`**, not thrown (this repairs a partial Grade-success / Progression-failure).
+- **Revision downstream chain.** `ExamResultRevision` CURRENT → grade **reconciliation** →
+  progression **cascade** → Transcript **supersession** → Certificate **STALE** — each step is
+  owned by its own engine and reached only through the owning engine's path, never a direct
+  cross-engine write from Examination.
+- **Concurrency guard.** After resolving the component, the command **re-reads** the official
+  DTO and aborts with **`OFFICIAL_RESULT_CHANGED`** if `officialVersion` moved underneath it
+  (a stale/older version can never overwrite a newer one). Missing base row ⇒
+  `OFFICIAL_RESULT_NOT_FOUND`; present-but-unpublished ⇒ `EXAM_RESULT_NOT_PUBLISHED`.
+- **Retraction is now rejected once consumed.** `RetractExamSessionPublicationCommand` checks
+  every session result's event ledger and throws **`PUBLICATION_ALREADY_CONSUMED`** if any
+  `integrated` / `integration_reconciled` event exists — we never roll Grade / Progression
+  backwards; a superseding correction goes through reconciliation. All other Phase-9 retraction
+  behaviour is unchanged.
+- **No Transcript / Certificate writes; no domain-event bus / Outbox.** The `ExamEvent` +
+  `AuditLog` pair is written INSIDE the command tx (rollback discards both); actor ids come
+  from the `ServiceContext` only (`.strict()` schemas reject any actor key). The session batch
+  (`IntegrateExamSessionResultsCommand`) delegates to the single command **per result, each in
+  its own tx** (no shared giant tx), with `stopOnFailure` + partial-success counts
+  (`total === succeeded + failed + skipped`).
+#### Limitation (v1) — the Grade target assessment component is intentionally unresolved
+
+Phase 11 delivers the **complete integration boundary** (source, ports, pure mapping, ledger,
+reconciliation, retraction guard, session batch — all test-covered). It deliberately does **not**
+resolve which Grade `assessmentComponent` an exam result feeds. A canonical
+`ExamResult → AssessmentComponent` mapping will be introduced in a **future Academic Core
+evolution** (a schema link + ADR); when it lands, only the three `production-ports.ts` bodies change.
+
+Until then:
+
+- A `SCORED` result whose target component cannot be resolved returns
+  **`EXAM_RESULT_INTEGRATION_UNSUPPORTED`**.
+- **No Grade data is written**, and no Progression cascade is triggered.
+- **No fallback heuristics are allowed.** In particular it is **FORBIDDEN** to "resolve" the
+  target by picking *the first `EXAM` component*, *the component with the highest weight*, *the
+  last component*, or any similar guess. Such a heuristic would let the Examination Engine decide
+  a Grade-domain fact and would break the domain separation (E-13: the Grade Engine is the single
+  owner of grade structure and calculation) that this engine has preserved since Phase 0. The
+  ONLY sanctioned unblock is the explicit canonical mapping above.
+
+This is a **deliberate, known limitation**, not an oversight (recorded under D1 / D14; no new ADR
+required beyond this note). Everything else in the boundary is complete and behaves correctly
+today — it simply, and honestly, refuses to guess.
+- **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅ (660 passed;
+  56 Phase-11 command tests + 7 Phase-11 architecture guards) · `eslint` (Phase-11 files) ✅ ·
+  `prisma validate` ✅.
+
+---
+
 ## 19. Resolved Decisions (closed for Phase 1)
 
 All schema-blocking decisions are **closed**. No open decision remains.
