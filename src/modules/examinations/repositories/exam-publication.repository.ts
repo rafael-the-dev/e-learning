@@ -3,7 +3,9 @@ import type { PrismaClientOrTx } from "@/server/db";
 import type {
   CreateExamPublicationInput,
   ExamPublicationRecord,
+  FindActivePublicationBySessionParams,
   ListExamPublicationsFilters,
+  MarkExamPublicationRetractedParams,
   UpdateExamPublicationMetadataInput,
 } from "@/modules/examinations/types/repository";
 
@@ -60,6 +62,8 @@ export async function createExamPublication(
       examSessionId: params.examSessionId,
       status: params.status,
       reason: params.reason ?? null,
+      publishedAt: params.publishedAt ?? null,
+      publishedById: params.publishedById ?? null,
     },
     select: publicationSelect,
   });
@@ -121,6 +125,46 @@ export async function listExamPublications(
     take: filters.take,
   });
   return rows.map(toRecord);
+}
+
+/** The single active (PUBLISHED) publication for a session, if any. Single-active
+ *  publication is enforced by this lookup (there is NO filtered-unique index) — the
+ *  Phase-9 command read-checks it, then closes the race with its conditional session
+ *  / result writes. A pure read; makes no decision. */
+export async function findActivePublicationBySession(
+  params: FindActivePublicationBySessionParams,
+  client?: PrismaClientOrTx
+): Promise<ExamPublicationRecord | null> {
+  const db = client ?? (await getDb());
+  const row = await db.examPublication.findFirst({
+    where: {
+      organizationId: params.organizationId,
+      examSessionId: params.examSessionId,
+      status: "PUBLISHED",
+    },
+    select: publicationSelect,
+  });
+  return row ? toRecord(row) : null;
+}
+
+/** Conditional PUBLISHED → RETRACTED (stamps `retractedAt` / `retractedById` /
+ *  `reason`). Only a still-PUBLISHED row matches, so a concurrently-retracted row
+ *  matches zero rows; the command asserts `count === 1`. Never deletes the row. */
+export async function markExamPublicationRetracted(
+  params: MarkExamPublicationRetractedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examPublication.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "PUBLISHED" },
+    data: {
+      status: "RETRACTED",
+      retractedAt: params.retractedAt,
+      retractedById: params.retractedById ?? null,
+      reason: params.reason,
+    },
+  });
+  return { count: res.count };
 }
 
 export interface UpdateExamPublicationMetadataParams {

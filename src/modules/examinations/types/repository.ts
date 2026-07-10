@@ -553,6 +553,11 @@ export interface CreateExamPublicationInput {
   examSessionId: string;
   status?: string;
   reason?: string | null;
+  // Phase 9 — the publish command stamps the publication provenance at creation
+  // time (both resolved from the ServiceContext / command clock, never trusted from
+  // input). Optional so the Phase-2 callers are unaffected; the repo persists verbatim.
+  publishedAt?: Date | null;
+  publishedById?: string | null;
 }
 
 export interface UpdateExamPublicationMetadataInput {
@@ -938,4 +943,60 @@ export interface ReturnExamResultToDraftParams {
   expectedStatus: string;
   /** When true, `reviewedById` / `reviewedAt` are cleared (returning from REVIEWED). */
   clearReviewMetadata: boolean;
+}
+
+// =============================================================================
+// PHASE 9 — RESULT-PUBLICATION PARAM TYPES (thin conditional-write / read)
+// -----------------------------------------------------------------------------
+// Param shapes for the Phase-9 ExamSession / ExamResult / ExamPublication
+// primitives. Each is org-scoped; the conditional writes pin the expected current
+// status in their `where` (the guard lives in the repo body) so a concurrently-
+// moved / wrong-state row matches zero rows and the caller aborts. They make NO
+// readiness / visibility decision — the command evaluates publication readiness and
+// asserts the expected `count` before / after each write.
+// =============================================================================
+
+// ─── ExamSession publication marks ──────────────────────────────────────────
+
+export interface MarkExamSessionResultsRecordedParams {
+  organizationId: string;
+  id: string;
+}
+
+export interface MarkExamSessionPublishedParams {
+  organizationId: string;
+  id: string;
+  publishedById?: string | null;
+}
+
+export interface ReturnExamSessionToResultsRecordedParams {
+  organizationId: string;
+  id: string;
+}
+
+// ─── ExamResult batch publication marks (conditional) ───────────────────────
+
+export interface MarkExamResultsPublishedConditionallyParams {
+  organizationId: string;
+  ids: string[];
+}
+
+export interface ReturnExamResultsToApprovedConditionallyParams {
+  organizationId: string;
+  ids: string[];
+}
+
+// ─── ExamPublication active-lookup + retraction mark ────────────────────────
+
+export interface FindActivePublicationBySessionParams {
+  organizationId: string;
+  examSessionId: string;
+}
+
+export interface MarkExamPublicationRetractedParams {
+  organizationId: string;
+  id: string;
+  retractedById?: string | null;
+  retractedAt: Date;
+  reason: string;
 }

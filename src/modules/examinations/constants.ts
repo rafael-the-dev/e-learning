@@ -226,6 +226,7 @@ export const ExamEventType = {
   EXAM_SESSION_STARTED: "exam_session.started",
   EXAM_SESSION_COMPLETED: "exam_session.completed",
   EXAM_SESSION_RESULTS_RECORDED: "exam_session.results_recorded",
+  EXAM_SESSION_PUBLISHED: "exam_session.published",
   EXAM_SESSION_CANCELLED: "exam_session.cancelled",
   EXAM_CANDIDATE_REGISTERED: "exam_candidate.registered",
   EXAM_CANDIDATE_WITHDRAWN: "exam_candidate.withdrawn",

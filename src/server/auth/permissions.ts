@@ -490,6 +490,13 @@ export const PERMISSIONS = {
   EXAMS_REVIEW_RESULTS: "exams.reviewResults",
   EXAMS_APPROVE_RESULTS: "exams.approveResults",
   EXAMS_RETURN_RESULTS_FOR_CORRECTION: "exams.returnResultsForCorrection",
+  // Phase 9 — result publication (the session-level visibility boundary). Admin-only:
+  // publication/retraction make APPROVED results visible to downstream consumers, so
+  // they are auto-granted only to SUPER_ADMIN / ORG_ADMIN via Object.values and never
+  // added to the SECRETARY/TEACHER explicit lists. Never trust publishedById /
+  // retractedById from input.
+  EXAMS_PUBLISH_RESULTS: "exams.publishResults",
+  EXAMS_RETRACT_PUBLICATION: "exams.retractPublication",
 
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",
