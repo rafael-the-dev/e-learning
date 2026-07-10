@@ -222,6 +222,7 @@ export const ExamEventType = {
   EXAM_CANDIDATE_DISQUALIFIED: "exam_candidate.disqualified",
   EXAM_CANDIDATE_ELIGIBILITY_OVERRIDDEN: "exam_candidate.eligibility_overridden",
   EXAM_ATTENDANCE_MARKED: "exam_attendance.marked",
+  EXAM_ATTENDANCE_CORRECTED: "exam_attendance.corrected",
   EXAM_RESULT_SUBMITTED: "exam_result.submitted",
   EXAM_RESULT_REVIEWED: "exam_result.reviewed",
   EXAM_RESULT_APPROVED: "exam_result.approved",

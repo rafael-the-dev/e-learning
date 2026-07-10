@@ -1,9 +1,11 @@
 import { getDb } from "@/server/db";
 import type { PrismaClientOrTx } from "@/server/db";
 import type {
+  AttendanceBySessionParams,
   CreateExamAttendanceInput,
   ExamAttendanceRecord,
   ListExamAttendanceFilters,
+  UpdateExamAttendanceConditionallyParams,
   UpdateExamAttendanceMetadataInput,
 } from "@/modules/examinations/types/repository";
 
@@ -121,4 +123,106 @@ export async function updateExamAttendanceMetadata(
     data: { ...params.patch },
   });
   return { count: res.count };
+}
+
+// =============================================================================
+// PHASE 6 — ATTENDANCE PRIMITIVES (thin, org-scoped; no rule / decision)
+// -----------------------------------------------------------------------------
+// A conditional correction write that pins the expected current status (a
+// concurrently-corrected row matches zero rows → `{ count: 0 }`; the command
+// asserts `count === 1`), plus read-only session-scoped roster helpers. Because
+// ExamAttendance carries no `examSessionId`, the session-scoped reads load the
+// session's candidate ids first, then the attendance rows for that id set. No
+// business rule lives here.
+// =============================================================================
+
+/** Conditional attendance correction: matches only the row whose current status
+ *  equals `expectedStatus` (per candidate, org-scoped). `checkedInAt` / `remarks`
+ *  are written only when the caller included them in `patch`. */
+export async function updateExamAttendanceConditionally(
+  params: UpdateExamAttendanceConditionallyParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examAttendance.updateMany({
+    where: {
+      organizationId: params.organizationId,
+      examCandidateId: params.examCandidateId,
+      status: params.expectedStatus,
+    },
+    data: { ...params.patch },
+  });
+  return { count: res.count };
+}
+
+/** The live candidate ids of a session (soft-deleted rows excluded). Internal
+ *  helper for the session-scoped attendance reads. */
+async function sessionCandidateIds(
+  params: AttendanceBySessionParams,
+  db: PrismaClientOrTx
+): Promise<string[]> {
+  const rows = await db.examCandidate.findMany({
+    where: {
+      organizationId: params.organizationId,
+      examSessionId: params.examSessionId,
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id as string);
+}
+
+/** Attendance rows for every candidate in a session (read-only roster). */
+export async function listAttendanceBySession(
+  params: AttendanceBySessionParams,
+  client?: PrismaClientOrTx
+): Promise<ExamAttendanceRecord[]> {
+  const db = client ?? (await getDb());
+  const ids = await sessionCandidateIds(params, db);
+  if (ids.length === 0) return [];
+  const rows = await db.examAttendance.findMany({
+    where: { organizationId: params.organizationId, examCandidateId: { in: ids } },
+    select: attendanceSelect,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+  });
+  return rows.map(toRecord);
+}
+
+/** Count of attendance rows recorded for a session's candidates (read-only). */
+export async function countAttendanceBySession(
+  params: AttendanceBySessionParams,
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  const ids = await sessionCandidateIds(params, db);
+  if (ids.length === 0) return 0;
+  return db.examAttendance.count({
+    where: { organizationId: params.organizationId, examCandidateId: { in: ids } },
+  });
+}
+
+/** REGISTERED candidate ids of a session that have NO attendance row yet — the
+ *  "still to check in" roster read. Pure read; decides nothing. */
+export async function listCandidatesWithoutAttendance(
+  params: AttendanceBySessionParams,
+  client?: PrismaClientOrTx
+): Promise<string[]> {
+  const db = client ?? (await getDb());
+  const registered = await db.examCandidate.findMany({
+    where: {
+      organizationId: params.organizationId,
+      examSessionId: params.examSessionId,
+      status: "REGISTERED",
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+  const ids = registered.map((r) => r.id as string);
+  if (ids.length === 0) return [];
+  const marked = await db.examAttendance.findMany({
+    where: { organizationId: params.organizationId, examCandidateId: { in: ids } },
+    select: { examCandidateId: true },
+  });
+  const markedIds = new Set(marked.map((r) => r.examCandidateId as string));
+  return ids.filter((id) => !markedIds.has(id));
 }

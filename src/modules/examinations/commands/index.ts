@@ -19,3 +19,6 @@ export * from "./assign-exam-invigilator.command";
 export * from "./registration-shared";
 export * from "./candidate-registration.commands";
 export * from "./candidate-status.commands";
+// Phase 6 — exam attendance (mark / correct / bulk mark). SEPARATE from class
+// attendance: records only; no results / grades / pass-fail / candidate mutation.
+export * from "./attendance.commands";

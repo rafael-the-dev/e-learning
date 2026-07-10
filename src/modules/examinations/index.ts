@@ -24,4 +24,6 @@ export * from "./services";
 export * from "./schemas/scheduling.schema";
 // Phase 5 — candidate-registration input schemas.
 export * from "./schemas/registration.schema";
+// Phase 6 — exam-attendance input schemas.
+export * from "./schemas/attendance.schema";
 export * from "./commands";
