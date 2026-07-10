@@ -35,4 +35,6 @@ export * from "./schemas/publication.schema";
 // Phase 10 — appeal workflow input schemas (create / review / approve / reject /
 // withdraw). The official-exam-result service is re-exported via `./services`.
 export * from "./schemas/appeal.schema";
+// Phase 11B — exam→grade-component binding input schemas (bind / archive).
+export * from "./schemas/binding.schema";
 export * from "./commands";

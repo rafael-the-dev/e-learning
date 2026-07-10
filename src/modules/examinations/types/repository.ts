@@ -1047,3 +1047,52 @@ export interface UpdateExamResultCurrentRevisionParams {
   id: string;
   currentRevisionId: string | null;
 }
+
+// =============================================================================
+// PHASE 11B — EXAM→GRADE-COMPONENT BINDING TYPES (ADR-014)
+// -----------------------------------------------------------------------------
+// Persistence-shaped record + thin input / lookup param types for the explicit
+// canonical binding that maps an ExamSession's results onto a Grade Engine
+// `assessmentComponentId`. `assessmentComponentId` / `createdById` are STRING
+// pointers (no FK); only `organizationId` / `examSessionId` are real FKs. Soft
+// delete via `deletedAt` (one active binding per session — filtered-unique in the
+// migration). NO grade math, NO rules — those live in the resolver / command.
+// =============================================================================
+
+export interface ExamGradeComponentBindingRecord {
+  id: string;
+  organizationId: string;
+  examSessionId: string;
+  assessmentComponentId: string;
+  createdById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+}
+
+export interface CreateExamGradeComponentBindingInput {
+  organizationId: string;
+  examSessionId: string;
+  assessmentComponentId: string;
+  createdById?: string | null;
+}
+
+export interface FindActiveBindingBySessionParams {
+  organizationId: string;
+  examSessionId: string;
+}
+
+export interface FindExamGradeComponentBindingByIdParams {
+  organizationId: string;
+  id: string;
+}
+
+export interface ListExamGradeComponentBindingsParams {
+  organizationId: string;
+  examSessionId?: string;
+}
+
+export interface ArchiveBindingParams {
+  organizationId: string;
+  id: string;
+}
