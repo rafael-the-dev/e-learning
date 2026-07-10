@@ -471,6 +471,10 @@ export const PERMISSIONS = {
   EXAMS_SCHEDULE: "exams.schedule",
   EXAMS_OVERRIDE_SCHEDULING: "exams.overrideScheduling",
   EXAMS_OPERATIONS_VIEW: "exams.operationsView",
+  // Phase 5 — candidate registration. SECRETARY gets registerCandidates (below);
+  // overrideEligibility stays admin-only (bypasses eligibility, never operational safety).
+  EXAMS_REGISTER_CANDIDATES: "exams.registerCandidates",
+  EXAMS_OVERRIDE_ELIGIBILITY: "exams.overrideEligibility",
 
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",
@@ -578,6 +582,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     // manage / override-scheduling / operations stay admin-only by default.
     PERMISSIONS.EXAMS_VIEW,
     PERMISSIONS.EXAMS_SCHEDULE,
+    PERMISSIONS.EXAMS_REGISTER_CANDIDATES,
     PERMISSIONS.STUDENT_TIMELINE_VIEW,
     PERMISSIONS.STUDENT_TIMELINE_CREATE_NOTE,
     PERMISSIONS.CLASSROOMS_VIEW,

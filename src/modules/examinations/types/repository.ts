@@ -286,6 +286,13 @@ export interface CreateExamCandidateInput {
   status?: string;
   assignedSeat?: string | null;
   eligibilitySnapshot?: string | null;
+  // Phase 5 — registration provenance columns the command resolves from the
+  // ServiceContext / engine verdict (never falsified). Optional so the Phase-2
+  // callers are unaffected; the repository persists them verbatim.
+  registeredAt?: Date | null;
+  registeredById?: string | null;
+  overriddenById?: string | null;
+  overrideReason?: string | null;
 }
 
 export interface UpdateExamCandidateMetadataInput {
@@ -784,4 +791,43 @@ export interface FindAssignmentBySessionUserParams {
   organizationId: string;
   examSessionId: string;
   userId: string;
+}
+
+// =============================================================================
+// PHASE 5 — CANDIDATE REGISTRATION PARAM TYPES (thin read / conditional write)
+// -----------------------------------------------------------------------------
+// Param shapes for the Phase-5 ExamCandidate primitives. Each is org-scoped and,
+// for the conditional writes, pins the expected current status in its `where`
+// (the guard lives in the repo body). They make NO business decision — the
+// command computes eligibility + operational blockers and asserts `count === 1`.
+// =============================================================================
+
+export interface CountActiveCandidatesBySessionParams {
+  organizationId: string;
+  examSessionId: string;
+}
+
+export interface FindActiveCandidateBySessionStudentParams {
+  organizationId: string;
+  examSessionId: string;
+  studentId: string;
+}
+
+export interface FindActiveCandidateBySessionSeatParams {
+  organizationId: string;
+  examSessionId: string;
+  assignedSeat: string;
+}
+
+export interface MarkExamCandidateWithdrawnParams {
+  organizationId: string;
+  id: string;
+  withdrawnById?: string | null;
+}
+
+export interface MarkExamCandidateDisqualifiedParams {
+  organizationId: string;
+  id: string;
+  disqualifiedById?: string | null;
+  disqualificationReason: string;
 }

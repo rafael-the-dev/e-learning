@@ -22,9 +22,17 @@ function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
-const CMD_FILES = readdirSync(CMD_DIR).filter(
-  (f) => (f.endsWith(".command.ts") || f.endsWith(".commands.ts")) && !f.endsWith(".test.ts")
-);
+// Scoped to the Phase-4 SCHEDULING sources only: the Phase-5 registration commands
+// (added later, in the same dir) legitimately run the eligibility engine and touch
+// ExamCandidate, so scanning the whole dir would false-positive. Their own guards
+// live in `candidate-registration.guards.test.ts`.
+const PHASE4_CMD_FILES = [
+  "exam-period.commands.ts",
+  "exam-room.commands.ts",
+  "exam-session.commands.ts",
+  "assign-exam-invigilator.command.ts",
+];
+const CMD_FILES = readdirSync(CMD_DIR).filter((f) => PHASE4_CMD_FILES.includes(f));
 const CMD_SRCS = CMD_FILES.map((f) => ({ file: f, code: stripComments(readFileSync(join(CMD_DIR, f), "utf8")) }));
 
 const each = (fn: (code: string, file: string) => void) => CMD_SRCS.forEach(({ code, file }) => fn(code, file));

@@ -820,6 +820,57 @@ First **mutating** phase — **scheduling only**. Delivered per ADR-013 (E-3a / 
 - **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
   (169 passed) · `eslint` ✅ · `prisma validate` ✅.
 
+### Phase 5 — Implementation notes (2026-07-10)
+
+Candidate **registration** — the first phase to WIRE the Phase-3A source + Phase-3B
+pure engine into mutating commands (manual + override; bulk auto-registration stays
+deferred per D7). No schema/migration change; no Grade/Progression/Transcript/
+Certificate/Attendance touch; no routes/UI; no domain-event bus/Outbox.
+
+- **The engine decides eligibility; the command enforces operational safety.**
+  `runRegistration` (shared core, `commands/registration-shared.ts`) calls
+  `loadExaminationEligibilityFacts` → `evaluateExaminationEligibility` verbatim (a
+  static guard asserts both imports and that NO eligibility-rule identifier —
+  attendance/prerequisite/finance/disciplinary/passing-grade — appears in the command
+  layer). The command-level operational blockers are **`SESSION_FULL` /
+  `ALREADY_REGISTERED` / `SEAT_UNAVAILABLE` / `SESSION_NOT_OPEN_FOR_REGISTRATION` /
+  `ATTEMPT_NUMBER_CONFLICT`** — none of which is an engine/constants blocker (E-3a;
+  asserted absent from the blocker vocabulary and the engine source).
+- **Normal register** (`RegisterExamCandidateCommand`, perm `exams.registerCandidates`)
+  requires the session to be **SCHEDULED**, the engine verdict **eligible**, and
+  **not `requiresApproval`** (else `ELIGIBILITY_BLOCKED` with `{ blockingReasons }` /
+  `MANUAL_APPROVAL_REQUIRED`; no candidate/attempt created).
+- **Override** (`OverrideExamCandidateEligibilityCommand`, perm
+  `exams.overrideEligibility`, **mandatory reason**) bypasses the **ELIGIBILITY verdict
+  ONLY** — never the operational blockers — allows a **SCHEDULED or LOCKED** session
+  (late registration), and records provenance in `eligibilitySnapshot`
+  (`override.overridden/overriddenBy/overrideReason/originalBlockingReasons/
+  originalRequiresApproval`) plus the `overriddenById`/`overrideReason` columns. It
+  emits **`exam_candidate.eligibility_overridden` THEN `exam_candidate.registered`**.
+- **The real engine verdict is never falsified:** an overridden candidate keeps its
+  true `ELIGIBLE`/`INELIGIBLE` `eligibilityStatus`; only the operational `status`
+  becomes `REGISTERED`.
+- **ExamAttempt is created atomically** (status `OPEN`, `attemptNumber` via
+  `getNextAttemptNumberCandidate`); a filtered-unique collision on `create` is caught
+  and re-thrown as the typed `ATTEMPT_NUMBER_CONFLICT` — an attempt is never silently
+  reused. **Capacity and seat are documented read-check race windows**, backstopped by
+  the DB indexes and a future reconciliation pass (Phase 14).
+- **Withdraw / disqualify** (`Withdraw`/`DisqualifyExamCandidateCommand`, perm
+  `exams.registerCandidates`) load the candidate org-scoped (→ NotFound) and mark it
+  via a **conditional `updateMany` pinning `status = 'REGISTERED'`**; the command
+  asserts `count === 1` (double-op / concurrently-moved ⇒ `count 0` ⇒
+  `BusinessRuleError`). Disqualify requires a reason. New repo primitives
+  (`countActiveCandidatesBySession`, `findActiveCandidateBySessionStudent/Seat`,
+  `markExamCandidateWithdrawn/Disqualified`) treat WITHDRAWN/DISQUALIFIED as inactive,
+  so re-registration after a withdrawal is allowed.
+- **`ExamEvent` (append-only) + `AuditLog` are written INSIDE the same tx** via
+  `recordExamTransition`; a rollback (failed write / lost race) discards both — proven
+  behaviourally by the fake-DB rollback test. There is **NO bus** (Phase 14). Phase-3A
+  reports `manualApproval` as UNKNOWN, so the `requiresApproval` paths are driven in
+  tests via a delegating engine spy (documented) — the source facts stay real.
+- **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
+  (223 passed) · `eslint src/modules/examinations` ✅ · `prisma validate` ✅.
+
 ---
 
 ## 19. Resolved Decisions (closed for Phase 1)

@@ -1,11 +1,20 @@
 import { getDb } from "@/server/db";
 import type { PrismaClientOrTx } from "@/server/db";
 import type {
+  CountActiveCandidatesBySessionParams,
   CreateExamCandidateInput,
   ExamCandidateRecord,
+  FindActiveCandidateBySessionSeatParams,
+  FindActiveCandidateBySessionStudentParams,
   ListExamCandidatesFilters,
+  MarkExamCandidateDisqualifiedParams,
+  MarkExamCandidateWithdrawnParams,
   UpdateExamCandidateMetadataInput,
 } from "@/modules/examinations/types/repository";
+
+/** Candidate statuses that are NOT active — a WITHDRAWN/DISQUALIFIED row frees the
+ *  seat and the single-active-candidate slot. Used only in `where` filters here. */
+const INACTIVE_CANDIDATE_STATUSES = ["WITHDRAWN", "DISQUALIFIED"] as const;
 
 // =============================================================================
 // EXAM CANDIDATE REPOSITORY (Phase 2) — persistence only
@@ -89,6 +98,10 @@ export async function createExamCandidate(
       status: params.status,
       assignedSeat: params.assignedSeat ?? null,
       eligibilitySnapshot: params.eligibilitySnapshot ?? null,
+      registeredAt: params.registeredAt ?? null,
+      registeredById: params.registeredById ?? null,
+      overriddenById: params.overriddenById ?? null,
+      overrideReason: params.overrideReason ?? null,
     },
     select: candidateSelect,
   });
@@ -229,6 +242,121 @@ export async function softDeleteExamCandidate(
   const res = await db.examCandidate.updateMany({
     where: { id: params.id, organizationId: params.organizationId, deletedAt: null },
     data: { deletedAt: new Date() },
+  });
+  return { count: res.count };
+}
+
+// =============================================================================
+// PHASE 5 — REGISTRATION PRIMITIVES (thin, org-scoped; no rule / decision)
+// -----------------------------------------------------------------------------
+// Read primitives count/find only the ACTIVE candidates (status NOT IN
+// WITHDRAWN/DISQUALIFIED, not soft-deleted) that occupy a seat / the single-active
+// slot — the registration command turns those reads into ALREADY_REGISTERED /
+// SESSION_FULL / SEAT_UNAVAILABLE decisions (E-3a). The write primitives are
+// conditional `updateMany` pinning `status = 'REGISTERED'`; the command asserts
+// `count === 1`. No business rule lives here.
+// =============================================================================
+
+/** Count the candidates that still occupy the session (REGISTERED/eligibility
+ *  states) — WITHDRAWN/DISQUALIFIED and soft-deleted rows are excluded. */
+export async function countActiveCandidatesBySession(
+  params: CountActiveCandidatesBySessionParams,
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  return db.examCandidate.count({
+    where: {
+      organizationId: params.organizationId,
+      examSessionId: params.examSessionId,
+      deletedAt: null,
+      status: { notIn: [...INACTIVE_CANDIDATE_STATUSES] },
+    },
+  });
+}
+
+/** The active candidate for (session, student), if any — distinct from the
+ *  any-live `findCandidateBySessionStudent`: a WITHDRAWN/DISQUALIFIED prior row
+ *  does not count, so re-registration after withdrawal is allowed. */
+export async function findActiveCandidateBySessionStudent(
+  params: FindActiveCandidateBySessionStudentParams,
+  client?: PrismaClientOrTx
+): Promise<ExamCandidateRecord | null> {
+  const db = client ?? (await getDb());
+  const row = await db.examCandidate.findFirst({
+    where: {
+      organizationId: params.organizationId,
+      examSessionId: params.examSessionId,
+      studentId: params.studentId,
+      deletedAt: null,
+      status: { notIn: [...INACTIVE_CANDIDATE_STATUSES] },
+    },
+    select: candidateSelect,
+  });
+  return row ? toRecord(row) : null;
+}
+
+/** The active candidate holding a given seat in a session, if any. */
+export async function findActiveCandidateBySessionSeat(
+  params: FindActiveCandidateBySessionSeatParams,
+  client?: PrismaClientOrTx
+): Promise<ExamCandidateRecord | null> {
+  const db = client ?? (await getDb());
+  const row = await db.examCandidate.findFirst({
+    where: {
+      organizationId: params.organizationId,
+      examSessionId: params.examSessionId,
+      assignedSeat: params.assignedSeat,
+      deletedAt: null,
+      status: { notIn: [...INACTIVE_CANDIDATE_STATUSES] },
+    },
+    select: candidateSelect,
+  });
+  return row ? toRecord(row) : null;
+}
+
+/** Conditional REGISTERED → WITHDRAWN mark (stamps `withdrawnAt`/`withdrawnById`).
+ *  Only a live REGISTERED row matches, so a double-withdraw returns `{ count: 0 }`. */
+export async function markExamCandidateWithdrawn(
+  params: MarkExamCandidateWithdrawnParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examCandidate.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      status: "REGISTERED",
+      deletedAt: null,
+    },
+    data: {
+      status: "WITHDRAWN",
+      withdrawnAt: new Date(),
+      withdrawnById: params.withdrawnById ?? null,
+    },
+  });
+  return { count: res.count };
+}
+
+/** Conditional REGISTERED → DISQUALIFIED mark (stamps `disqualifiedAt`/
+ *  `disqualifiedById`/`disqualificationReason`). Double-disqualify ⇒ `{ count: 0 }`. */
+export async function markExamCandidateDisqualified(
+  params: MarkExamCandidateDisqualifiedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examCandidate.updateMany({
+    where: {
+      id: params.id,
+      organizationId: params.organizationId,
+      status: "REGISTERED",
+      deletedAt: null,
+    },
+    data: {
+      status: "DISQUALIFIED",
+      disqualifiedAt: new Date(),
+      disqualifiedById: params.disqualifiedById ?? null,
+      disqualificationReason: params.disqualificationReason,
+    },
   });
   return { count: res.count };
 }
