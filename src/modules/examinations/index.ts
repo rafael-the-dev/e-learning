@@ -22,4 +22,6 @@ export * from "./types/eligibility-source";
 export * from "./services";
 // Phase 4 — scheduling input schemas + scheduling commands.
 export * from "./schemas/scheduling.schema";
+// Phase 5 — candidate-registration input schemas.
+export * from "./schemas/registration.schema";
 export * from "./commands";

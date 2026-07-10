@@ -15,3 +15,7 @@ export * from "./exam-period.commands";
 export * from "./exam-room.commands";
 export * from "./exam-session.commands";
 export * from "./assign-exam-invigilator.command";
+// Phase 5 — candidate registration (register / override / withdraw / disqualify).
+export * from "./registration-shared";
+export * from "./candidate-registration.commands";
+export * from "./candidate-status.commands";
