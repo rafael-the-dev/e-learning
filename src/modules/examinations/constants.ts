@@ -153,6 +153,16 @@ export const ExamInvigilatorRole = {
 export type ExamInvigilatorRole =
   (typeof ExamInvigilatorRole)[keyof typeof ExamInvigilatorRole];
 
+/** Result-code for an ExamResult (Phase 7). Aligns with the attendance fact:
+ *  SCORED requires a numeric score; the others require score = null. */
+export const ExamResultCode = {
+  SCORED: "SCORED",
+  ABSENT: "ABSENT",
+  EXCUSED: "EXCUSED",
+  DISQUALIFIED: "DISQUALIFIED",
+} as const;
+export type ExamResultCode = (typeof ExamResultCode)[keyof typeof ExamResultCode];
+
 /** Reasons the ExaminationEligibilityEngine (Phase 3B) blocks generation/registration.
  *  ACADEMIC/ADMINISTRATIVE only — race-sensitive operational blockers (SESSION_FULL,
  *  ALREADY_REGISTERED, room/invigilator/seat/timetable conflicts) are NOT here; they
@@ -223,6 +233,8 @@ export const ExamEventType = {
   EXAM_CANDIDATE_ELIGIBILITY_OVERRIDDEN: "exam_candidate.eligibility_overridden",
   EXAM_ATTENDANCE_MARKED: "exam_attendance.marked",
   EXAM_ATTENDANCE_CORRECTED: "exam_attendance.corrected",
+  EXAM_RESULT_CREATED: "exam_result.created",
+  EXAM_RESULT_UPDATED: "exam_result.updated",
   EXAM_RESULT_SUBMITTED: "exam_result.submitted",
   EXAM_RESULT_REVIEWED: "exam_result.reviewed",
   EXAM_RESULT_APPROVED: "exam_result.approved",

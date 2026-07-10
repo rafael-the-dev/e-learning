@@ -5,6 +5,9 @@ import type {
   ExamResultRecord,
   ExamResultRevisionRecord,
   ListExamResultsFilters,
+  MarkExamResultSubmittedParams,
+  ResultsBySessionParams,
+  UpdateDraftExamResultConditionallyParams,
   UpdateExamResultMetadataInput,
 } from "@/modules/examinations/types/repository";
 
@@ -283,4 +286,102 @@ export async function updateExamResultMetadata(
     data: { ...params.patch },
   });
   return { count: res.count };
+}
+
+// =============================================================================
+// PHASE 7 — RESULT-ENTRY PRIMITIVES (thin, org-scoped; no rule / decision)
+// -----------------------------------------------------------------------------
+// Conditional writes that pin `status = 'DRAFT'` so a SUBMITTED/REVIEWED/APPROVED/
+// PUBLISHED/INVALIDATED (or concurrently-moved) row matches zero rows →
+// `{ count: 0 }`; the command asserts `count === 1`. Because ExamResult carries no
+// `examSessionId`, the session-scoped reads resolve the session's candidate ids
+// first, then read the results for that id set. NO normalization, NO pass/fail, NO
+// business rule lives here — the caller resolves every column value.
+// =============================================================================
+
+/** Conditional DRAFT edit: writes the resolved score/maxScore/normalizedScore/
+ *  resultCode/remarks columns only when the row is still `DRAFT` (per id, org).
+ *  `markerId` is written only when the caller included it in `patch`. */
+export async function updateDraftExamResultConditionally(
+  params: UpdateDraftExamResultConditionallyParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const { patch } = params;
+  const res = await db.examResult.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "DRAFT" },
+    data: {
+      score: patch.score,
+      maxScore: patch.maxScore,
+      normalizedScore: patch.normalizedScore,
+      resultCode: patch.resultCode,
+      ...(patch.remarks !== undefined ? { remarks: patch.remarks } : {}),
+      ...(patch.markerId !== undefined ? { markerId: patch.markerId } : {}),
+    },
+  });
+  return { count: res.count };
+}
+
+/** Conditional DRAFT → SUBMITTED mark (stamps `submittedAt`; `markerId` only when
+ *  supplied). Only a still-DRAFT row matches, so a double-submit ⇒ `{ count: 0 }`. */
+export async function markExamResultSubmitted(
+  params: MarkExamResultSubmittedParams,
+  client?: PrismaClientOrTx
+): Promise<{ count: number }> {
+  const db = client ?? (await getDb());
+  const res = await db.examResult.updateMany({
+    where: { id: params.id, organizationId: params.organizationId, status: "DRAFT" },
+    data: {
+      status: "SUBMITTED",
+      submittedAt: params.submittedAt,
+      ...(params.markerId !== undefined ? { markerId: params.markerId } : {}),
+    },
+  });
+  return { count: res.count };
+}
+
+/** The live candidate ids of a session (soft-deleted rows excluded). Internal
+ *  helper for the session-scoped result reads. */
+async function sessionCandidateIds(
+  params: ResultsBySessionParams,
+  db: PrismaClientOrTx
+): Promise<string[]> {
+  const rows = await db.examCandidate.findMany({
+    where: {
+      organizationId: params.organizationId,
+      examSessionId: params.examSessionId,
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id as string);
+}
+
+/** Results for every candidate in a session (read-only roster). */
+export async function findResultsBySession(
+  params: ResultsBySessionParams,
+  client?: PrismaClientOrTx
+): Promise<ExamResultRecord[]> {
+  const db = client ?? (await getDb());
+  const ids = await sessionCandidateIds(params, db);
+  if (ids.length === 0) return [];
+  const rows = await db.examResult.findMany({
+    where: { organizationId: params.organizationId, examCandidateId: { in: ids } },
+    select: resultSelect,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+  });
+  return rows.map(toRecord);
+}
+
+/** Count of results recorded for a session's candidates (read-only). */
+export async function countResultsBySession(
+  params: ResultsBySessionParams,
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  const ids = await sessionCandidateIds(params, db);
+  if (ids.length === 0) return 0;
+  return db.examResult.count({
+    where: { organizationId: params.organizationId, examCandidateId: { in: ids } },
+  });
 }

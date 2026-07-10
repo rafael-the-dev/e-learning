@@ -22,3 +22,8 @@ export * from "./candidate-status.commands";
 // Phase 6 — exam attendance (mark / correct / bulk mark). SEPARATE from class
 // attendance: records only; no results / grades / pass-fail / candidate mutation.
 export * from "./attendance.commands";
+// Phase 7 — exam result entry (create / update-draft / submit + bulk). Records
+// official exam facts up to DRAFT/SUBMITTED ONLY: no final grade / pass-fail /
+// progression / transcript / certificate / review / approval / publication / appeal.
+export * from "./result-entry-shared";
+export * from "./result-entry.commands";

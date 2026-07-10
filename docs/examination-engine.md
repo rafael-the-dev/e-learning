@@ -928,6 +928,91 @@ migration/constants change; no routes/UI; no domain-event bus/Outbox.
 
 ---
 
+### Phase 7 — Implementation notes (2026-07-10)
+
+Exam **result entry** — records the OFFICIAL EXAM RESULT for a candidate up to
+**DRAFT / SUBMITTED ONLY**. It records exam **facts**: it does **not** calculate a
+final subject grade, decide pass/fail, touch `StudentSubject`/`Level`/`Course`
+progress, write a Transcript/Certificate, publish, review, approve, or run appeals
+(all later phases / out of scope, asserted by a static guard). **No schema / migration
+change**; it adds the `exams.enterResults` / `exams.submitResults` permissions, the
+`ExamResultCode` constant (`SCORED` / `ABSENT` / `EXCUSED` / `DISQUALIFIED`), and the
+`exam_result.created` / `exam_result.updated` event types (`exam_result.submitted`
+already existed). No routes / UI; no domain-event bus / Outbox.
+
+- **The attendance fact drives the `resultCode`** (deterministic, §9): `PRESENT` /
+  `LATE` → `SCORED` (numeric score required, `0 ≤ score ≤ maxScore`, `maxScore > 0`);
+  `ABSENT` → `ABSENT`; `EXCUSED` → `EXCUSED`; `DISQUALIFIED` → `DISQUALIFIED` (reason
+  required). Every non-`SCORED` code forces `score` **and** `normalizedScore` to
+  `null`. A client-supplied `resultCode` may only CONFIRM the derived one — a
+  mismatch is `RESULT_CODE_MISMATCH`; it is never a free choice. Attendance is
+  **never inferred**: create with no attendance row ⇒ `ATTENDANCE_NOT_MARKED`.
+- **`normalizedScore` is exam-score normalization ONLY** — `round((score / maxScore)
+  * 100)` to 2 dp (e.g. `45/60 → 75.00`). It is **not** a subject grade, carries no
+  pass/fail meaning, and feeds no progression. It lives in the command/shared layer;
+  the repository does no arithmetic (static guard: no `* 100` / `/ maxScore` /
+  `normalizeExamScore` in the repo).
+- **Create** (`CreateExamResultCommand`, perm `exams.enterResults`) requires the
+  candidate `status = REGISTERED` (else `CANDIDATE_NOT_REGISTERED`) and the session
+  **IN_PROGRESS | COMPLETED** (else `SESSION_NOT_OPEN_FOR_RESULTS`), derives the
+  facts, and creates the single **DRAFT** row. `studentId` / `enrollmentId` /
+  `examAttemptId` are copied from the candidate, `levelSubjectId` from the session —
+  never trusted from input. A **duplicate is rejected, never overwritten**
+  (`RESULT_ALREADY_EXISTS`, raised BOTH by the find-guard AND by a `P2002` on the
+  `@unique examCandidateId`). `markerId = ctx.userId`.
+- **Update-draft** (`UpdateDraftExamResultCommand`, perm `exams.enterResults`) edits
+  a **DRAFT** result only (else `RESULT_NOT_DRAFT`), re-derives the resultCode /
+  score / normalizedScore from the **current** attendance (a correction may have
+  changed it), and writes via a **conditional `updateMany` pinning status =
+  'DRAFT'**; the command asserts `count === 1` (a lost race ⇒ `count 0` ⇒
+  `RESULT_CONCURRENTLY_CHANGED`). Before/after values are preserved in the ExamEvent
+  and the audit `oldValues` / `newValues`.
+- **Submit** (`SubmitExamResultCommand`, perm `exams.submitResults`) moves **DRAFT →
+  SUBMITTED**, requiring a **COMPLETED** session (else `SESSION_NOT_COMPLETED`) and
+  an internally-consistent row (`SCORED` ⇒ score + maxScore + normalizedScore all
+  present; non-`SCORED` ⇒ score + normalizedScore null; else `RESULT_INCOMPLETE`).
+  **Submit = freeze, not recalculate:** it re-loads the **current** attendance and
+  VALIDATES that `resultCodeForAttendance(status)` still equals the draft's
+  `resultCode`; a divergence (e.g. attendance corrected `PRESENT → ABSENT` after the
+  draft, without an intervening update-draft) is rejected with `RESULT_STALE`
+  (missing attendance ⇒ `ATTENDANCE_NOT_MARKED`) — it NEVER silently re-derives or
+  mutates the draft, forcing an explicit update-draft first. It uses the same
+  conditional DRAFT pin (double-submit ⇒ `RESULT_CONCURRENTLY_CHANGED`), stamps
+  `submittedAt`, and **preserves `markerId`** — the submitter is recorded in the
+  ExamEvent / audit metadata (the schema has no `submittedById`).
+- **Post-DRAFT immutability:** the update/submit conditional writes pin status
+  `DRAFT`, so a `SUBMITTED` / `REVIEWED` / `APPROVED` / `PUBLISHED` / `INVALIDATED`
+  row matches zero rows and is rejected. There is **NO `ExamResultRevision`** logic
+  here (post-publication correction is a future phase).
+- **Bulk create / submit** (`BulkCreateExamResultsCommand` /
+  `BulkSubmitExamResultsCommand`, authorized **ONCE up-front**) are **self-contained
+  sequential runners** that re-use the single command once per item, **each in its
+  OWN transaction** — no shared tx, no re-implemented rule, and they do **NOT** import
+  the Certificate bulk runner. The **`examSessionId` contract is enforced, not
+  decorative:** each runner loads the session's live candidate ids (create) / result
+  ids (submit) ONCE up-front and fails any item that does not belong to the indicated
+  session per-item (`CANDIDATE_NOT_IN_SESSION` / `RESULT_NOT_IN_SESSION`) — it never
+  reaches the single command; a missing / soft-deleted / cross-session target is
+  treated identically. Per-item errors are captured (`{ code, message }`), never
+  thrown; unknown errors are sanitised to `INTERNAL_ERROR`. `stopOnFailure` (default
+  `false`) continues past failures; `true` skips the rest. Returns
+  `{ total, succeeded, failed, skipped, items }` with `total === succeeded + failed
+  + skipped`.
+- **Never mutates the candidate / session status** and **writes no
+  `StudentSubject`/`Level`/`Course` progress row** (both asserted behaviourally +
+  static guard). **`ExamEvent` (append-only) + `AuditLog` are written INSIDE the same
+  tx** via `recordExamTransition` (`exam_result.created` / `.updated` / `.submitted`);
+  a rollback discards both (proven by the fake-DB rollback tests). There is **NO bus**
+  (Phase 14).
+- **Teacher assignment-scoped entry is DEFERRED:** Phase 7 restricts result entry to
+  holders of `exams.enterResults` / `exams.submitResults` (admin / secretary). No
+  `teacherId` / `markerId` is ever trusted from input.
+- **Validation:** `tsc --noEmit` ✅ · `vitest run src/modules/examinations` ✅
+  (379 passed) · `eslint src/modules/examinations` ✅ · `prisma validate` ✅.
+
+---
+
+
 ## 19. Resolved Decisions (closed for Phase 1)
 
 All schema-blocking decisions are **closed**. No open decision remains.
