@@ -199,6 +199,7 @@ export const ExamEventAggregateType = {
   EXAM_APPEAL: "EXAM_APPEAL",
   EXAM_PUBLICATION: "EXAM_PUBLICATION",
   EXAM_INCIDENT: "EXAM_INCIDENT",
+  EXAM_INVIGILATOR_ASSIGNMENT: "EXAM_INVIGILATOR_ASSIGNMENT",
 } as const;
 export type ExamEventAggregateType =
   (typeof ExamEventAggregateType)[keyof typeof ExamEventAggregateType];
@@ -233,5 +234,6 @@ export const ExamEventType = {
   EXAM_PUBLICATION_PUBLISHED: "exam_publication.published",
   EXAM_PUBLICATION_RETRACTED: "exam_publication.retracted",
   EXAM_PUBLICATION_COMPLETED: "exam_publication.completed",
+  EXAM_INVIGILATOR_ASSIGNED: "exam_invigilator.assigned",
 } as const;
 export type ExamEventType = (typeof ExamEventType)[keyof typeof ExamEventType];

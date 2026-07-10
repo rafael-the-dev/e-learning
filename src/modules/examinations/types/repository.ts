@@ -685,3 +685,103 @@ export interface ListExamEventsFilters {
   skip?: number;
   take?: number;
 }
+
+// =============================================================================
+// PHASE 4 — SCHEDULING PARAM TYPES (conditional-write / read primitives)
+// -----------------------------------------------------------------------------
+// Thin param shapes for the Phase-4 repository primitives. Every conditional
+// write is org-scoped and carries the expected current status in its `where`
+// (the actual guard lives in the repo function body); these types only describe
+// the columns the caller resolves. They make NO business decision.
+// =============================================================================
+
+// ─── ExamPeriod lifecycle marks ─────────────────────────────────────────────
+
+export interface MarkExamPeriodOpenParams {
+  organizationId: string;
+  id: string;
+}
+
+export interface MarkExamPeriodLockedParams {
+  organizationId: string;
+  id: string;
+  lockedById?: string | null;
+}
+
+export interface MarkExamPeriodCompletedParams {
+  organizationId: string;
+  id: string;
+  completedById?: string | null;
+}
+
+export interface MarkExamPeriodCancelledParams {
+  organizationId: string;
+  id: string;
+  cancelledById?: string | null;
+}
+
+// ─── ExamSession lifecycle marks ────────────────────────────────────────────
+
+export interface MarkExamSessionScheduledParams {
+  organizationId: string;
+  id: string;
+}
+
+export interface MarkExamSessionLockedParams {
+  organizationId: string;
+  id: string;
+  lockedById?: string | null;
+}
+
+export interface MarkExamSessionStartedParams {
+  organizationId: string;
+  id: string;
+}
+
+export interface MarkExamSessionCompletedParams {
+  organizationId: string;
+  id: string;
+  completedById?: string | null;
+}
+
+export interface MarkExamSessionCancelledParams {
+  organizationId: string;
+  id: string;
+  cancelledById?: string | null;
+}
+
+// ─── ExamRoom archive + future-session read ─────────────────────────────────
+
+export interface ArchiveExamRoomParams {
+  organizationId: string;
+  id: string;
+}
+
+export interface FindFutureSessionsByRoomParams {
+  organizationId: string;
+  roomId: string;
+  after: Date;
+}
+
+/** Minimal projection returned by `findFutureSessionsByRoom` — enough for the
+ *  archive guard to reason about occupancy, never the full session record. */
+export interface ExamRoomFutureSessionRef {
+  id: string;
+  status: string;
+  startsAt: Date;
+  endsAt: Date;
+}
+
+// ─── ExamInvigilatorAssignment duplicate lookups ────────────────────────────
+
+export interface FindAssignmentBySessionTeacherParams {
+  organizationId: string;
+  examSessionId: string;
+  teacherId: string;
+}
+
+export interface FindAssignmentBySessionUserParams {
+  organizationId: string;
+  examSessionId: string;
+  userId: string;
+}

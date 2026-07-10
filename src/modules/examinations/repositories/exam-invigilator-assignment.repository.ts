@@ -3,6 +3,8 @@ import type { PrismaClientOrTx } from "@/server/db";
 import type {
   CreateExamInvigilatorAssignmentInput,
   ExamInvigilatorAssignmentRecord,
+  FindAssignmentBySessionTeacherParams,
+  FindAssignmentBySessionUserParams,
   ListExamInvigilatorAssignmentsFilters,
   UpdateExamInvigilatorAssignmentMetadataInput,
 } from "@/modules/examinations/types/repository";
@@ -125,6 +127,44 @@ export async function listAssignmentsBySession(
     orderBy: [{ assignedAt: "asc" }, { id: "asc" }],
   });
   return rows.map(toRecord);
+}
+
+// ─── PHASE 4 — duplicate-assignment lookups (READ-ONLY) ───────────────────────
+
+/** The existing assignment for this session + teacher, if any — the duplicate
+ *  guard read. Org-scoped, no decision (the command rejects a duplicate). */
+export async function findAssignmentBySessionTeacher(
+  params: FindAssignmentBySessionTeacherParams,
+  client?: PrismaClientOrTx
+): Promise<ExamInvigilatorAssignmentRecord | null> {
+  const db = client ?? (await getDb());
+  const row = await db.examInvigilatorAssignment.findFirst({
+    where: {
+      organizationId: params.organizationId,
+      examSessionId: params.examSessionId,
+      teacherId: params.teacherId,
+    },
+    select: assignmentSelect,
+  });
+  return row ? toRecord(row) : null;
+}
+
+/** The existing assignment for this session + user, if any — the duplicate guard
+ *  read. Org-scoped, no decision. */
+export async function findAssignmentBySessionUser(
+  params: FindAssignmentBySessionUserParams,
+  client?: PrismaClientOrTx
+): Promise<ExamInvigilatorAssignmentRecord | null> {
+  const db = client ?? (await getDb());
+  const row = await db.examInvigilatorAssignment.findFirst({
+    where: {
+      organizationId: params.organizationId,
+      examSessionId: params.examSessionId,
+      userId: params.userId,
+    },
+    select: assignmentSelect,
+  });
+  return row ? toRecord(row) : null;
 }
 
 export interface UpdateInvigilatorAssignmentMetadataParams {
