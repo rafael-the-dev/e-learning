@@ -75,13 +75,14 @@ describe("exam-period.repository", () => {
 
   it("updateExamPeriodMetadata returns count and patches columns; softDelete stamps deletedAt", async () => {
     const { fake, client } = db();
-    const r = seed(fake, "examPeriod", { organizationId: ORG, status: "DRAFT" });
+    const r = seed(fake, "examPeriod", { organizationId: ORG, status: "DRAFT", name: "Original" });
+    // H1: metadata patches carry genuine metadata only (never lifecycle `status`).
     const upd = await periodRepo.updateExamPeriodMetadata(
-      { organizationId: ORG, id: r.id as string, patch: { status: "OPEN" } },
+      { organizationId: ORG, id: r.id as string, patch: { name: "Época Renomeada" } },
       client
     );
     expect(upd.count).toBe(1);
-    expect(fake.examPeriod.__store[0].status).toBe("OPEN");
+    expect(fake.examPeriod.__store[0].name).toBe("Época Renomeada");
 
     const del = await periodRepo.softDeleteExamPeriod({ organizationId: ORG, id: r.id as string }, client);
     expect(del.count).toBe(1);
@@ -92,13 +93,13 @@ describe("exam-period.repository", () => {
 
   it("updateMetadata across tenants does not touch a foreign row", async () => {
     const { fake, client } = db();
-    const r = seed(fake, "examPeriod", { organizationId: ORG, status: "DRAFT" });
+    const r = seed(fake, "examPeriod", { organizationId: ORG, status: "DRAFT", name: "Original" });
     const res = await periodRepo.updateExamPeriodMetadata(
-      { organizationId: OTHER, id: r.id as string, patch: { status: "OPEN" } },
+      { organizationId: OTHER, id: r.id as string, patch: { name: "Época Renomeada" } },
       client
     );
     expect(res.count).toBe(0);
-    expect(fake.examPeriod.__store[0].status).toBe("DRAFT");
+    expect(fake.examPeriod.__store[0].name).toBe("Original");
   });
 });
 
@@ -271,9 +272,9 @@ describe("exam-candidate.repository", () => {
     expect(c.eligibilitySnapshot).toBe(snapshot); // raw string, never parsed
 
     expect(
-      (await candidateRepo.updateExamCandidateMetadata({ organizationId: ORG, id: c.id, patch: { status: "REGISTERED" } }, client)).count
+      (await candidateRepo.updateExamCandidateMetadata({ organizationId: ORG, id: c.id, patch: { assignedSeat: "A1" } }, client)).count
     ).toBe(1);
-    expect(fake.examCandidate.__store[0].status).toBe("REGISTERED");
+    expect(fake.examCandidate.__store[0].assignedSeat).toBe("A1");
     expect((await candidateRepo.softDeleteExamCandidate({ organizationId: ORG, id: c.id }, client)).count).toBe(1);
   });
 });
@@ -348,8 +349,10 @@ describe("exam-result.repository", () => {
   it("updateExamResultMetadata is a primitive patch returning count", async () => {
     const { fake, client } = db();
     const r = await resultRepo.createExamResult(create, client);
-    expect((await resultRepo.updateExamResultMetadata({ organizationId: ORG, id: r.id, patch: { status: "SUBMITTED", score: 90 } }, client)).count).toBe(1);
-    expect(fake.examResult.__store[0].status).toBe("SUBMITTED");
+    // H1: the metadata patch carries genuine metadata only (remarks / resultChecksum);
+    // score / status / review stamps are immutable here (E-6a).
+    expect((await resultRepo.updateExamResultMetadata({ organizationId: ORG, id: r.id, patch: { remarks: "Observação do supervisor" } }, client)).count).toBe(1);
+    expect(fake.examResult.__store[0].remarks).toBe("Observação do supervisor");
   });
 });
 
@@ -386,7 +389,9 @@ describe("exam-appeal.repository", () => {
     expect(await appealRepo.findExamAppealById({ organizationId: OTHER, id: a.id }, client)).toBeNull();
     expect(await appealRepo.listExamAppeals({ organizationId: ORG, examResultId: "res1" }, client)).toHaveLength(1);
     expect(await appealRepo.countExamAppeals({ organizationId: ORG, studentId: "s1" }, client)).toBe(1);
-    expect((await appealRepo.updateExamAppealMetadata({ organizationId: ORG, id: a.id, patch: { status: "APPROVED" } }, client)).count).toBe(1);
+    // H1: ExamAppeal exposes no mutable metadata — the patch is structurally empty
+    // (lifecycle/decision changes go through the mark* primitives).
+    expect((await appealRepo.updateExamAppealMetadata({ organizationId: ORG, id: a.id, patch: {} }, client)).count).toBe(1);
   });
 });
 

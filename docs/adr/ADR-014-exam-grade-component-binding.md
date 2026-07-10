@@ -73,7 +73,7 @@ that would make the Examination Engine decide a Grade-domain fact and break E-13
 
 | Exam `resultCode` | Grade integration |
 |---|---|
-| `SCORED` | **Supported** — score + maxScore written via the canonical Grade mutation once the session is bound. |
+| `SCORED` | **Supported** — score + maxScore written via the canonical Grade mutation once the session is bound **and the exam `maxScore` equals the bound component's `maxGrade`**. A scale mismatch is refused with `EXAM_RESULT_INTEGRATION_UNSUPPORTED` (the score is **never** rescaled/guessed). |
 | `ABSENT` | **Unsupported** — the canonical `StudentAssessmentResult` cannot represent a non-numeric outcome (only a deprecated participation sidecar can). → `EXAM_RESULT_INTEGRATION_UNSUPPORTED`. |
 | `EXCUSED` | **Unsupported** (no explicit Grade contract). |
 | `DISQUALIFIED` | **Unsupported** (no Grade representation). |

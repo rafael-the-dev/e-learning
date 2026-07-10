@@ -1,10 +1,17 @@
-# Examination Engine — Domain Design & Architecture (Phase 0)
+# Examination Engine — Domain Design & Architecture (v1.0)
 
-> **Status:** Phase 0 design **FROZEN / ready for Phase 1** (documentation only; no code,
-> schema, migration, route, or UI). Governed by
-> [ADR-013](./adr/ADR-013-examination-engine.md) (Accepted). All Phase-0 review findings
-> (H1, H2, M1–M4, L1–L4) are resolved; the open decisions are closed (§19, D1–D14).
-> **Date:** 2026-07-09
+> **Status:** **v1.0 — IMPLEMENTED & FROZEN** (2026-07-10). Phases 0–11B + 13 delivered;
+> release notes: [examination-engine-v1.0.0](./releases/examination-engine-v1.0.0.md).
+> Governed by [ADR-013](./adr/ADR-013-examination-engine.md) and
+> [ADR-014](./adr/ADR-014-exam-grade-component-binding.md) (both Accepted). The Grade /
+> Progression integration is **live and verified end-to-end against a real database** (the
+> production adapter — no fakes). Deferred beyond v1.0: **Phase 12** (portals / API layer)
+> and **Phase 14** (Outbox / operational hardening). Any structural change now requires a
+> new ADR superseding ADR-013.
+> All Phase-0 design review findings (H1, H2, M1–M4, L1–L4) and the global architecture
+> review findings (repository metadata-surface hardening H1; live integration proof H2) are
+> resolved; the open decisions are closed (§19, D1–D14).
+> **Date:** 2026-07-10 (design freeze 2026-07-09)
 > **Upstream (frozen):** Academic Core ([ADR-001](./adr/ADR-001-academic-core-freeze.md)),
 > Academic Transcript Engine, Certificate Engine ([ADR-002](./adr/ADR-002-certificate-engine-architecture.md), v1.0).
 > **Conventions inherited:** the Certificate Engine's layering (schemas → repositories →
@@ -624,23 +631,26 @@ except the Outbox; aggregates only — no PII/score/checksum leakage.
 
 ```
 Phase 0  — Domain Design (this document) — CLOSED
-Phase 1  — Data Model (Prisma) — IMPLEMENTED (2026-07-09; see notes below): incl. ExamAttempt (D12) and ExamResultRevision (D14),
+Phase 1  — Data Model (Prisma) — IMPLEMENTED (2026-07-09): incl. ExamAttempt (D12) and ExamResultRevision (D14),
            filtered-unique indexes (attemptNumber per enrollment+levelSubject; single
            current revision per result; unique active candidate per session+student)
-Phase 2  — Repositories (tenant-safe, persistence-only) + ExaminationAcademicSource ACL
-Phase 3A — ExaminationEligibilitySource
-Phase 3B — ExaminationEligibilityEngine (pure; academic/admin only — freeze E-3/E-3a/E-4/E-5)
-Phase 4  — Scheduling commands (conflicts + capacity as command-level conditional writes)
-Phase 5  — Candidate registration (manual / bulk; override; [auto — deferred D7])
-Phase 6  — Attendance
-Phase 7  — Result entry (marker submission)
-Phase 8  — Review / Approval (checksum on approve)
-Phase 9  — Publication (visibility boundary + retraction)
-Phase 10 — Appeals + ExamResultRevision (current-result supersession)
-Phase 11 — Integration with Grade / Progression (import adapter; E-13; per D1/D5/D13)
-Phase 12 — Portals / API
-Phase 13 — Bulk operations
-Phase 14 — Operational hardening
+Phase 2  — Repositories (tenant-safe, persistence-only) + ExaminationAcademicSource ACL — IMPLEMENTED
+Phase 3A — ExaminationEligibilitySource — IMPLEMENTED
+Phase 3B — ExaminationEligibilityEngine (pure; academic/admin only — E-3/E-3a/E-4/E-5) — IMPLEMENTED
+Phase 4  — Scheduling commands (conflicts + capacity as command-level conditional writes) — IMPLEMENTED
+Phase 5  — Candidate registration (manual; override; [auto — deferred D7]) — IMPLEMENTED
+Phase 6  — Attendance — IMPLEMENTED
+Phase 7  — Result entry (marker submission) — IMPLEMENTED
+Phase 8  — Review / Approval (checksum on approve) — IMPLEMENTED
+Phase 9  — Publication (visibility boundary + retraction) — IMPLEMENTED
+Phase 10 — Appeals + ExamResultRevision (current-result supersession) — IMPLEMENTED
+Phase 11 — Integration with Grade / Progression (import adapter; E-13; per D1/D5/D13) — IMPLEMENTED (write-gated)
+Phase 11B — Canonical exam→grade component binding (ADR-014) — IMPLEMENTED (integration LIVE + verified)
+Phase 13 — Bulk operations (sequential single-command runners; one tx per item) — IMPLEMENTED
+Phase 12 — Portals / API — DEFERRED (post-v1.0; no exam route/action layer yet)
+Phase 14 — Operational hardening (domain-event bus / Outbox) — DEFERRED (post-v1.0)
+
+── v1.0 release line: Phases 0–11B + 13 (2026-07-10). Phases 12 & 14 are the only deferred scope.
 ```
 
 ### Phase 1 — Implementation notes (2026-07-09)

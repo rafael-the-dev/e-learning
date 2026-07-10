@@ -56,12 +56,14 @@ export interface CreateExamPeriodInput {
   createdById?: string | null;
 }
 
+// H1 hardening (ADR-013): `status` is NOT a metadata field — lifecycle changes go
+// only through the conditional-write marks (markExamPeriod*). Removing it makes the
+// metadata helper structurally incapable of bypassing the ExamPeriod state machine.
 export interface UpdateExamPeriodMetadataInput {
   name?: string;
   academicYear?: string;
   term?: string | null;
   branchId?: string | null;
-  status?: string;
   startsAt?: Date;
   endsAt?: Date;
   lockedAt?: Date | null;
@@ -174,15 +176,15 @@ export interface CreateExamSessionInput {
   createdById?: string | null;
 }
 
+// H1 hardening (ADR-013): `status` (lifecycle), `startsAt` / `endsAt` (the exam window)
+// and `roomId` (the sitting location) are domain state, NOT metadata. They are removed
+// so the metadata helper cannot re-time, re-room, or re-state a session behind the
+// scheduling/lifecycle primitives.
 export interface UpdateExamSessionMetadataInput {
   title?: string;
-  status?: string;
-  roomId?: string | null;
   branchId?: string | null;
   courseId?: string | null;
   courseLevelId?: string | null;
-  startsAt?: Date;
-  endsAt?: Date;
   capacity?: number;
   instructions?: string | null;
   lockedAt?: Date | null;
@@ -295,9 +297,11 @@ export interface CreateExamCandidateInput {
   overrideReason?: string | null;
 }
 
+// H1 hardening (ADR-013): the operational `status` (REGISTERED / WITHDRAWN /
+// DISQUALIFIED) is lifecycle owned by the dedicated marks (markExamCandidate*) — never
+// a metadata write. Removed so this helper cannot re-state a candidate.
 export interface UpdateExamCandidateMetadataInput {
   eligibilityStatus?: string;
-  status?: string;
   assignedSeat?: string | null;
   registeredAt?: Date | null;
   registeredById?: string | null;
@@ -410,24 +414,18 @@ export interface CreateExamResultInput {
   remarks?: string | null;
 }
 
+// H1 hardening (ADR-013 / E-6a): an ExamResult's official facts are IMMUTABLE outside
+// the sanctioned lifecycle. Every scoring field (score / maxScore / normalizedScore /
+// resultCode), every review-chain stamp (markerId / reviewedById / approvedById /
+// submittedAt / reviewedAt / approvedAt), publication (publishedAt), invalidation
+// (invalidatedAt / invalidationReason), the lifecycle `status`, and the revision
+// pointer (currentRevisionId) are removed — those move ONLY through their dedicated
+// conditional-write primitives (markExamResult* / updateDraftExamResultConditionally /
+// updateExamResultCurrentRevision). Only genuine, non-lifecycle metadata remains: a
+// free-text annotation and the integration checksum.
 export interface UpdateExamResultMetadataInput {
-  score?: number | null;
-  maxScore?: number;
-  normalizedScore?: number | null;
-  status?: string;
-  resultCode?: string | null;
-  markerId?: string | null;
-  reviewedById?: string | null;
-  approvedById?: string | null;
-  submittedAt?: Date | null;
-  reviewedAt?: Date | null;
-  approvedAt?: Date | null;
-  publishedAt?: Date | null;
-  invalidatedAt?: Date | null;
-  invalidationReason?: string | null;
   remarks?: string | null;
   resultChecksum?: string | null;
-  currentRevisionId?: string | null;
 }
 
 export interface ListExamResultsFilters {
@@ -514,14 +512,14 @@ export interface CreateExamAppealInput {
   status?: string;
 }
 
-export interface UpdateExamAppealMetadataInput {
-  status?: string;
-  decision?: string | null;
-  decisionReason?: string | null;
-  decidedById?: string | null;
-  decidedAt?: Date | null;
-  closedAt?: Date | null;
-}
+// H1 hardening (ADR-013): ExamAppeal has NO mutable non-lifecycle metadata. The
+// appeal `reason` is fixed at creation; `status` and the whole decision/close record
+// (decision / decisionReason / decidedById / decidedAt / closedAt) are lifecycle owned
+// by the dedicated marks (markAppealUnderReview / markAppealApproved / markAppealRejected
+// / markAppealWithdrawn). The metadata helper is therefore structurally incapable of
+// writing any field — `Record<string, never>` rejects every non-empty patch at compile
+// time (an empty `{}` type would NOT catch excess properties).
+export type UpdateExamAppealMetadataInput = Record<string, never>;
 
 export interface ListExamAppealsFilters {
   organizationId: string;
