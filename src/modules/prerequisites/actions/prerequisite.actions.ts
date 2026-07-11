@@ -37,7 +37,6 @@ import {
 } from "@/modules/prerequisites/repositories/prerequisite-waiver.repository";
 import {
   createProgressionPolicy,
-  updateProgressionPolicy,
   findPolicyByTransition,
 } from "@/modules/prerequisites/repositories/level-progression-policy.repository";
 import { evaluateLevelProgression, promoteStudentToNextLevel } from "@/modules/prerequisites/engines/level-progression.engine";

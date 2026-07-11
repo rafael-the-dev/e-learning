@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
 import {
   Sheet,
@@ -11,7 +11,6 @@ import {
 } from "@/shared/components/ui/sheet";
 import { SubjectPrerequisitesPanel } from "@/modules/prerequisites/components/subject-prerequisites-panel";
 import { fetchLevelSubjectPrerequisitesAction } from "@/modules/prerequisites/actions/prerequisite.actions";
-import type { PrerequisiteDrawerData } from "@/modules/prerequisites/actions/prerequisite.actions";
 
 interface Props {
   open: boolean;
@@ -28,32 +27,20 @@ export function PrerequisitesDrawer({
   subjectName,
   canManage,
 }: Props) {
-  const [data, setData] = useState<PrerequisiteDrawerData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Fetch-on-open via TanStack Query (enabled: open) instead of a useEffect that
+  // sets state synchronously — the latter trips react-hooks/set-state-in-effect and
+  // causes an extra render. refetch() drives the post-mutation refresh.
+  const { data, isFetching, error, refetch } = useQuery({
+    queryKey: ["level-subject-prerequisites", levelSubjectId],
+    queryFn: async () => {
+      const res = await fetchLevelSubjectPrerequisitesAction(levelSubjectId);
+      if (!res.success) throw new Error(res.error);
+      return res.data;
+    },
+    enabled: open,
+  });
 
-  useEffect(() => {
-    if (!open) return;
-    setLoading(true);
-    setError(null);
-    fetchLevelSubjectPrerequisitesAction(levelSubjectId).then((res) => {
-      if (res.success && res.data) {
-        setData(res.data);
-      } else if (!res.success) {
-        setError(res.error);
-      }
-      setLoading(false);
-    });
-  }, [open, levelSubjectId]);
-
-  // Refresh data after mutations inside the panel
-  function handleRefresh() {
-    setLoading(true);
-    fetchLevelSubjectPrerequisitesAction(levelSubjectId).then((res) => {
-      if (res.success && res.data) setData(res.data);
-      setLoading(false);
-    });
-  }
+  const errorMessage = error instanceof Error ? error.message : null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -66,25 +53,27 @@ export function PrerequisitesDrawer({
           <SheetDescription>{subjectName}</SheetDescription>
         </SheetHeader>
 
-        {loading && (
+        {isFetching && (
           <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
             A carregar...
           </div>
         )}
 
-        {error && !loading && (
+        {errorMessage && !isFetching && (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
+            {errorMessage}
           </div>
         )}
 
-        {data && !loading && (
+        {data && !isFetching && (
           <SubjectPrerequisitesPanel
             levelSubjectId={levelSubjectId}
             groups={data.groups}
             availableLevelSubjects={data.availableLevelSubjects}
             canManage={canManage}
-            onMutate={handleRefresh}
+            onMutate={() => {
+              refetch();
+            }}
           />
         )}
       </SheetContent>

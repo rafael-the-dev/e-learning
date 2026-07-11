@@ -447,14 +447,18 @@ describe("findTeacherUpcomingDeadlines", () => {
   });
 
   it("returns deadlines sorted by date ascending across all three sources", async () => {
+    // Dates are relative to `now` (not absolute) so the test doesn't rot: the
+    // repository only surfaces UPCOMING (future) deadlines, so hard-coded calendar
+    // dates would silently be filtered out once the wall clock passes them.
+    const DAY = 24 * 60 * 60 * 1000;
     mockAssessmentFindMany.mockResolvedValue([
-      { id: "a1", title: "Teste Final", assessmentDate: new Date("2026-07-05") },
+      { id: "a1", title: "Teste Final", assessmentDate: new Date(Date.now() + 5 * DAY) },
     ]);
     mockClassGroupFindMany.mockResolvedValue([
-      { id: "cg1", name: "Turma A", endDate: new Date("2026-07-02") },
+      { id: "cg1", name: "Turma A", endDate: new Date(Date.now() + 2 * DAY) },
     ]);
     mockFindUpcomingEventsByOrganization.mockResolvedValue([
-      { id: "e1", title: "Reunião", startDate: new Date("2026-07-01") },
+      { id: "e1", title: "Reunião", startDate: new Date(Date.now() + 1 * DAY) },
     ]);
 
     const deadlines = await findTeacherUpcomingDeadlines(TEACHER, ORG);

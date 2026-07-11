@@ -6,7 +6,6 @@ import {
   type EligibilityGroupInput,
   type EligibilityPrerequisiteItemInput,
   type EligibilityStudentProgressInput,
-  type EligibilityWaiverInput,
 } from "@/modules/prerequisites/engines/subject-eligibility.engine";
 import { SUBJECT_ELIGIBILITY_STATUS } from "@/modules/prerequisites/types";
 

@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, ChevronDown, ChevronRight, Shield, AlertCircle } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
-import { Badge } from "@/shared/components/ui/badge";
 import { EmptyState } from "@/shared/components/layout/empty-state";
 import { ConfirmDialog } from "@/shared/components/feedback/confirm-dialog";
 import { toast } from "@/shared/hooks/use-toast";
@@ -18,7 +17,6 @@ import {
   PREREQUISITE_LOGIC_TYPE_LABELS,
   PREREQUISITE_REQUIREMENT_TYPE_LABELS,
 } from "@/modules/prerequisites/types";
-import type { PrerequisiteGroup } from "@/modules/prerequisites/types";
 
 interface PrerequisiteItemData {
   id: string;
@@ -85,10 +83,14 @@ export function SubjectPrerequisitesPanel({
   const [newItemRequirementType, setNewItemRequirementType] = useState("MUST_PASS");
   const [newItemMinGrade, setNewItemMinGrade] = useState("");
 
+  // Refresh after a mutation: prefer the caller's handler, else refresh the route.
+  const refresh = () => (onMutate ? onMutate() : router.refresh());
+
   function toggleGroup(id: string) {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
@@ -98,7 +100,7 @@ export function SubjectPrerequisitesPanel({
       const res = await createPrerequisiteGroupAction({ levelSubjectId, logicType });
       if (res.success) {
         toast.success("Grupo de pré-requisitos criado.");
-        onMutate ? onMutate() : router.refresh();
+        refresh();
       } else {
         toast.error(res.error ?? "Erro ao criar grupo.");
       }
@@ -110,7 +112,7 @@ export function SubjectPrerequisitesPanel({
     const res = await archivePrerequisiteGroupAction(archiveConfirmId);
     if (res.success) {
       toast.success("Grupo arquivado.");
-      onMutate ? onMutate() : router.refresh();
+      refresh();
     } else {
       toast.error(res.error ?? "Erro ao arquivar grupo.");
     }
@@ -137,7 +139,7 @@ export function SubjectPrerequisitesPanel({
         setNewItemSubject("");
         setNewItemRequirementType("MUST_PASS");
         setNewItemMinGrade("");
-        onMutate ? onMutate() : router.refresh();
+        refresh();
       } else {
         toast.error(res.error ?? "Erro ao adicionar pré-requisito.");
       }
@@ -149,7 +151,7 @@ export function SubjectPrerequisitesPanel({
     const res = await deletePrerequisiteItemAction(deleteItemConfirmId);
     if (res.success) {
       toast.success("Pré-requisito removido.");
-      onMutate ? onMutate() : router.refresh();
+      refresh();
     } else {
       toast.error(res.error ?? "Erro ao remover pré-requisito.");
     }
