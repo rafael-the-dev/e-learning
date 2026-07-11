@@ -1,10 +1,32 @@
 # BUG-PREREQ-001 — `next build` fails (Prerequisites module)
 
-- **Status:** OPEN
+- **Status:** RESOLVED (2026-07-11)
 - **Priority:** High (application build blocker)
-- **Scope:** OUTSIDE the Examination Portal (Phase 12). Do not fix as part of Phase 12.
+- **Scope:** OUTSIDE the Examination Portal (Phase 12). Fixed separately, after Phase 12.
 - **Owner:** Academic Core / Prerequisites
 - **Reported:** 2026-07-11 (during Examination Portal Phase 12, Increment 3)
+
+## Resolution
+
+**Root cause:** `services/review-progression-request.service.ts` carried a top-level
+`"use server"` directive while also exporting a **class** (`ProgressionRequestError`) and
+result interfaces. A `"use server"` module may export **only async functions** — the illegal
+non-async export made the Turbopack server-module transform yield nothing, so the importing
+`actions/prerequisite.actions.ts` saw "the module has no exports at all" and the named exports
+`approveProgressionRequest` / `rejectProgressionRequest` "didn't exist". `tsc` does not enforce
+the "use server" export rule, which is why type-check stayed green while `next build` failed.
+
+**Fix:** removed the `"use server"` directive. This file is a **service** (plain server-side
+code invoked only by the `"use server"` actions layer in `actions/prerequisite.actions.ts`),
+not a server-actions entrypoint, so it should never have been a server-actions module. One-line
+change; no behaviour change, no schema/migration change. It was also the only `"use server"`
+file under `prerequisites/services` + `prerequisites/engines` (the rest are correctly plain
+modules).
+
+**Validation after fix:** `next build` ✓ (exit 0) · `tsc --noEmit` ✓ (0) ·
+`vitest run` ✓ **3976/3977** (the single failure is the unrelated, pre-existing,
+date-relative `teacher-portal.repository.test.ts` deadline-ordering test — its fixtures use
+absolute past dates) · `eslint` on the changed file ✓ (clean). No examination files involved.
 
 ## Summary
 
