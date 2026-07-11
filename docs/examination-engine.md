@@ -1461,3 +1461,196 @@ All schema-blocking decisions are **closed**. No open decision remains.
   ADR-006; snapshot immutability ADR-005; downstream staleness reuses ADR-009.
 
 **Phase 1 Data Model may start.** The architecture is **frozen**; changes require a new ADR.
+
+---
+
+## Phase 12 — Examination Administration Portal
+
+Consumer layer over the frozen v1.0 engine. **The portal never owns business logic** —
+routes and pages consume commands, read services, DTOs and server-computed
+`allowedActions`. Lifecycle, eligibility, attendance/result consistency, publication
+readiness, appeal rules and Grade-integration rules are NOT duplicated here. No schema /
+migration / engine-rule change.
+
+**Route convention (deviation from the request spec, intentional):** the spec suggested
+`/organizations/[organizationId]/examinations/…`, but this project resolves `organizationId`
+**server-side only** (`@/server/auth/context` — "never accept organizationId from client
+input for tenant queries"). The portal therefore uses the real convention: pages under the
+`(org)` group (`src/app/(org)/examinations/**`) and routes under `src/app/api/examinations/**`,
+tenant from `requireOrganization()`.
+
+### Delivery increments
+
+- **Increment 1 — safe backend spine (IMPLEMENTED):** DTO/allowedActions contract
+  (`types/portal.ts`), typed-error→HTTP + filter parsing (`lib/portal-http.ts`), the pure
+  `allowedActions` mapper (`services/admin/examination-portal.mapper.ts`), read services +
+  thin API routes for **Periods, Sessions and the admin Overview**, architecture guards +
+  read-service/mapper tests, and this section. `tsc` 0 · `vitest src/modules/examinations`
+  760/760 (28 files) · `eslint` 0 · `prisma validate` ✓.
+- **Increment 2 — remaining read services + routes:** Rooms, Candidates, Attendance,
+  Results, Publication, Appeals, Grade-Integration, Operations, on the identical pattern.
+- **Increment 3 — React UI:** nav wiring, overview dashboard, per-section pages and the
+  shared components (`ExaminationStatusBadge`, `Exam*Actions`, `ExamPublicationReadinessCard`,
+  `ExamIntegrationStatusCard`, `AllowedActionButton`, empty/error states).
+
+### Read services (`src/modules/examinations/services/admin/`)
+
+Org-scoped, permission-aware (`exams.view`), paginated, batched (no N+1), **read-only** — no
+commands, no writes, no business decisions, no raw Prisma entities.
+
+| Service | Surface |
+|---|---|
+| `ExaminationAdminOverviewService` | dashboard KPIs — fixed set of tenant-scoped status COUNTS (periods / sessions / results / appeals). Cross-entity watchlists (conflicts, stale integrations, missing attendance) are deferred to the Operations service (increment 2). |
+| `ExamPeriodAdminReadService` | period list (filter: status / academicYear) + detail (with `sessionCount`) |
+| `ExamSessionAdminReadService` | session list (filter: period / levelSubject / room / status) + detail (bounded roster/attendance/result counters) |
+
+### API routes (`src/app/api/examinations/`) — thin transport shells
+
+`GET|POST /periods`, `GET /periods/:id`, `POST /periods/:id/{open,lock,complete,cancel}`;
+`GET|POST /sessions`, `GET /sessions/:id`, `POST /sessions/:id/{schedule,lock,start,complete,cancel}`;
+`GET /operations/overview`. Each route: `requireOrganization()` (→401), delegate to a read
+service (GET) or command (POST), map typed errors via `mapExaminationError`. Routes import no
+repositories, no Prisma; commands/services enforce authorization + rules.
+
+### allowedActions (server-computed)
+
+Every list-item / detail DTO carries an `allowedActions` block derived purely from
+**permissions × entity status** (mirrors the command state machines). The UI renders these
+flags; it never re-derives a rule, and a `true` flag never authorizes — the command
+re-validates. Period: `canOpen/canLock/canComplete/canCancel`. Session:
+`canSchedule/canLock/canStart/canComplete/canCancel/canRegisterCandidate/canMarkAttendance/
+canEnterResults/canPublish/canRetract/canBindGradeComponent/canIntegrate`.
+
+### Error mapping (`mapExaminationError`)
+
+401 (auth, at route) · 403 `AuthorizationError` · 404 `NotFoundError`/cross-tenant · 409
+`ConcurrencyError` + conflict-coded `BusinessRuleError` (`*_CONCURRENTLY_CHANGED`,
+`*_ALREADY_EXISTS/CONSUMED`, `SEAT_UNAVAILABLE`, `SESSION_FULL`, …) · 422 other
+`BusinessRuleError`/`ValidationError` (business readiness) · 500 sanitised. Never leaks
+Prisma/SQL/stack/raw metadata.
+
+### Privacy boundaries
+
+Explicit DTOs only. Never exposed: raw Prisma entities, `eligibilitySnapshot`,
+`ExamEvent.metadata` / `AuditLog` blobs, Grade/Transcript/Certificate internals, checksums,
+storage paths. Enforced by static architecture guards (`services/admin/__tests__/
+portal-architecture-guards.test.ts`): routes import no repositories / no Prisma; read
+services import no commands and perform no writes; the mapper is pure; the portal reaches no
+Transcript/Certificate and surfaces no `eligibilitySnapshot`.
+
+### Deferred
+
+Teacher, Student and Guardian portals are **out of scope** for Phase 12 (admin/secretary
+only). The Grade-Integration UI (increment 3) exposes bind/integrate/reconcile status only —
+**no Transcript/Certificate controls**, no heuristic component suggestion.
+
+### Increment 2 — Remaining backend administration surface (IMPLEMENTED)
+
+The full remaining backend surface, on the Increment-1 pattern (thin routes → read
+service/command → `mapExaminationError`; read services `assertCanView(exams.view)`,
+tenant-scoped, batched, no writes; server-computed `allowedActions`; no engine rule
+duplicated). No schema/migration/UI change. `tsc` 0 · `vitest src/modules/examinations`
+**805/805 (36 files)** · `eslint` 0 · `prisma validate` ✓.
+
+**Read services** (`services/admin/`): `ExamRoomAdminReadService`,
+`ExamCandidateAdminReadService`, `ExamAttendanceAdminReadService`,
+`ExamResultAdminReadService`, `ExamPublicationAdminReadService`,
+`ExamAppealAdminReadService`, `ExamIntegrationAdminReadService`,
+`ExaminationOperationsReadService`. New batched read-model repository
+`repositories/exam-admin-read.repository.ts` (the only new Prisma layer; read-only,
+tenant-scoped, minimal-select, batched — display enrichment + projections + conflict/
+health detection; excluded from the frozen-engine repo-purity guards by design).
+
+**Routes** (`app/api/examinations/`): rooms (list/create, detail/patch, archive);
+session candidates (list, register, override) + candidate detail/withdraw/disqualify;
+attendance (roster, mark, correct, bulk); results (session list, detail/patch, create,
+submit/review/approve/return-for-correction); publication (readiness, state, publish,
+retract); appeals (list, detail, review/approve/reject); grade-binding (get/bind),
+integration-status, result integrate/reconcile; operations conflicts + integration-health.
+
+**Reuse (no duplicated rules):** publication readiness → `evaluatePublicationReadiness`;
+official result → `resolveOfficialExamResult`; integration ledger →
+`latestIntegratedVersion` / `gradeStateFor` / `mapExamOutcomeToGrade`; consumption →
+`isSessionConsumed`. Grade binding is EXPLICIT only (no heuristic / first-component
+fallback); maxScore≠maxGrade and non-scored outcomes are represented honestly
+(UNSUPPORTED). Operations is DETECTION only (never mutates).
+
+**Privacy:** `eligibilitySnapshot` is parsed into an allowlisted provenance
+(blockers/warnings/requiresApproval/override facts) and NEVER surfaced raw; no
+ExamEvent.metadata / AuditLog / Grade-entity / document-number leakage — enforced by the
+portal architecture guards + per-service privacy tests.
+
+**Error mapping:** `mapExaminationError` — 401 (route) · 403 · 404 · **409** (Concurrency +
+conflict-coded BusinessRule) · 422 (readiness/validation/unsupported) · 500 (sanitised).
+
+**Increment-2 known filter push-down gap (documented):** the org-wide appeal list
+DB-filters `status` + `studentId` + pagination; `examSessionId` / `levelSubjectId` /
+`createdFrom/To` / `search` are accepted but not yet DB-pushed (the frozen appeal
+repository indexes status/studentId only). Session-scoped lists (candidates / attendance /
+results) filter every field in-memory over the bounded roster (no N+1).
+
+**Still deferred to Increment 3:** all React pages, client components, and nav wiring.
+Phase 12 remains OPEN until Increment 3.
+
+### Increment 3 — Admin Portal UI (COMPLETE)
+
+React UI over the frozen backend. **The frontend decides nothing** — it renders the
+server-computed `allowedActions`, never a status comparison, and always surfaces the
+command's typed error (the backend is authoritative). Pages are server components that
+guard (`requirePermissionOrRedirect`) + call the read services, and pass privacy-safe DTOs
+to client components; mutations POST to the thin `/api/examinations/**` routes and toast the
+command's error. Enforced by a UI architecture guard (`components/__tests__/
+ui-architecture-guards.test.ts`): no status-literal comparison in any component/page, and no
+repository / `@/server/db` import.
+
+**Reusable component library** (`src/modules/examinations/components/`):
+`ExaminationStatusBadge` (+ `ResultStatusBadge` / `CandidateStatusBadge` / `AppealStatusBadge`),
+`AllowedActionButton` (interprets one `allowedActions` flag → API call → error toast; optional
+confirm / mandatory-reason dialog), `ExaminationPageHeader`, `ExaminationKpiCard`,
+`ExaminationSummaryCard`, `PublicationReadinessCard`, `IntegrationStatusCard`,
+`ExaminationDataTable`, `ExaminationEmptyState`, `ExaminationErrorState` — the small library
+the spec scoped; no second design system.
+
+**Delivered & verified (Part A):** nav entry (`exams.view`); examinations area layout +
+secondary nav; **Dashboard** (consumes only `ExaminationAdminOverviewService` — KPIs,
+summaries, alerts, quick actions; no recalculation); **Periods** section end-to-end (server
+page → read service → `PeriodsTable` client → open/lock/complete/cancel via
+`AllowedActionButton` → API + toast) as the full exemplar of the allowedActions pattern.
+`tsc` 0 · `vitest src/modules/examinations` **809/809 (37 files)** · `eslint` 0. (No jsdom
+test env in this repo, so component behaviour is covered by the static UI guard + type-check,
+not render tests.)
+
+**Delivered & verified (Part B):**
+- **Rooms** — server page → `examRoomAdminReadService.list` → `RoomsTable`; create/edit via
+  `RoomFormDialog` (gated on `exams.schedule`); archive via `AllowedActionButton`.
+- **Sessions** — list page (`SessionsTable`, "Gerir" → detail) + create via
+  `SessionFormDialog` (gated on `exams.schedule`).
+- **Session detail** (`sessions/[id]`) — 7 tabs over batched, session-scoped read services:
+  *Visão geral* (session summary + lifecycle actions: schedule/lock/start/complete/cancel,
+  all `allowedActions`-gated); *Candidatos* (`CandidatesTab` — register / register-with-override
+  / withdraw / disqualify); *Assiduidade* (`AttendanceTab` — roster + summary KPIs + mark /
+  correct, single mark via the bulk endpoint); *Resultados* (`ResultsTab` — create / edit draft +
+  submit / review / approve / return, official-result overlay, normalized score labelled
+  **"Percentagem do exame"**, never "Nota Final"); *Publicação* (`PublicationReadinessCard`);
+  *Integração* (`IntegrationStatusCard`); *Atividade* (honest empty state — no activity read
+  service is exposed by the frozen engine).
+- **Appeals** — list page (`AppealsTable` — review + link to detail) + detail page
+  (`appeals/[id]`) with the **original → current-official** visual comparison (append-only
+  revisions listed; the published original is never overwritten) and `AppealDecisionPanel`
+  (review / approve-with-revised-score / reject).
+- **Operations** (`exams.operationsView`) — detection-only: Scheduling (sessions without
+  room / invigilators / over capacity / outside period window), Conflicts (room + invigilator),
+  Integration Health KPIs.
+- **Periods** — create via `PeriodFormDialog` added to the Part-A exemplar.
+
+Component library additions used by Part B: `CandidatesTab`, `AttendanceTab`, `ResultsTab`,
+`AppealsTable`, `AppealDecisionPanel`, `SessionsTable`, `RoomsTable`, `RoomFormDialog`,
+`PeriodFormDialog`, `SessionFormDialog`, `PeriodsTable` (all client) — each interprets
+server-computed `allowedActions` and surfaces the command's typed error; no status branching
+for permissions. Entity pickers for register / session-create are id-based (a picker UI is a
+future enhancement, noted here — behaviour is unaffected: the commands validate every id).
+
+`tsc` 0 · `vitest src/modules/examinations` **809/809 (37 files, incl. the UI architecture
+guard)** · `eslint` 0. **Phase 12 is COMPLETE.** (The repo-wide `next build` still fails on the
+pre-existing, unrelated prerequisites circular import tracked in `docs/bugs/BUG-PREREQ-001.md`;
+it is outside the Examination Portal's scope.)

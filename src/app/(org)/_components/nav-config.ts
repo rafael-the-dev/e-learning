@@ -150,6 +150,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         requiredPermission: "assessments.view",
       },
       {
+        href: "/examinations",
+        label: "Exames",
+        iconName: "FileText",
+        requiredPermission: "exams.view",
+      },
+      {
         href: "/grades",
         label: "Notas",
         iconName: "PenLine",

@@ -4,6 +4,44 @@ All notable, release-level changes to the platform are recorded here. The format
 on [Keep a Changelog](https://keepachangelog.com/). Per-engine release notes live under
 [`docs/releases/`](docs/releases/).
 
+## [examination-portal-v1.0] — 2026-07-11
+
+**Examination Administration Portal (Phase 12) — IMPLEMENTED.** The admin/secretary portal
+(API layer, read services and React UI) over the **frozen** engine backend. No engine
+behaviour, schema or migration changed. Full notes:
+[docs/releases/examination-portal-v1.0.0.md](docs/releases/examination-portal-v1.0.0.md).
+
+### Added
+- **Backend spine** — privacy-safe DTOs with server-computed `allowedActions`
+  (`types/portal.ts`); pure mapper; batched tenant-scoped read-model repository (no N+1); 11
+  admin read services; ~50 thin API routes under `app/api/examinations/**` (auth → read service
+  (GET) / command (POST/PATCH) → `mapExaminationError`; org resolved server-side, never from URL).
+- **React UI** — Dashboard, Periods, Rooms, Sessions (+ 7-tab detail: Overview / Candidates /
+  Attendance / Results / Publication / Integration / Activity), Appeals (list + original→official
+  comparison), and Operations (detection-only conflicts + integration health).
+- **Component library** — `AllowedActionButton` (the single flag→button→error-toast primitive),
+  status badges, KPI/summary cards, `PublicationReadinessCard`, `IntegrationStatusCard`,
+  `ExaminationDataTable`, section tables/dialogs. No new permissions (reuses the 22 `exams.*`).
+
+### Invariants
+- **The frontend decides nothing** — every action is gated by a server-computed `allowedActions`
+  flag, never a status comparison; the command's typed error is always surfaced. Enforced by a
+  static UI architecture guard (no status-literal compare, no repository / `@/server/db` import
+  in any component/page).
+- No route/DTO exposes `eligibilitySnapshot`, `ExamEvent.metadata`, audit blobs, or
+  Transcript/Certificate/Grade internals; the normalized score is labelled "Percentagem do
+  exame", never "Nota Final".
+
+### Known limitations (future — behaviour unaffected)
+- Register-candidate / create-session use id-based references (picker UI deferred; commands
+  still validate every id). No Teacher/Student/Guardian exam portals.
+
+### Validation
+- `tsc --noEmit` ✓ (0) · `vitest run src/modules/examinations` ✓ (809/37, incl. UI guard) ·
+  `eslint` ✓ (0) · `prisma validate` ✓. No schema/migration change.
+- The repo-wide `next build` fails only on the pre-existing, unrelated prerequisites circular
+  import ([BUG-PREREQ-001](docs/bugs/BUG-PREREQ-001.md)) — out of scope.
+
 ## [examination-engine-v1.0] — 2026-07-10
 
 **Examination Engine v1.0 — IMPLEMENTED & FROZEN.** Full official exam lifecycle as a
