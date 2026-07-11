@@ -92,6 +92,12 @@ const REGISTRIES = {
 
 export type ExaminationBadgeKind = keyof typeof REGISTRIES;
 
+/** Value→PT-PT label options for a status vocabulary, for filter selects. Keeps the
+ *  filter labels identical to the badges (single source of truth). */
+export function getStatusOptions(kind: ExaminationBadgeKind): Array<{ value: string; label: string }> {
+  return Object.entries(REGISTRIES[kind]).map(([value, entry]) => ({ value, label: entry.label }));
+}
+
 export function ExaminationStatusBadge({
   kind,
   status,

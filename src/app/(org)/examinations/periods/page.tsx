@@ -6,6 +6,8 @@ import { examPeriodAdminReadService } from "@/modules/examinations/services/admi
 import { ExaminationPageHeader } from "@/modules/examinations/components/examination-page-header";
 import { PeriodsTable } from "@/modules/examinations/components/periods-table";
 import { PeriodFormDialog } from "@/modules/examinations/components/period-form-dialog";
+import { ExaminationFilterBar } from "@/modules/examinations/components/examination-filter-bar";
+import { getStatusOptions } from "@/modules/examinations/components/status-badges";
 
 export const metadata = { title: "Exames — Períodos" };
 
@@ -33,6 +35,10 @@ export default async function ExamPeriodsPage({
         title="Períodos de Exame"
         description="Gerir os períodos de exame da organização."
         actions={canManage ? <PeriodFormDialog trigger={<Button size="sm">Novo período</Button>} /> : undefined}
+      />
+      <ExaminationFilterBar
+        showSearch={false}
+        selects={[{ param: "status", label: "Estado", options: getStatusOptions("period") }]}
       />
       <PeriodsTable
         items={result.items}

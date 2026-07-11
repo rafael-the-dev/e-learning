@@ -6,6 +6,8 @@ import { examSessionAdminReadService } from "@/modules/examinations/services/adm
 import { ExaminationPageHeader } from "@/modules/examinations/components/examination-page-header";
 import { SessionsTable } from "@/modules/examinations/components/sessions-table";
 import { SessionFormDialog } from "@/modules/examinations/components/session-form-dialog";
+import { ExaminationFilterBar } from "@/modules/examinations/components/examination-filter-bar";
+import { getStatusOptions } from "@/modules/examinations/components/status-badges";
 
 export const metadata = { title: "Exames — Sessões" };
 
@@ -33,6 +35,10 @@ export default async function ExamSessionsPage({
         title="Sessões de Exame"
         description="Gerir as sessões e o seu ciclo de vida."
         actions={canManage ? <SessionFormDialog trigger={<Button size="sm">Nova sessão</Button>} /> : undefined}
+      />
+      <ExaminationFilterBar
+        showSearch={false}
+        selects={[{ param: "status", label: "Estado", options: getStatusOptions("session") }]}
       />
       <SessionsTable items={result.items} page={result.page} pageSize={result.pageSize} total={result.total} />
     </div>
