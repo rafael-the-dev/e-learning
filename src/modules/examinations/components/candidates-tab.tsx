@@ -18,6 +18,7 @@ import type { ExamCandidateListItemDto } from "@/modules/examinations/types/port
 import { CandidateStatusBadge, ExaminationStatusBadge } from "./status-badges";
 import { ExaminationDataTable, type ExaminationColumn } from "./examination-data-table";
 import { AllowedActionButton } from "./allowed-action-button";
+import { StudentLookup, EnrollmentLookup } from "./entity-lookups";
 
 // Register / register-with-override. Override records the acting user + reason and NEVER
 // hides that the candidate was originally ineligible (the eligibility verdict is stored
@@ -28,9 +29,20 @@ function RegisterDialog({ sessionId, levelSubjectId, override }: { sessionId: st
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [studentId, setStudentId] = useState("");
+  const [studentLabel, setStudentLabel] = useState<string | null>(null);
   const [enrollmentId, setEnrollmentId] = useState("");
+  const [enrollmentLabel, setEnrollmentLabel] = useState<string | null>(null);
   const [assignedSeat, setAssignedSeat] = useState("");
   const [reason, setReason] = useState("");
+
+  function reset(): void {
+    setStudentId("");
+    setStudentLabel(null);
+    setEnrollmentId("");
+    setEnrollmentLabel(null);
+    setAssignedSeat("");
+    setReason("");
+  }
 
   async function submit(): Promise<void> {
     setLoading(true);
@@ -47,6 +59,7 @@ function RegisterDialog({ sessionId, levelSubjectId, override }: { sessionId: st
         return;
       }
       toast({ title: override ? "Candidato inscrito (override)" : "Candidato inscrito" });
+      reset();
       setOpen(false);
       router.refresh();
     } catch {
@@ -71,8 +84,31 @@ function RegisterDialog({ sessionId, levelSubjectId, override }: { sessionId: st
               O override ignora apenas a elegibilidade académica. O veredito real é preservado e auditado.
             </p>
           )}
-          <div className="space-y-1"><Label htmlFor="c-student">ID do aluno</Label><Input id="c-student" value={studentId} onChange={(e) => setStudentId(e.target.value)} /></div>
-          <div className="space-y-1"><Label htmlFor="c-enroll">ID da matrícula</Label><Input id="c-enroll" value={enrollmentId} onChange={(e) => setEnrollmentId(e.target.value)} /></div>
+          <div className="space-y-1">
+            <Label>Aluno</Label>
+            <StudentLookup
+              value={studentId || null}
+              selectedLabel={studentLabel}
+              onChange={(v, item) => {
+                setStudentId(v ?? "");
+                setStudentLabel(item?.label ?? null);
+                setEnrollmentId("");
+                setEnrollmentLabel(null);
+              }}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Matrícula</Label>
+            <EnrollmentLookup
+              studentId={studentId || null}
+              value={enrollmentId || null}
+              selectedLabel={enrollmentLabel}
+              onChange={(v, item) => {
+                setEnrollmentId(v ?? "");
+                setEnrollmentLabel(item?.label ?? null);
+              }}
+            />
+          </div>
           <div className="space-y-1"><Label htmlFor="c-seat">Lugar (opcional)</Label><Input id="c-seat" value={assignedSeat} onChange={(e) => setAssignedSeat(e.target.value)} /></div>
           {override && (
             <div className="space-y-1"><Label htmlFor="c-reason">Motivo do override</Label><Textarea id="c-reason" value={reason} onChange={(e) => setReason(e.target.value)} /></div>

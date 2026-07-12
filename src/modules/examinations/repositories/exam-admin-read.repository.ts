@@ -452,6 +452,129 @@ export async function listAssignableTeachers(
   return rows.map((t) => ({ teacherId: t.id, name: `${t.firstName} ${t.lastName}`.trim() }));
 }
 
+// ─── Entity lookups for the pickers (capped, name-first, tenant-scoped) ────────
+// Read-only, minimal-select, TAKE-capped searches that power EntityLookupCombobox.
+// SQL Server `contains` is collation-driven (no `mode: insensitive` on this connector),
+// mirroring the existing room search.
+
+const LOOKUP_TAKE = 20;
+
+export interface StudentLookupRow {
+  id: string;
+  code: string | null;
+  name: string;
+}
+export async function lookupStudents(
+  organizationId: string,
+  query: string,
+  client?: PrismaClientOrTx
+): Promise<StudentLookupRow[]> {
+  const db = client ?? (await getDb());
+  const q = query.trim();
+  const rows = await db.student.findMany({
+    where: {
+      organizationId,
+      deletedAt: null,
+      ...(q ? { OR: [{ firstName: { contains: q } }, { lastName: { contains: q } }, { code: { contains: q } }] } : {}),
+    },
+    select: { id: true, code: true, firstName: true, lastName: true },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    take: LOOKUP_TAKE,
+  });
+  return rows.map((r) => ({ id: r.id, code: r.code, name: `${r.firstName} ${r.lastName}`.trim() }));
+}
+
+export interface EnrollmentLookupRow {
+  id: string;
+  enrollmentNumber: string | null;
+  courseName: string;
+  status: string;
+}
+export async function lookupEnrollmentsForStudent(
+  organizationId: string,
+  studentId: string,
+  client?: PrismaClientOrTx
+): Promise<EnrollmentLookupRow[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.enrollment.findMany({
+    where: { organizationId, studentId, deletedAt: null },
+    select: { id: true, enrollmentNumber: true, status: true, course: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+    take: LOOKUP_TAKE,
+  });
+  return rows.map((r) => ({ id: r.id, enrollmentNumber: r.enrollmentNumber, courseName: r.course?.name ?? "—", status: r.status }));
+}
+
+export interface RoomLookupRow {
+  id: string;
+  name: string;
+  code: string | null;
+}
+export async function lookupRooms(
+  organizationId: string,
+  query: string,
+  client?: PrismaClientOrTx
+): Promise<RoomLookupRow[]> {
+  const db = client ?? (await getDb());
+  const q = query.trim();
+  return db.examRoom.findMany({
+    where: { organizationId, status: "ACTIVE", ...(q ? { OR: [{ name: { contains: q } }, { code: { contains: q } }] } : {}) },
+    select: { id: true, name: true, code: true },
+    orderBy: { name: "asc" },
+    take: LOOKUP_TAKE,
+  });
+}
+
+export interface LevelSubjectLookupRow {
+  id: string;
+  subjectName: string;
+  levelName: string;
+  courseName: string;
+}
+export async function lookupLevelSubjects(
+  organizationId: string,
+  query: string,
+  client?: PrismaClientOrTx
+): Promise<LevelSubjectLookupRow[]> {
+  const db = client ?? (await getDb());
+  const q = query.trim();
+  const rows = await db.levelSubject.findMany({
+    where: { organizationId, deletedAt: null, status: "ACTIVE", ...(q ? { subject: { name: { contains: q } } } : {}) },
+    select: {
+      id: true,
+      subject: { select: { name: true } },
+      courseLevel: { select: { name: true, course: { select: { name: true } } } },
+    },
+    take: LOOKUP_TAKE,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    subjectName: r.subject?.name ?? "—",
+    levelName: r.courseLevel?.name ?? "",
+    courseName: r.courseLevel?.course?.name ?? "",
+  }));
+}
+
+export interface PeriodLookupRow {
+  id: string;
+  name: string;
+  academicYear: string;
+}
+export async function lookupPeriods(
+  organizationId: string,
+  query: string,
+  client?: PrismaClientOrTx
+): Promise<PeriodLookupRow[]> {
+  const db = client ?? (await getDb());
+  const q = query.trim();
+  return db.examPeriod.findMany({
+    where: { organizationId, deletedAt: null, ...(q ? { OR: [{ name: { contains: q } }, { academicYear: { contains: q } }] } : {}) },
+    select: { id: true, name: true, academicYear: true },
+    orderBy: { createdAt: "desc" },
+    take: LOOKUP_TAKE,
+  });
+}
+
 export interface SessionCandidateCount {
   examSessionId: string;
   activeCount: number;

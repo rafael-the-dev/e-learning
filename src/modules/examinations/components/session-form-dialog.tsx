@@ -13,16 +13,20 @@ import {
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { toast } from "@/shared/hooks/use-toast";
+import { PeriodLookup, LevelSubjectLookup, RoomLookup } from "./entity-lookups";
 
-// Create a DRAFT exam session. Period / level-subject / room are referenced by id (pickers
-// are a future enhancement). The command validates the window, capacity and references.
+// Create a DRAFT exam session. Period / level-subject / room are chosen with searchable
+// pickers. The command validates the window, capacity and references.
 export function SessionFormDialog({ trigger }: { trigger: React.ReactNode }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [periodId, setPeriodId] = useState("");
+  const [periodLabel, setPeriodLabel] = useState<string | null>(null);
   const [levelSubjectId, setLevelSubjectId] = useState("");
+  const [levelSubjectLabel, setLevelSubjectLabel] = useState<string | null>(null);
   const [roomId, setRoomId] = useState("");
+  const [roomLabel, setRoomLabel] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
@@ -67,10 +71,19 @@ export function SessionFormDialog({ trigger }: { trigger: React.ReactNode }) {
           <DialogTitle>Nova sessão de exame</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="space-y-1"><Label htmlFor="s-period">ID do período</Label><Input id="s-period" value={periodId} onChange={(e) => setPeriodId(e.target.value)} /></div>
-          <div className="space-y-1"><Label htmlFor="s-ls">ID da disciplina do nível</Label><Input id="s-ls" value={levelSubjectId} onChange={(e) => setLevelSubjectId(e.target.value)} /></div>
+          <div className="space-y-1">
+            <Label>Período</Label>
+            <PeriodLookup value={periodId || null} selectedLabel={periodLabel} onChange={(v, item) => { setPeriodId(v ?? ""); setPeriodLabel(item?.label ?? null); }} />
+          </div>
+          <div className="space-y-1">
+            <Label>Disciplina do nível</Label>
+            <LevelSubjectLookup value={levelSubjectId || null} selectedLabel={levelSubjectLabel} onChange={(v, item) => { setLevelSubjectId(v ?? ""); setLevelSubjectLabel(item?.label ?? null); }} />
+          </div>
           <div className="space-y-1"><Label htmlFor="s-title">Título (opcional)</Label><Input id="s-title" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
-          <div className="space-y-1"><Label htmlFor="s-room">ID da sala (opcional)</Label><Input id="s-room" value={roomId} onChange={(e) => setRoomId(e.target.value)} /></div>
+          <div className="space-y-1">
+            <Label>Sala (opcional)</Label>
+            <RoomLookup value={roomId || null} selectedLabel={roomLabel} onChange={(v, item) => { setRoomId(v ?? ""); setRoomLabel(item?.label ?? null); }} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1"><Label htmlFor="s-start">Início</Label><Input id="s-start" type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></div>
             <div className="space-y-1"><Label htmlFor="s-end">Fim</Label><Input id="s-end" type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} /></div>
