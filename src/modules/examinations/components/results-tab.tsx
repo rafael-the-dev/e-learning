@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import {
@@ -88,6 +89,8 @@ export function ResultsTab({
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<{ title: string; data: BulkSummary } | null>(null);
   const [confirm, setConfirm] = useState<{ op: "submit" | "review" | "approve"; label: string } | null>(null);
+  const [search, setSearch] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Refetch on tab-enter (Radix remounts): reflects statuses changed by a publish/
   // integrate in another tab. On first mount it simply confirms the server-seeded data.
@@ -103,9 +106,11 @@ export function ResultsTab({
     return r?.studentName ?? r?.studentNumber ?? ref;
   };
 
-  async function fetchResultsPage(p: number): Promise<PortalListResult<Row> | null> {
+  async function fetchResultsPage(p: number, q: string): Promise<PortalListResult<Row> | null> {
+    const params = new URLSearchParams({ page: String(p), pageSize: "100" });
+    if (q.trim()) params.set("search", q.trim());
     try {
-      const res = await fetch(`/api/examinations/sessions/${sessionId}/results?page=${p}&pageSize=100`);
+      const res = await fetch(`/api/examinations/sessions/${sessionId}/results?${params}`);
       if (!res.ok) return null;
       return (await res.json()) as PortalListResult<Row>;
     } catch {
@@ -113,8 +118,8 @@ export function ResultsTab({
     }
   }
 
-  async function reload(): Promise<void> {
-    const dto = await fetchResultsPage(1);
+  async function reload(q: string = search): Promise<void> {
+    const dto = await fetchResultsPage(1, q);
     if (dto) {
       setRows(dto.items);
       setEdits(seedEdits(dto.items));
@@ -122,6 +127,12 @@ export function ResultsTab({
       setPage(dto.page);
       setTotal(dto.total);
     }
+  }
+
+  function onSearchChange(v: string): void {
+    setSearch(v);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => void reload(v), 300);
   }
 
   function setEdit(key: string, patch: Partial<Edit>): void {
@@ -196,7 +207,7 @@ export function ResultsTab({
 
   async function loadMore(): Promise<void> {
     setLoadingMore(true);
-    const dto = await fetchResultsPage(page + 1);
+    const dto = await fetchResultsPage(page + 1, search);
     if (dto) {
       setRows((prev) => {
         const seen = new Set(prev.map(rowKey));
@@ -212,11 +223,33 @@ export function ResultsTab({
 
   const selCount = selected.size;
   const hasMore = rows.length < total;
-
-  if (rows.length === 0) return <ExaminationEmptyState title="Sem resultados para esta sessão." />;
+  const searching = search.trim().length > 0;
 
   return (
     <div className="space-y-3">
+      <div className="relative min-w-55">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Pesquisar por nome ou nº de aluno…"
+          className="pl-8"
+          aria-label="Pesquisar resultados"
+        />
+      </div>
+
+      {rows.length === 0 ? (
+        searching ? (
+          <ExaminationEmptyState
+            title={`Sem resultados para «${search.trim()}»`}
+            description="Nenhum resultado corresponde à pesquisa."
+            action={<Button variant="outline" size="sm" onClick={() => { setSearch(""); void reload(""); }}>Limpar pesquisa</Button>}
+          />
+        ) : (
+          <ExaminationEmptyState title="Sem resultados para esta sessão." />
+        )
+      ) : (
+        <>
       {/* Bulk action bars */}
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-2">
         <Button size="sm" onClick={saveDrafts} disabled={busy || dirty.length === 0}>
@@ -348,6 +381,8 @@ export function ResultsTab({
           </Button>
         )}
       </div>
+        </>
+      )}
 
       {/* Whole-session confirm */}
       <Dialog open={confirm !== null} onOpenChange={(o) => { if (!o) setConfirm(null); }}>
