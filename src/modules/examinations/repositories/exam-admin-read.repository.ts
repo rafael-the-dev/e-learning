@@ -555,6 +555,70 @@ export async function lookupLevelSubjects(
   }));
 }
 
+// ─── Registerable students for a session (bulk-register roster + preview) ─────
+
+export interface RegisterableStudentRow {
+  studentId: string;
+  enrollmentId: string;
+  name: string;
+  number: string | null;
+  alreadyRegistered: boolean;
+}
+export interface RegisterableStudentsResult {
+  capacity: number;
+  registeredCount: number;
+  items: RegisterableStudentRow[];
+}
+
+/** Students with an ACTIVE enrollment in the session's course, each flagged whether they
+ *  already have a (non-terminal) candidate row in this session — plus capacity + current
+ *  registered count so the UI can pre-flight "eligible / already / no-vacancy". Read-only. */
+export async function getRegisterableStudents(
+  organizationId: string,
+  session: { id: string; courseId: string | null; courseLevelId: string | null; levelSubjectId: string; capacity: number },
+  client?: PrismaClientOrTx
+): Promise<RegisterableStudentsResult> {
+  const db = client ?? (await getDb());
+
+  // Resolve the governing course (session.courseId, else via the level-subject's level).
+  let courseId = session.courseId;
+  if (!courseId) {
+    const ls = await db.levelSubject.findUnique({
+      where: { id: session.levelSubjectId },
+      select: { courseLevel: { select: { courseId: true } } },
+    });
+    courseId = ls?.courseLevel?.courseId ?? null;
+  }
+
+  // Existing candidates in this session (non-terminal ⇒ already registered).
+  const existing = await db.examCandidate.findMany({
+    where: { organizationId, examSessionId: session.id },
+    select: { studentId: true, status: true },
+  });
+  const terminal = new Set(["WITHDRAWN", "DISQUALIFIED"]);
+  const activeStudentIds = new Set(existing.filter((c) => !terminal.has(c.status as string)).map((c) => c.studentId));
+  const registeredCount = activeStudentIds.size;
+
+  if (!courseId) return { capacity: session.capacity, registeredCount, items: [] };
+
+  const enrollments = await db.enrollment.findMany({
+    where: { organizationId, courseId, status: "ACTIVE", deletedAt: null },
+    select: { id: true, studentId: true, student: { select: { code: true, firstName: true, lastName: true } } },
+    orderBy: [{ student: { firstName: "asc" } }, { student: { lastName: "asc" } }],
+    take: 1000,
+  });
+
+  const items: RegisterableStudentRow[] = enrollments.map((e) => ({
+    studentId: e.studentId,
+    enrollmentId: e.id,
+    name: `${e.student?.firstName ?? ""} ${e.student?.lastName ?? ""}`.trim() || e.studentId,
+    number: e.student?.code ?? null,
+    alreadyRegistered: activeStudentIds.has(e.studentId),
+  }));
+
+  return { capacity: session.capacity, registeredCount, items };
+}
+
 export interface PeriodLookupRow {
   id: string;
   name: string;

@@ -572,6 +572,25 @@ export interface ExaminationConflictsDto {
   };
 }
 
+// ─── Bulk candidate registration roster (Sprint 2.1 P3) ───────────────────────
+
+export interface ExamRegisterableStudentDto {
+  studentId: string;
+  enrollmentId: string;
+  name: string;
+  number: string | null;
+  alreadyRegistered: boolean;
+}
+
+export interface ExamRegisterablePanelDto {
+  examSessionId: string;
+  capacity: number;
+  registeredCount: number;
+  items: ExamRegisterableStudentDto[];
+  /** Server-computed: may the viewer register (exams.registerCandidates)? */
+  canRegister: boolean;
+}
+
 // ─── Invigilators (Increment 4 — append-only in v1; no unassign) ──────────────
 
 export interface ExamInvigilatorDto {

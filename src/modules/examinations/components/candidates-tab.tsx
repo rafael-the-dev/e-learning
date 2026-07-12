@@ -19,6 +19,7 @@ import { CandidateStatusBadge, ExaminationStatusBadge } from "./status-badges";
 import { ExaminationDataTable, type ExaminationColumn } from "./examination-data-table";
 import { AllowedActionButton } from "./allowed-action-button";
 import { StudentLookup, EnrollmentLookup } from "./entity-lookups";
+import { BulkRegisterDialog } from "./bulk-register-dialog";
 
 // Register / register-with-override. Override records the acting user + reason and NEVER
 // hides that the candidate was originally ineligible (the eligibility verdict is stored
@@ -165,6 +166,7 @@ export function CandidatesTab({
   return (
     <div className="space-y-3">
       <div className="flex justify-end gap-2">
+        <BulkRegisterDialog sessionId={sessionId} levelSubjectId={levelSubjectId} />
         <RegisterDialog sessionId={sessionId} levelSubjectId={levelSubjectId} override={false} />
         <RegisterDialog sessionId={sessionId} levelSubjectId={levelSubjectId} override />
       </div>

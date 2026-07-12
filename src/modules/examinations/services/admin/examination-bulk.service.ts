@@ -15,7 +15,16 @@ import {
   ReviewExamResultCommand,
   ApproveExamResultCommand,
 } from "@/modules/examinations/commands/result-review.commands";
+import { RegisterExamCandidateCommand } from "@/modules/examinations/commands/candidate-registration.commands";
 import { runBulk, type BulkSummary } from "@/modules/examinations/lib/bulk-runner";
+
+/** One candidate in a bulk registration. levelSubjectId is the session's. */
+export interface BulkRegisterInput {
+  studentId: string;
+  enrollmentId: string;
+  levelSubjectId: string;
+  assignedSeat?: string;
+}
 
 /** One draft-result edit in a bulk upsert. `examResultId` present ⇒ update, else create. */
 export interface BulkResultInput {
@@ -135,6 +144,28 @@ export class ExaminationBulkService {
       run: (id) => new ApproveExamResultCommand({ examResultId: id }, context).run(),
       // Wrong-state is a skip; APPROVER_IS_MARKER / APPROVER_IS_REVIEWER stay FAILED (two-eyes).
       skipCodes: ["RESULT_NOT_REVIEWED"],
+    });
+  }
+
+  // ── Candidates: bulk register ──────────────────────────────────────────────
+  /** Register many candidates in one call. Already-registered ⇒ skipped ("ignorados");
+   *  eligibility / capacity / seat blockers stay FAILED (grouped in the summary). */
+  async bulkRegisterCandidates(
+    context: AuthContext,
+    examSessionId: string,
+    items: BulkRegisterInput[]
+  ): Promise<BulkSummary> {
+    if (!context.ability.can(PERMISSIONS.EXAMS_REGISTER_CANDIDATES)) throw new AuthorizationError();
+    await this.assertSession(context, examSessionId);
+    return runBulk({
+      items,
+      ref: (it) => it.studentId,
+      run: (it) =>
+        new RegisterExamCandidateCommand(
+          { examSessionId, studentId: it.studentId, enrollmentId: it.enrollmentId, levelSubjectId: it.levelSubjectId, assignedSeat: it.assignedSeat },
+          context
+        ).run(),
+      skipCodes: ["ALREADY_REGISTERED"],
     });
   }
 

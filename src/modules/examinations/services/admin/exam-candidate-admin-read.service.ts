@@ -18,6 +18,7 @@ import {
 import {
   listEnrollmentDisplayByIds,
   listStudentDisplayByIds,
+  getRegisterableStudents,
 } from "@/modules/examinations/repositories/exam-admin-read.repository";
 import type {
   ExamAttendanceRecord,
@@ -29,6 +30,7 @@ import type {
   ExamCandidateDetailDto,
   ExamCandidateEligibilityProvenanceDto,
   ExamCandidateListItemDto,
+  ExamRegisterablePanelDto,
   PortalListResult,
 } from "@/modules/examinations/types/portal";
 import {
@@ -266,6 +268,31 @@ export class ExamCandidateAdminReadService {
         hasResult,
         caps
       ),
+    };
+  }
+
+  /** Registerable-students roster for bulk registration + the pre-flight preview
+   *  (eligible / already-registered / no-vacancy). `canRegister` is server-computed. */
+  async getRegisterable(context: AuthContext, examSessionId: string): Promise<ExamRegisterablePanelDto> {
+    this.assertCanView(context);
+    const { organizationId } = context;
+    const session = await findExamSessionById({ organizationId, id: examSessionId });
+    if (!session) throw new NotFoundError("ExamSession", examSessionId);
+
+    const roster = await getRegisterableStudents(organizationId, {
+      id: session.id,
+      courseId: session.courseId,
+      courseLevelId: session.courseLevelId,
+      levelSubjectId: session.levelSubjectId,
+      capacity: session.capacity,
+    });
+
+    return {
+      examSessionId,
+      capacity: roster.capacity,
+      registeredCount: roster.registeredCount,
+      items: roster.items,
+      canRegister: context.ability.can(PERMISSIONS.EXAMS_REGISTER_CANDIDATES),
     };
   }
 }
