@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import type { ExamPublicationReadinessDto } from "@/modules/examinations/types/portal";
@@ -19,6 +19,14 @@ export function PublicationReadinessCard({ readiness: initial }: { readiness: Ex
     const res = await fetch(`/api/examinations/sessions/${id}/publication-readiness`);
     if (res.ok) setReadiness((await res.json()) as ExamPublicationReadinessDto);
   }
+
+  // Refetch on tab-enter — reflects result/session changes made in other tabs.
+  useEffect(() => {
+    void (async () => {
+      await refetch();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Card>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -204,6 +204,24 @@ export function AttendanceTab({ sessionId, roster }: { sessionId: string; roster
     }
     setLoadingMore(false);
   }
+
+  // Refetch on tab-enter (Radix remounts): reflects registrations/marks made elsewhere.
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const dto = await fetchRosterPage(1);
+      if (alive && dto) {
+        setRows(dto.items.map((r) => ({ ...r })));
+        setSummary(dto.summary);
+        setPage(1);
+        setTotal(dto.total);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const nameByCandidate = new Map(rows.map((r) => [r.examCandidateId, r.studentName ?? r.studentNumber ?? r.examCandidateId]));
   const problems = markAllResult ? markAllResult.results.filter((r) => r.status !== "succeeded") : [];

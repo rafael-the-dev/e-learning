@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import type {
@@ -32,6 +32,15 @@ export function IntegrationStatusCard({
     if (s) setStatus(s as ExamIntegrationStatusDto);
     if (b) setBinding(b as ExamGradeBindingDto);
   }
+
+  // Refetch on tab-enter (Radix remounts the tab): keeps this card fresh after a publish
+  // or an integrate done elsewhere, without a global reload.
+  useEffect(() => {
+    void (async () => {
+      await refetch();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Card>

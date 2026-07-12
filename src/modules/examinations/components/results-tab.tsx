@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import {
@@ -88,6 +88,15 @@ export function ResultsTab({
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<{ title: string; data: BulkSummary } | null>(null);
   const [confirm, setConfirm] = useState<{ op: "submit" | "review" | "approve"; label: string } | null>(null);
+
+  // Refetch on tab-enter (Radix remounts): reflects statuses changed by a publish/
+  // integrate in another tab. On first mount it simply confirms the server-seeded data.
+  useEffect(() => {
+    void (async () => {
+      await reload();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const nameOf = (ref: string): string => {
     const r = rows.find((x) => rowKey(x) === ref || x.examResultId === ref || x.examCandidateId === ref);
