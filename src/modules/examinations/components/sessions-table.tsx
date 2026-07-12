@@ -13,11 +13,13 @@ export function SessionsTable({
   page,
   pageSize,
   total,
+  emptyTitle = "Nenhuma sessão de exame.",
 }: {
   items: ExamSessionListItemDto[];
   page: number;
   pageSize: number;
   total: number;
+  emptyTitle?: string;
 }) {
   const columns: ExaminationColumn<ExamSessionListItemDto>[] = [
     { key: "title", header: "Título", render: (s) => <span className="font-medium">{s.title}</span> },
@@ -44,7 +46,7 @@ export function SessionsTable({
       page={page}
       pageSize={pageSize}
       total={total}
-      emptyTitle="Nenhuma sessão de exame."
+      emptyTitle={emptyTitle}
     />
   );
 }

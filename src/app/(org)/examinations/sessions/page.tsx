@@ -37,10 +37,16 @@ export default async function ExamSessionsPage({
         actions={canManage ? <SessionFormDialog trigger={<Button size="sm">Nova sessão</Button>} /> : undefined}
       />
       <ExaminationFilterBar
-        showSearch={false}
+        searchPlaceholder="Pesquisar por título, disciplina, curso, nível ou sala…"
         selects={[{ param: "status", label: "Estado", options: getStatusOptions("session") }]}
       />
-      <SessionsTable items={result.items} page={result.page} pageSize={result.pageSize} total={result.total} />
+      <SessionsTable
+        items={result.items}
+        page={result.page}
+        pageSize={result.pageSize}
+        total={result.total}
+        emptyTitle={sp.search ? `Sem resultados para «${sp.search}».` : undefined}
+      />
     </div>
   );
 }

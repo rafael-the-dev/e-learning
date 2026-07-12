@@ -2,11 +2,11 @@ import { AuthorizationError } from "@/shared/lib/command";
 import type { AuthContext } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/shared/lib/pagination";
+import { findExamSessionById } from "@/modules/examinations/repositories/exam-session.repository";
 import {
-  countExamSessions,
-  findExamSessionById,
-  listExamSessions,
-} from "@/modules/examinations/repositories/exam-session.repository";
+  listSessionsForPortal,
+  countSessionsForPortal,
+} from "@/modules/examinations/repositories/exam-admin-read.repository";
 import { listRegisteredCandidatesBySession } from "@/modules/examinations/repositories/exam-candidate.repository";
 import { listAttendanceBySession } from "@/modules/examinations/repositories/exam-attendance.repository";
 import { findResultsBySession } from "@/modules/examinations/repositories/exam-result.repository";
@@ -51,11 +51,12 @@ export class ExamSessionAdminReadService {
       levelSubjectId: filters.levelSubjectId,
       roomId: filters.roomId,
       status: filters.status,
+      search: filters.search,
     };
 
     const [rows, total] = await Promise.all([
-      listExamSessions({ ...repoFilters, skip: (page - 1) * pageSize, take: pageSize }),
-      countExamSessions(repoFilters),
+      listSessionsForPortal({ ...repoFilters, skip: (page - 1) * pageSize, take: pageSize }),
+      countSessionsForPortal(repoFilters),
     ]);
 
     const caps = resolveSessionCaps(context);

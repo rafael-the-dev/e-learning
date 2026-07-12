@@ -1,7 +1,7 @@
 import { getDb } from "@/server/db";
 import type { PrismaClientOrTx } from "@/server/db";
 import { isSessionConsumed } from "@/modules/examinations/commands/integration-shared";
-import type { ExamPeriodRecord } from "@/modules/examinations/types/repository";
+import type { ExamPeriodRecord, ExamSessionRecord } from "@/modules/examinations/types/repository";
 
 // ─── ExamPeriod portal list (adds text search the frozen core repo lacks) ─────
 // Same columns as the core select (row shape === ExamPeriodRecord), plus a single
@@ -51,6 +51,69 @@ export async function countPeriodsForPortal(
 ): Promise<number> {
   const db = client ?? (await getDb());
   return db.examPeriod.count({ where: buildPeriodPortalWhere(filters) });
+}
+
+// ─── ExamSession portal list (adds a single-OR join search) ───────────────────
+// Row shape === ExamSessionRecord. Global search across title + course/level/subject/
+// room NAMES via one OR (nested relation filters) — a single query, minimal select.
+
+const sessionPortalSelect = {
+  id: true, organizationId: true, periodId: true, branchId: true, courseId: true, courseLevelId: true,
+  levelSubjectId: true, roomId: true, title: true, status: true, startsAt: true, endsAt: true,
+  capacity: true, instructions: true, lockedAt: true, startedAt: true, completedAt: true,
+  publishedAt: true, cancelledAt: true, createdById: true, lockedById: true, completedById: true,
+  publishedById: true, cancelledById: true, createdAt: true, updatedAt: true, deletedAt: true,
+} as const;
+
+export interface SessionPortalFilters {
+  organizationId: string;
+  periodId?: string;
+  levelSubjectId?: string;
+  roomId?: string;
+  status?: string;
+  search?: string;
+}
+
+function buildSessionPortalWhere(f: SessionPortalFilters): Record<string, unknown> {
+  const where: Record<string, unknown> = { organizationId: f.organizationId, deletedAt: null };
+  if (f.periodId) where.periodId = f.periodId;
+  if (f.levelSubjectId) where.levelSubjectId = f.levelSubjectId;
+  if (f.roomId) where.roomId = f.roomId;
+  if (f.status) where.status = f.status;
+  const q = f.search?.trim();
+  if (q) {
+    where.OR = [
+      { title: { contains: q } },
+      { course: { name: { contains: q } } },
+      { courseLevel: { name: { contains: q } } },
+      { levelSubject: { subject: { name: { contains: q } } } },
+      { room: { name: { contains: q } } },
+    ];
+  }
+  return where;
+}
+
+export async function listSessionsForPortal(
+  filters: SessionPortalFilters & { skip: number; take: number },
+  client?: PrismaClientOrTx
+): Promise<ExamSessionRecord[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.examSession.findMany({
+    where: buildSessionPortalWhere(filters),
+    select: sessionPortalSelect,
+    orderBy: [{ startsAt: "desc" }, { id: "asc" }],
+    skip: filters.skip,
+    take: filters.take,
+  });
+  return rows as ExamSessionRecord[];
+}
+
+export async function countSessionsForPortal(
+  filters: SessionPortalFilters,
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  return db.examSession.count({ where: buildSessionPortalWhere(filters) });
 }
 
 // =============================================================================
