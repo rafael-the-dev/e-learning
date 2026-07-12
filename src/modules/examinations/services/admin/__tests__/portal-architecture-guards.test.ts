@@ -31,6 +31,13 @@ const routeSrcs = tsFiles(ROUTES_DIR).map((f) => ({ file: f, code: stripComments
 const adminSrcs = tsFiles(ADMIN_DIR).map((f) => ({ file: f, code: stripComments(readFileSync(f, "utf8")) }));
 const libCode = stripComments(readFileSync(LIB_FILE, "utf8"));
 
+// The bulk service is the ONE sanctioned write-orchestrator (route -> bulk service ->
+// existing command per item). It legitimately imports + constructs commands, so it is
+// excluded from the "read services drive no commands" rule — but stays subject to every
+// other guard (no direct @/server/db, no Prisma writes of its own, no other engines).
+const BULK_SERVICE = "examination-bulk.service.ts";
+const readServiceSrcs = adminSrcs.filter((s) => !s.file.endsWith(BULK_SERVICE));
+
 describe("portal routes are thin transport shells", () => {
   it("discovers examination route files", () => {
     expect(routeSrcs.length).toBeGreaterThan(0);
@@ -63,7 +70,7 @@ describe("portal read services own data access but no writes / commands", () => 
     // (e.g. evaluatePublicationReadiness, latestIntegratedVersion). What they must
     // NOT do is import a command CLASS module (`*.commands`) — that would mean the
     // read layer drives a mutation / duplicates command orchestration.
-    for (const { file, code } of adminSrcs) {
+    for (const { file, code } of readServiceSrcs) {
       expect(code, `${file} must not import a *.commands module`).not.toMatch(/\.commands["']/);
       expect(code, `${file} must not construct a Command`).not.toMatch(/new \w+Command\(/);
     }
