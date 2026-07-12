@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Search } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -14,9 +15,9 @@ import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { toast } from "@/shared/hooks/use-toast";
-import type { ExamCandidateListItemDto } from "@/modules/examinations/types/portal";
+import type { ExamCandidateListItemDto, PortalListResult } from "@/modules/examinations/types/portal";
 import { CandidateStatusBadge, ExaminationStatusBadge } from "./status-badges";
-import { ExaminationDataTable, type ExaminationColumn } from "./examination-data-table";
+import { ExaminationEmptyState } from "./examination-states";
 import { AllowedActionButton } from "./allowed-action-button";
 import { StudentLookup, EnrollmentLookup } from "./entity-lookups";
 import { BulkRegisterDialog } from "./bulk-register-dialog";
@@ -25,7 +26,7 @@ import { BulkRegisterDialog } from "./bulk-register-dialog";
 // hides that the candidate was originally ineligible (the eligibility verdict is stored
 // server-side; the detail view shows the provenance). Student/enrollment ids are entered
 // directly here (picker is a future enhancement).
-function RegisterDialog({ sessionId, levelSubjectId, override }: { sessionId: string; levelSubjectId: string; override: boolean }) {
+function RegisterDialog({ sessionId, levelSubjectId, override, onDone }: { sessionId: string; levelSubjectId: string; override: boolean; onDone?: () => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -62,7 +63,8 @@ function RegisterDialog({ sessionId, levelSubjectId, override }: { sessionId: st
       toast({ title: override ? "Candidato inscrito (override)" : "Candidato inscrito" });
       reset();
       setOpen(false);
-      router.refresh();
+      if (onDone) onDone();
+      else router.refresh();
     } catch {
       toast({ title: "Erro de rede", variant: "destructive" });
     } finally {
@@ -128,9 +130,7 @@ export function CandidatesTab({
   sessionId,
   levelSubjectId,
   items,
-  page,
-  pageSize,
-  total,
+  total: initialTotal,
 }: {
   sessionId: string;
   levelSubjectId: string;
@@ -139,38 +139,149 @@ export function CandidatesTab({
   pageSize: number;
   total: number;
 }) {
-  const columns: ExaminationColumn<ExamCandidateListItemDto>[] = [
-    { key: "student", header: "Aluno", render: (c) => (
-      <div><div className="font-medium">{c.studentName ?? "—"}</div><div className="text-xs text-muted-foreground">{c.studentNumber ?? c.studentId}</div></div>
-    ) },
-    { key: "attempt", header: "Tentativa", render: (c) => c.attemptNumber ?? "—" },
-    { key: "eligibility", header: "Elegibilidade", render: (c) => <ExaminationStatusBadge kind="candidate" status={c.eligibilityStatus} /> },
-    { key: "status", header: "Estado", render: (c) => <CandidateStatusBadge status={c.candidateStatus} /> },
-    { key: "seat", header: "Lugar", render: (c) => c.assignedSeat ?? "—" },
-    { key: "attendance", header: "Assiduidade", render: (c) => c.attendanceStatus ? <ExaminationStatusBadge kind="attendance" status={c.attendanceStatus} /> : "—" },
-    { key: "result", header: "Resultado", render: (c) => c.resultStatus ? <ExaminationStatusBadge kind="result" status={c.resultStatus} /> : "—" },
-    { key: "override", header: "Override", render: (c) => (c.overridden ? "Sim" : "—") },
-    {
-      key: "actions",
-      header: "Ações",
-      className: "text-right",
-      render: (c) => (
-        <div className="flex justify-end gap-2">
-          <AllowedActionButton allowed={c.allowedActions.canWithdraw} url={`/api/examinations/candidates/${c.examCandidateId}/withdraw`} label="Retirar" variant="outline" hideWhenDisallowed reasonRequired reasonLabel="Motivo" confirmTitle="Retirar candidato" successMessage="Candidato retirado" />
-          <AllowedActionButton allowed={c.allowedActions.canDisqualify} url={`/api/examinations/candidates/${c.examCandidateId}/disqualify`} label="Desqualificar" variant="destructive" hideWhenDisallowed reasonRequired reasonLabel="Motivo da desqualificação" confirmTitle="Desqualificar candidato" successMessage="Candidato desqualificado" />
-        </div>
-      ),
-    },
-  ];
+  const [rows, setRows] = useState<ExamCandidateListItemDto[]>(items);
+  const [total, setTotal] = useState(initialTotal);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function fetchPage(p: number, q: string): Promise<PortalListResult<ExamCandidateListItemDto> | null> {
+    const params = new URLSearchParams({ page: String(p), pageSize: "100" });
+    if (q.trim()) params.set("search", q.trim());
+    try {
+      const res = await fetch(`/api/examinations/sessions/${sessionId}/candidates?${params}`);
+      return res.ok ? ((await res.json()) as PortalListResult<ExamCandidateListItemDto>) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function reload(q: string = search): Promise<void> {
+    setLoading(true);
+    const dto = await fetchPage(1, q);
+    if (dto) {
+      setRows(dto.items);
+      setTotal(dto.total);
+      setPage(1);
+    }
+    setLoading(false);
+  }
+
+  // Refetch on tab-enter (fresh after registrations made elsewhere).
+  useEffect(() => {
+    void (async () => {
+      await reload("");
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function onSearchChange(v: string): void {
+    setSearch(v);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => void reload(v), 300);
+  }
+
+  async function loadMore(): Promise<void> {
+    setLoadingMore(true);
+    const dto = await fetchPage(page + 1, search);
+    if (dto) {
+      setRows((prev) => {
+        const seen = new Set(prev.map((r) => r.examCandidateId));
+        return [...prev, ...dto.items.filter((r) => !seen.has(r.examCandidateId))];
+      });
+      setPage((p) => p + 1);
+      setTotal(dto.total);
+    }
+    setLoadingMore(false);
+  }
+
+  const hasMore = rows.length < total;
+  const searching = search.trim().length > 0;
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end gap-2">
-        <BulkRegisterDialog sessionId={sessionId} levelSubjectId={levelSubjectId} />
-        <RegisterDialog sessionId={sessionId} levelSubjectId={levelSubjectId} override={false} />
-        <RegisterDialog sessionId={sessionId} levelSubjectId={levelSubjectId} override />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="relative min-w-55 flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Pesquisar por nome, nº de aluno ou matrícula…"
+            className="pl-8"
+            aria-label="Pesquisar candidatos"
+          />
+        </div>
+        <div className="flex gap-2">
+          <BulkRegisterDialog sessionId={sessionId} levelSubjectId={levelSubjectId} onDone={() => void reload()} />
+          <RegisterDialog sessionId={sessionId} levelSubjectId={levelSubjectId} override={false} onDone={() => void reload()} />
+          <RegisterDialog sessionId={sessionId} levelSubjectId={levelSubjectId} override onDone={() => void reload()} />
+        </div>
       </div>
-      <ExaminationDataTable columns={columns} rows={items} rowKey={(c) => c.examCandidateId} page={page} pageSize={pageSize} total={total} emptyTitle="Sem candidatos inscritos." />
+
+      {rows.length === 0 ? (
+        searching ? (
+          <ExaminationEmptyState
+            title={`Sem candidatos para «${search.trim()}»`}
+            description="Nenhum candidato corresponde à pesquisa."
+            action={<Button variant="outline" size="sm" onClick={() => { setSearch(""); void reload(""); }}>Limpar pesquisa</Button>}
+          />
+        ) : (
+          <ExaminationEmptyState title="Sem candidatos inscritos." />
+        )
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Aluno</th>
+                  <th className="px-3 py-2 font-medium">Tentativa</th>
+                  <th className="px-3 py-2 font-medium">Elegibilidade</th>
+                  <th className="px-3 py-2 font-medium">Estado</th>
+                  <th className="px-3 py-2 font-medium">Lugar</th>
+                  <th className="px-3 py-2 font-medium">Assiduidade</th>
+                  <th className="px-3 py-2 font-medium">Resultado</th>
+                  <th className="px-3 py-2 font-medium">Override</th>
+                  <th className="px-3 py-2 text-right font-medium">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr key={c.examCandidateId} className="border-b last:border-0">
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{c.studentName ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">{c.studentNumber ?? c.studentId}</div>
+                    </td>
+                    <td className="px-3 py-2">{c.attemptNumber ?? "—"}</td>
+                    <td className="px-3 py-2"><ExaminationStatusBadge kind="candidate" status={c.eligibilityStatus} /></td>
+                    <td className="px-3 py-2"><CandidateStatusBadge status={c.candidateStatus} /></td>
+                    <td className="px-3 py-2">{c.assignedSeat ?? "—"}</td>
+                    <td className="px-3 py-2">{c.attendanceStatus ? <ExaminationStatusBadge kind="attendance" status={c.attendanceStatus} /> : "—"}</td>
+                    <td className="px-3 py-2">{c.resultStatus ? <ExaminationStatusBadge kind="result" status={c.resultStatus} /> : "—"}</td>
+                    <td className="px-3 py-2">{c.overridden ? "Sim" : "—"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end gap-2">
+                        <AllowedActionButton allowed={c.allowedActions.canWithdraw} url={`/api/examinations/candidates/${c.examCandidateId}/withdraw`} label="Retirar" variant="outline" hideWhenDisallowed reasonRequired reasonLabel="Motivo" confirmTitle="Retirar candidato" successMessage="Candidato retirado" onSuccess={() => reload()} />
+                        <AllowedActionButton allowed={c.allowedActions.canDisqualify} url={`/api/examinations/candidates/${c.examCandidateId}/disqualify`} label="Desqualificar" variant="destructive" hideWhenDisallowed reasonRequired reasonLabel="Motivo da desqualificação" confirmTitle="Desqualificar candidato" successMessage="Candidato desqualificado" onSuccess={() => reload()} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{loading ? "A pesquisar…" : `A mostrar ${rows.length} de ${total} candidatos.`}</span>
+            {hasMore && (
+              <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? "A carregar…" : "Carregar mais"}
+              </Button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

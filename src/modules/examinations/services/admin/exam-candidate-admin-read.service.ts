@@ -153,7 +153,8 @@ export class ExamCandidateAdminReadService {
         const student = studentById.get(candidate.studentId);
         const name = student ? `${student.firstName} ${student.lastName}` : "";
         const number = student?.code ?? "";
-        const hay = `${name} ${number}`.toLowerCase();
+        const enrollmentNumber = enrollmentById.get(candidate.enrollmentId)?.enrollmentNumber ?? "";
+        const hay = `${name} ${number} ${enrollmentNumber}`.toLowerCase();
         if (!hay.includes(search)) return false;
       }
       return true;

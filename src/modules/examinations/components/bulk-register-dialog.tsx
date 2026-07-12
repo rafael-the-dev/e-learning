@@ -24,7 +24,7 @@ import { BulkSummaryDialog } from "./bulk-summary-dialog";
 // One HTTP call → runBulk over the existing Register command per item.
 // =============================================================================
 
-export function BulkRegisterDialog({ sessionId, levelSubjectId }: { sessionId: string; levelSubjectId: string }) {
+export function BulkRegisterDialog({ sessionId, levelSubjectId, onDone }: { sessionId: string; levelSubjectId: string; onDone?: () => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -91,7 +91,8 @@ export function BulkRegisterDialog({ sessionId, levelSubjectId }: { sessionId: s
       }
       setOpen(false);
       setSummary(json);
-      router.refresh();
+      if (onDone) onDone();
+      else router.refresh();
     } catch {
       toast({ title: "Erro de rede", variant: "destructive" });
     } finally {
