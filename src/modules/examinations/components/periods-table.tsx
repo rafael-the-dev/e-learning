@@ -14,11 +14,13 @@ export function PeriodsTable({
   page,
   pageSize,
   total,
+  emptyTitle = "Nenhum período de exame.",
 }: {
   items: ExamPeriodListItemDto[];
   page: number;
   pageSize: number;
   total: number;
+  emptyTitle?: string;
 }) {
   const columns: ExaminationColumn<ExamPeriodListItemDto>[] = [
     { key: "name", header: "Nome", render: (p) => <span className="font-medium">{p.name}</span> },
@@ -79,7 +81,7 @@ export function PeriodsTable({
       page={page}
       pageSize={pageSize}
       total={total}
-      emptyTitle="Nenhum período de exame."
+      emptyTitle={emptyTitle}
     />
   );
 }

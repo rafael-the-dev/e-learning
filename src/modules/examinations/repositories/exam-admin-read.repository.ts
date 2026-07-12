@@ -1,6 +1,57 @@
 import { getDb } from "@/server/db";
 import type { PrismaClientOrTx } from "@/server/db";
 import { isSessionConsumed } from "@/modules/examinations/commands/integration-shared";
+import type { ExamPeriodRecord } from "@/modules/examinations/types/repository";
+
+// ─── ExamPeriod portal list (adds text search the frozen core repo lacks) ─────
+// Same columns as the core select (row shape === ExamPeriodRecord), plus a single
+// OR search across name / academicYear / term. Tenant-scoped, non-deleted.
+
+const periodPortalSelect = {
+  id: true, organizationId: true, branchId: true, name: true, academicYear: true, term: true,
+  status: true, startsAt: true, endsAt: true, lockedAt: true, completedAt: true, cancelledAt: true,
+  createdById: true, lockedById: true, completedById: true, cancelledById: true,
+  createdAt: true, updatedAt: true, deletedAt: true,
+} as const;
+
+export interface PeriodPortalFilters {
+  organizationId: string;
+  status?: string;
+  academicYear?: string;
+  search?: string;
+}
+
+function buildPeriodPortalWhere(f: PeriodPortalFilters): Record<string, unknown> {
+  const where: Record<string, unknown> = { organizationId: f.organizationId, deletedAt: null };
+  if (f.status) where.status = f.status;
+  if (f.academicYear) where.academicYear = f.academicYear;
+  const q = f.search?.trim();
+  if (q) where.OR = [{ name: { contains: q } }, { academicYear: { contains: q } }, { term: { contains: q } }];
+  return where;
+}
+
+export async function listPeriodsForPortal(
+  filters: PeriodPortalFilters & { skip: number; take: number },
+  client?: PrismaClientOrTx
+): Promise<ExamPeriodRecord[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.examPeriod.findMany({
+    where: buildPeriodPortalWhere(filters),
+    select: periodPortalSelect,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    skip: filters.skip,
+    take: filters.take,
+  });
+  return rows as ExamPeriodRecord[];
+}
+
+export async function countPeriodsForPortal(
+  filters: PeriodPortalFilters,
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  return db.examPeriod.count({ where: buildPeriodPortalWhere(filters) });
+}
 
 // =============================================================================
 // EXAMINATION ADMIN PORTAL — BATCHED READ REPOSITORY (Phase 12, Increment 2)

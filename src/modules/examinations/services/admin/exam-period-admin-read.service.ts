@@ -2,12 +2,12 @@ import { AuthorizationError } from "@/shared/lib/command";
 import type { AuthContext } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/shared/lib/pagination";
-import {
-  countExamPeriods,
-  findExamPeriodById,
-  listExamPeriods,
-} from "@/modules/examinations/repositories/exam-period.repository";
+import { findExamPeriodById } from "@/modules/examinations/repositories/exam-period.repository";
 import { countExamSessions } from "@/modules/examinations/repositories/exam-session.repository";
+import {
+  listPeriodsForPortal,
+  countPeriodsForPortal,
+} from "@/modules/examinations/repositories/exam-admin-read.repository";
 import type {
   ExamPeriodAdminListFilters,
   ExamPeriodDetailDto,
@@ -46,11 +46,12 @@ export class ExamPeriodAdminReadService {
       organizationId,
       status: filters.status,
       academicYear: filters.academicYear,
+      search: filters.search,
     };
 
     const [rows, total] = await Promise.all([
-      listExamPeriods({ ...repoFilters, skip: (page - 1) * pageSize, take: pageSize }),
-      countExamPeriods(repoFilters),
+      listPeriodsForPortal({ ...repoFilters, skip: (page - 1) * pageSize, take: pageSize }),
+      countPeriodsForPortal(repoFilters),
     ]);
 
     const caps = resolvePeriodCaps(context);

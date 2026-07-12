@@ -37,7 +37,7 @@ export default async function ExamPeriodsPage({
         actions={canManage ? <PeriodFormDialog trigger={<Button size="sm">Novo período</Button>} /> : undefined}
       />
       <ExaminationFilterBar
-        showSearch={false}
+        searchPlaceholder="Pesquisar por nome, ano ou período…"
         selects={[{ param: "status", label: "Estado", options: getStatusOptions("period") }]}
       />
       <PeriodsTable
@@ -45,6 +45,7 @@ export default async function ExamPeriodsPage({
         page={result.page}
         pageSize={result.pageSize}
         total={result.total}
+        emptyTitle={sp.search ? `Sem resultados para «${sp.search}».` : undefined}
       />
     </div>
   );
