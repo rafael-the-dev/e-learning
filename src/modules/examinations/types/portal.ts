@@ -572,6 +572,31 @@ export interface ExaminationConflictsDto {
   };
 }
 
+// ─── Invigilators (Increment 4 — append-only in v1; no unassign) ──────────────
+
+export interface ExamInvigilatorDto {
+  assignmentId: string;
+  examSessionId: string;
+  teacherId: string | null;
+  userId: string | null;
+  role: string;
+  name: string;
+}
+
+export interface ExamInvigilatorOptionDto {
+  teacherId: string;
+  name: string;
+}
+
+export interface ExamInvigilatorPanelDto {
+  examSessionId: string;
+  items: ExamInvigilatorDto[];
+  /** Active teachers to choose from (picker source). */
+  assignableTeachers: ExamInvigilatorOptionDto[];
+  /** Server-computed: may the viewer assign (exams.schedule)? */
+  canAssign: boolean;
+}
+
 export interface ExaminationIntegrationHealthDto {
   missingBindings: number;
   unsupportedResults: number;

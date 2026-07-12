@@ -384,6 +384,74 @@ export async function listInvigilatorAssignmentsBySessionIds(
   }));
 }
 
+// ─── Invigilators for the portal (names resolved + assignable teacher source) ──
+
+export interface InvigilatorForSession {
+  assignmentId: string;
+  teacherId: string | null;
+  userId: string | null;
+  role: string;
+  name: string;
+}
+
+/** Assignments for ONE session, with the invigilator's display name resolved
+ *  (teacher first, else user). Read-only; used by the Vigilantes tab. */
+export async function listInvigilatorsForSession(
+  organizationId: string,
+  examSessionId: string,
+  client?: PrismaClientOrTx
+): Promise<InvigilatorForSession[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.examInvigilatorAssignment.findMany({
+    where: { organizationId, examSessionId },
+    select: { id: true, teacherId: true, userId: true, role: true },
+    orderBy: { assignedAt: "asc" },
+  });
+  if (rows.length === 0) return [];
+  const teacherIds = rows.map((r) => r.teacherId).filter((v): v is string => !!v);
+  const userIds = rows.map((r) => r.userId).filter((v): v is string => !!v);
+  const [teachers, users] = await Promise.all([
+    teacherIds.length
+      ? db.teacher.findMany({ where: { organizationId, id: { in: teacherIds } }, select: { id: true, firstName: true, lastName: true } })
+      : Promise.resolve([] as Array<{ id: string; firstName: string; lastName: string }>),
+    userIds.length
+      ? db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true } })
+      : Promise.resolve([] as Array<{ id: string; name: string; email: string }>),
+  ]);
+  const teacherName = new Map(teachers.map((t) => [t.id, `${t.firstName} ${t.lastName}`.trim()]));
+  const userName = new Map(users.map((u) => [u.id, u.name || u.email]));
+  return rows.map((r) => ({
+    assignmentId: r.id,
+    teacherId: r.teacherId,
+    userId: r.userId,
+    role: r.role,
+    name: r.teacherId
+      ? teacherName.get(r.teacherId) ?? r.teacherId
+      : r.userId
+        ? userName.get(r.userId) ?? r.userId
+        : "—",
+  }));
+}
+
+export interface AssignableTeacher {
+  teacherId: string;
+  name: string;
+}
+
+/** Active teachers of the org, id + name, for the invigilator picker. */
+export async function listAssignableTeachers(
+  organizationId: string,
+  client?: PrismaClientOrTx
+): Promise<AssignableTeacher[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.teacher.findMany({
+    where: { organizationId, status: "ACTIVE", deletedAt: null },
+    select: { id: true, firstName: true, lastName: true },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+  });
+  return rows.map((t) => ({ teacherId: t.id, name: `${t.firstName} ${t.lastName}`.trim() }));
+}
+
 export interface SessionCandidateCount {
   examSessionId: string;
   activeCount: number;

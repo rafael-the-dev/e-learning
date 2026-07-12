@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { examinationOperationsReadService } from "@/modules/examinations/services/admin/examination-operations-read.service";
@@ -10,7 +11,17 @@ export const metadata = { title: "Exames — Operações" };
 
 const fmt = (d: Date | string) => new Date(d).toLocaleString("pt-PT", { dateStyle: "short", timeStyle: "short" });
 
-function SessionRefList({ title, sessions }: { title: string; sessions: ExamConflictSessionRef[] }) {
+// Each detected gap links straight to the session (optionally to a specific tab),
+// so detection leads to the fix instead of a dead end.
+function SessionRefList({
+  title,
+  sessions,
+  tab,
+}: {
+  title: string;
+  sessions: ExamConflictSessionRef[];
+  tab?: string;
+}) {
   return (
     <ExaminationSummaryCard title={`${title} (${sessions.length})`}>
       {sessions.length === 0 ? (
@@ -18,9 +29,14 @@ function SessionRefList({ title, sessions }: { title: string; sessions: ExamConf
       ) : (
         <ul className="space-y-1 text-sm">
           {sessions.map((s) => (
-            <li key={s.sessionId} className="flex justify-between rounded border p-2">
-              <span className="font-medium">{s.title}</span>
-              <span className="text-xs text-muted-foreground">{fmt(s.startsAt)} – {fmt(s.endsAt)}</span>
+            <li key={s.sessionId} className="rounded border p-2 hover:bg-muted/40">
+              <Link
+                href={`/examinations/sessions/${s.sessionId}${tab ? `?tab=${tab}` : ""}`}
+                className="flex items-center justify-between gap-3"
+              >
+                <span className="font-medium text-foreground underline-offset-2 hover:underline">{s.title}</span>
+                <span className="text-xs text-muted-foreground">{fmt(s.startsAt)} – {fmt(s.endsAt)}</span>
+              </Link>
             </li>
           ))}
         </ul>
@@ -46,7 +62,7 @@ export default async function ExamOperationsPage() {
         <h2 className="text-sm font-semibold text-muted-foreground">Agendamento</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <SessionRefList title="Sessões sem sala" sessions={conflicts.sessionsWithoutRoom} />
-          <SessionRefList title="Sessões sem vigilantes" sessions={conflicts.sessionsWithoutInvigilators} />
+          <SessionRefList title="Sessões sem vigilantes" sessions={conflicts.sessionsWithoutInvigilators} tab="invigilators" />
           <SessionRefList title="Sessões acima da capacidade" sessions={conflicts.overCapacitySessions} />
           <SessionRefList title="Sessões fora da janela do período" sessions={conflicts.sessionsOutsidePeriodWindow} />
         </div>
