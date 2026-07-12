@@ -605,6 +605,39 @@ export async function listInvigilatorsForSession(
   }));
 }
 
+/** Room names by id (for Operations — resolve UUIDs to names). */
+export async function listRoomNamesByIds(
+  organizationId: string,
+  roomIds: string[],
+  client?: PrismaClientOrTx
+): Promise<Map<string, string>> {
+  if (roomIds.length === 0) return new Map();
+  const db = client ?? (await getDb());
+  const rows = await db.examRoom.findMany({
+    where: { organizationId, id: { in: roomIds } },
+    select: { id: true, name: true },
+  });
+  return new Map(rows.map((r) => [r.id, r.name]));
+}
+
+/** Invigilator names by id (teacher OR user) — for Operations conflict labels. */
+export async function listInvigilatorNamesByIds(
+  organizationId: string,
+  ids: string[],
+  client?: PrismaClientOrTx
+): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const db = client ?? (await getDb());
+  const [teachers, users] = await Promise.all([
+    db.teacher.findMany({ where: { organizationId, id: { in: ids } }, select: { id: true, firstName: true, lastName: true } }),
+    db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } }),
+  ]);
+  const out = new Map<string, string>();
+  for (const t of teachers) out.set(t.id, `${t.firstName} ${t.lastName}`.trim());
+  for (const u of users) if (!out.has(u.id)) out.set(u.id, u.name || u.email);
+  return out;
+}
+
 export interface AssignableTeacher {
   teacherId: string;
   name: string;

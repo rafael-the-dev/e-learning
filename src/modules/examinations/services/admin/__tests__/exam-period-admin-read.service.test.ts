@@ -4,24 +4,26 @@ import { PERMISSIONS, type Permission } from "@/server/auth/permissions";
 import type { ExamPeriodRecord } from "@/modules/examinations/types/repository";
 
 vi.mock("@/modules/examinations/repositories/exam-period.repository", () => ({
-  listExamPeriods: vi.fn(),
-  countExamPeriods: vi.fn(),
   findExamPeriodById: vi.fn(),
 }));
 vi.mock("@/modules/examinations/repositories/exam-session.repository", () => ({
   countExamSessions: vi.fn(),
 }));
+vi.mock("@/modules/examinations/repositories/exam-admin-read.repository", () => ({
+  listPeriodsForPortal: vi.fn(),
+  countPeriodsForPortal: vi.fn(),
+}));
 
-import {
-  listExamPeriods,
-  countExamPeriods,
-  findExamPeriodById,
-} from "@/modules/examinations/repositories/exam-period.repository";
+import { findExamPeriodById } from "@/modules/examinations/repositories/exam-period.repository";
 import { countExamSessions } from "@/modules/examinations/repositories/exam-session.repository";
+import {
+  listPeriodsForPortal,
+  countPeriodsForPortal,
+} from "@/modules/examinations/repositories/exam-admin-read.repository";
 import { examPeriodAdminReadService } from "../exam-period-admin-read.service";
 
-const listMock = vi.mocked(listExamPeriods);
-const countMock = vi.mocked(countExamPeriods);
+const listMock = vi.mocked(listPeriodsForPortal);
+const countMock = vi.mocked(countPeriodsForPortal);
 const findMock = vi.mocked(findExamPeriodById);
 const sessionCountMock = vi.mocked(countExamSessions);
 

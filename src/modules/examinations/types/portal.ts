@@ -547,11 +547,15 @@ export interface ExamConflictSessionRef {
 
 export interface ExamRoomConflictDto {
   roomId: string;
+  /** Resolved room name (id is kept only for internal navigation). */
+  roomName: string | null;
   sessions: ExamConflictSessionRef[];
 }
 
 export interface ExamInvigilatorConflictDto {
   invigilatorId: string;
+  /** Resolved invigilator name (teacher or user; id kept only for navigation). */
+  invigilatorName: string | null;
   sessions: ExamConflictSessionRef[];
 }
 

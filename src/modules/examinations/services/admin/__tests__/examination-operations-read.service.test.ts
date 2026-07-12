@@ -12,6 +12,8 @@ vi.mock("@/modules/examinations/repositories/exam-admin-read.repository", () => 
   listInvigilatorAssignmentsBySessionIds: vi.fn(),
   listPeriodWindowsByIds: vi.fn(),
   listSessionsForConflicts: vi.fn(),
+  listRoomNamesByIds: vi.fn(),
+  listInvigilatorNamesByIds: vi.fn(),
 }));
 
 import {
@@ -19,6 +21,8 @@ import {
   listInvigilatorAssignmentsBySessionIds,
   listPeriodWindowsByIds,
   listSessionsForConflicts,
+  listRoomNamesByIds,
+  listInvigilatorNamesByIds,
 } from "@/modules/examinations/repositories/exam-admin-read.repository";
 import { examinationOperationsReadService } from "../examination-operations-read.service";
 
@@ -41,6 +45,8 @@ describe("operations conflict detection (detection only, org-scoped)", () => {
     vi.mocked(listInvigilatorAssignmentsBySessionIds).mockResolvedValue([] as never);
     vi.mocked(countActiveCandidatesBySessionIds).mockResolvedValue([{ examSessionId: "sC", activeCount: 5 }] as never);
     vi.mocked(listPeriodWindowsByIds).mockResolvedValue([{ id: "p-1", startsAt: d(8), endsAt: d(20) }] as never);
+    vi.mocked(listRoomNamesByIds).mockResolvedValue(new Map([["room-1", "Sala 1"]]));
+    vi.mocked(listInvigilatorNamesByIds).mockResolvedValue(new Map());
 
     const c = await examinationOperationsReadService.getConflicts(ctx([PERMISSIONS.EXAMS_OPERATIONS_VIEW]));
     expect(c.roomConflicts).toHaveLength(1);

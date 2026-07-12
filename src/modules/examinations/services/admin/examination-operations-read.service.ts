@@ -12,6 +12,8 @@ import {
   listInvigilatorAssignmentsBySessionIds,
   listPeriodWindowsByIds,
   listSessionsForConflicts,
+  listRoomNamesByIds,
+  listInvigilatorNamesByIds,
   type ConflictSessionRow,
 } from "@/modules/examinations/repositories/exam-admin-read.repository";
 import { gradeStateFor, latestIntegratedVersion } from "@/modules/examinations/commands/integration-shared";
@@ -66,7 +68,7 @@ export class ExaminationOperationsReadService {
       arr.push(s);
       byRoom.set(s.roomId, arr);
     }
-    const roomConflicts = [...byRoom.entries()]
+    const roomConflictsRaw = [...byRoom.entries()]
       .map(([roomId, list]) => ({ roomId, sessions: overlappingSet(list).map(ref) }))
       .filter((c) => c.sessions.length > 0);
 
@@ -81,9 +83,17 @@ export class ExaminationOperationsReadService {
       arr.push(s);
       byInvigilator.set(a.invigilatorId, arr);
     }
-    const invigilatorConflicts = [...byInvigilator.entries()]
+    const invigilatorConflictsRaw = [...byInvigilator.entries()]
       .map(([invigilatorId, list]) => ({ invigilatorId, sessions: overlappingSet(list).map(ref) }))
       .filter((c) => c.sessions.length > 0);
+
+    // Resolve UUIDs → names (ids kept only for internal navigation).
+    const [roomNames, invigilatorNames] = await Promise.all([
+      listRoomNamesByIds(organizationId, roomConflictsRaw.map((c) => c.roomId)),
+      listInvigilatorNamesByIds(organizationId, invigilatorConflictsRaw.map((c) => c.invigilatorId)),
+    ]);
+    const roomConflicts = roomConflictsRaw.map((c) => ({ ...c, roomName: roomNames.get(c.roomId) ?? null }));
+    const invigilatorConflicts = invigilatorConflictsRaw.map((c) => ({ ...c, invigilatorName: invigilatorNames.get(c.invigilatorId) ?? null }));
 
     const sessionsWithInvigilator = new Set(assignments.map((a) => a.examSessionId));
     const sessionsWithoutRoom = sessions.filter((s) => !s.roomId).map(ref);

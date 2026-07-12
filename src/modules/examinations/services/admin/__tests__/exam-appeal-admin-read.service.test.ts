@@ -2,15 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "@/server/auth/context";
 import { PERMISSIONS, type Permission } from "@/server/auth/permissions";
 
-vi.mock("@/modules/examinations/repositories/exam-appeal.repository", () => ({ countExamAppeals: vi.fn(), findExamAppealById: vi.fn(), listExamAppeals: vi.fn() }));
+vi.mock("@/modules/examinations/repositories/exam-appeal.repository", () => ({ findExamAppealById: vi.fn() }));
 vi.mock("@/modules/examinations/repositories/exam-result.repository", () => ({ findExamResultById: vi.fn() }));
 vi.mock("@/modules/examinations/repositories/exam-result-revision.repository", () => ({ listRevisionsByResult: vi.fn() }));
-vi.mock("@/modules/examinations/repositories/exam-admin-read.repository", () => ({ listResultsByIds: vi.fn(), listStudentDisplayByIds: vi.fn(), listSubjectNamesByLevelSubjectIds: vi.fn() }));
+vi.mock("@/modules/examinations/repositories/exam-admin-read.repository", () => ({ listResultsByIds: vi.fn(), listStudentDisplayByIds: vi.fn(), listSubjectNamesByLevelSubjectIds: vi.fn(), listAppealsForPortal: vi.fn(), countAppealsForPortal: vi.fn() }));
 
-import { countExamAppeals, findExamAppealById, listExamAppeals } from "@/modules/examinations/repositories/exam-appeal.repository";
+import { findExamAppealById } from "@/modules/examinations/repositories/exam-appeal.repository";
 import { findExamResultById } from "@/modules/examinations/repositories/exam-result.repository";
 import { listRevisionsByResult } from "@/modules/examinations/repositories/exam-result-revision.repository";
-import { listResultsByIds, listStudentDisplayByIds, listSubjectNamesByLevelSubjectIds } from "@/modules/examinations/repositories/exam-admin-read.repository";
+import { listResultsByIds, listStudentDisplayByIds, listSubjectNamesByLevelSubjectIds, listAppealsForPortal, countAppealsForPortal } from "@/modules/examinations/repositories/exam-admin-read.repository";
 import { examAppealAdminReadService } from "../exam-appeal-admin-read.service";
 
 function ctx(g: Permission[]): AuthContext {
@@ -23,8 +23,8 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("appeal read service", () => {
   it("lists org-scoped appeals with subject/student enrichment + allowedActions", async () => {
-    vi.mocked(listExamAppeals).mockResolvedValue([appeal] as never);
-    vi.mocked(countExamAppeals).mockResolvedValue(1);
+    vi.mocked(listAppealsForPortal).mockResolvedValue([appeal] as never);
+    vi.mocked(countAppealsForPortal).mockResolvedValue(1);
     vi.mocked(listResultsByIds).mockResolvedValue([{ id: "r-1", examCandidateId: "c-1", levelSubjectId: "ls-1", status: "PUBLISHED", resultCode: "SCORED", score: 15, maxScore: 20, normalizedScore: 75, currentRevisionId: "rev-1" }] as never);
     vi.mocked(listStudentDisplayByIds).mockResolvedValue([{ id: "st-1", code: "A1", firstName: "Ana", lastName: "S" }] as never);
     vi.mocked(listSubjectNamesByLevelSubjectIds).mockResolvedValue([{ levelSubjectId: "ls-1", subjectName: "Matemática" }] as never);
