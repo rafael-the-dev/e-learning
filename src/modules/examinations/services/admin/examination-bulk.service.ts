@@ -16,7 +16,9 @@ import {
   ApproveExamResultCommand,
 } from "@/modules/examinations/commands/result-review.commands";
 import { RegisterExamCandidateCommand } from "@/modules/examinations/commands/candidate-registration.commands";
-import { runBulk, type BulkSummary } from "@/modules/examinations/lib/bulk-runner";
+import { IntegratePublishedExamResultCommand } from "@/modules/examinations/commands/integration.commands";
+import { examIntegrationAdminReadService } from "./exam-integration-admin-read.service";
+import { runBulk, type BulkSummary, type BulkItemResult } from "@/modules/examinations/lib/bulk-runner";
 
 /** One candidate in a bulk registration. levelSubjectId is the session's. */
 export interface BulkRegisterInput {
@@ -167,6 +169,47 @@ export class ExaminationBulkService {
         ).run(),
       skipCodes: ["ALREADY_REGISTERED"],
     });
+  }
+
+  // ── Results: bulk integrate published results into grades ──────────────────
+  /** Integrate a session's PUBLISHED results into the grade/progression engine. Targets
+   *  only results that need it (gradeState MISSING); already-CURRENT are left alone and
+   *  UNSUPPORTED (non-scored) are reported as skipped ("Não suportado") — never faked as
+   *  integrated. Real failures (integration/progression errors) stay FAILED. Reuses the
+   *  existing single Integrate command per item; no new rules. */
+  async bulkIntegrateResults(context: AuthContext, examSessionId: string): Promise<BulkSummary> {
+    if (!context.ability.can(PERMISSIONS.EXAMS_INTEGRATE_RESULTS)) throw new AuthorizationError();
+    await this.assertSession(context, examSessionId);
+
+    // Resolve targets server-side from the integration read (per-result gradeState).
+    const status = await examIntegrationAdminReadService.getIntegrationStatus(context, examSessionId);
+    const toIntegrate = status.results.filter((r) => r.gradeState === "MISSING" && r.canIntegrate).map((r) => r.examResultId);
+    const unsupported = status.results.filter((r) => r.gradeState === "UNSUPPORTED").map((r) => r.examResultId);
+
+    const summary = await runBulk({
+      items: toIntegrate,
+      ref: (id) => id,
+      run: (id) => new IntegratePublishedExamResultCommand({ examResultId: id }, context).run(),
+      // Not-published is a benign skip; integration/progression errors stay FAILED.
+      skipCodes: ["EXAM_RESULT_NOT_PUBLISHED"],
+    });
+
+    // Surface the non-scored results honestly as skipped ("Não suportado") without
+    // wasting an integrate call that would only fail.
+    const unsupportedItems: BulkItemResult[] = unsupported.map((id) => ({
+      ref: id,
+      status: "skipped",
+      code: "EXAM_RESULT_INTEGRATION_UNSUPPORTED",
+      message: "Não suportado",
+    }));
+
+    return {
+      ...summary,
+      total: summary.total + unsupportedItems.length,
+      processed: summary.processed + unsupportedItems.length,
+      skipped: summary.skipped + unsupportedItems.length,
+      results: [...summary.results, ...unsupportedItems],
+    };
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────

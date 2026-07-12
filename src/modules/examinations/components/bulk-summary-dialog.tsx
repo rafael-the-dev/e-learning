@@ -33,6 +33,13 @@ export const BULK_CODE_LABELS: Record<string, string> = {
   ATTEMPT_NUMBER_CONFLICT: "Conflito de número de tentativa",
   SESSION_NOT_OPEN_FOR_REGISTRATION: "Registo fechado",
   CANDIDATE_NOT_REGISTERED: "Candidato não inscrito",
+  // integration
+  EXAM_RESULT_INTEGRATION_UNSUPPORTED: "Não suportado",
+  EXAM_RESULT_NOT_PUBLISHED: "Não publicado",
+  OFFICIAL_RESULT_NOT_FOUND: "Sem resultado oficial",
+  OFFICIAL_RESULT_CHANGED: "Resultado oficial alterado — reconciliar",
+  EXAM_RESULT_INTEGRATION_FAILED: "Falha na integração",
+  PROGRESSION_RECALCULATION_FAILED: "Falha no recálculo de progressão",
   // separation of duties
   SELF_REVIEW_NOT_ALLOWED: "Não pode rever o próprio lançamento",
   MARKER_REQUIRED: "Falta o corretor",
