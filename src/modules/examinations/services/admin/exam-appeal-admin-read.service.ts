@@ -2,17 +2,15 @@ import { AuthorizationError } from "@/shared/lib/command";
 import type { AuthContext } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/shared/lib/pagination";
-import {
-  countExamAppeals,
-  findExamAppealById,
-  listExamAppeals,
-} from "@/modules/examinations/repositories/exam-appeal.repository";
+import { findExamAppealById } from "@/modules/examinations/repositories/exam-appeal.repository";
 import { findExamResultById } from "@/modules/examinations/repositories/exam-result.repository";
 import { listRevisionsByResult } from "@/modules/examinations/repositories/exam-result-revision.repository";
 import {
   listResultsByIds,
   listStudentDisplayByIds,
   listSubjectNamesByLevelSubjectIds,
+  listAppealsForPortal,
+  countAppealsForPortal,
 } from "@/modules/examinations/repositories/exam-admin-read.repository";
 import { resolveOfficialExamResult } from "@/modules/examinations/commands/appeals-shared";
 import type { ExamOfficialResultDto } from "@/modules/examinations/types/portal";
@@ -32,10 +30,10 @@ import { computeAppealAllowedActions, resolveAppealCaps } from "./examination-po
 // `exams.view`. Exposes NO raw ExamEvent metadata, NO document numbers, NO Grade
 // entities. No writes — review/approve/reject go through the commands.
 //
-// Increment-2 filter push-down: `status` + `studentId` are DB-filtered + paginated;
-// `examSessionId` / `levelSubjectId` / `createdFrom` / `createdTo` / `search` are
-// accepted for forward-compatibility but not yet DB-pushed (documented gap — the
-// frozen appeal repository indexes status/studentId only).
+// Filter push-down: `status` + `studentId` + `search` are DB-filtered + paginated via the
+// portal read (search = one OR across student name/number + subject + session title, a
+// single query + matching count). `examSessionId` / `levelSubjectId` / `createdFrom` /
+// `createdTo` are accepted for forward-compatibility but not yet DB-pushed.
 // =============================================================================
 
 const reasonSummary = (reason: string): string =>
@@ -55,10 +53,10 @@ export class ExamAppealAdminReadService {
     const page = Math.max(1, filters.page ?? 1);
     const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, filters.pageSize ?? DEFAULT_PAGE_SIZE));
 
-    const repoFilters = { organizationId, status: filters.status, studentId: filters.studentId };
+    const repoFilters = { organizationId, status: filters.status, studentId: filters.studentId, search: filters.search };
     const [appeals, total] = await Promise.all([
-      listExamAppeals({ ...repoFilters, skip: (page - 1) * pageSize, take: pageSize }),
-      countExamAppeals(repoFilters),
+      listAppealsForPortal({ ...repoFilters, skip: (page - 1) * pageSize, take: pageSize }),
+      countAppealsForPortal(repoFilters),
     ]);
 
     // Batch the result → levelSubject → subject + student display + current scores.

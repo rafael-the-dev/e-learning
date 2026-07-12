@@ -27,10 +27,16 @@ export default async function ExamAppealsPage({
     <div className="space-y-4">
       <ExaminationPageHeader title="Recursos de Exame" description="Rever, aprovar ou rejeitar recursos sobre resultados." />
       <ExaminationFilterBar
-        showSearch={false}
+        searchPlaceholder="Pesquisar por aluno, disciplina ou sessão…"
         selects={[{ param: "status", label: "Estado", options: getStatusOptions("appeal") }]}
       />
-      <AppealsTable items={result.items} page={result.page} pageSize={result.pageSize} total={result.total} />
+      <AppealsTable
+        items={result.items}
+        page={result.page}
+        pageSize={result.pageSize}
+        total={result.total}
+        emptyTitle={sp.search ? `Sem resultados para «${sp.search}».` : undefined}
+      />
     </div>
   );
 }

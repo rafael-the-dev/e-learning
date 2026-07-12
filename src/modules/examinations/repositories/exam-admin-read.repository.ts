@@ -1,7 +1,7 @@
 import { getDb } from "@/server/db";
 import type { PrismaClientOrTx } from "@/server/db";
 import { isSessionConsumed } from "@/modules/examinations/commands/integration-shared";
-import type { ExamPeriodRecord, ExamSessionRecord } from "@/modules/examinations/types/repository";
+import type { ExamPeriodRecord, ExamSessionRecord, ExamAppealRecord } from "@/modules/examinations/types/repository";
 
 // ─── ExamPeriod portal list (adds text search the frozen core repo lacks) ─────
 // Same columns as the core select (row shape === ExamPeriodRecord), plus a single
@@ -114,6 +114,64 @@ export async function countSessionsForPortal(
 ): Promise<number> {
   const db = client ?? (await getDb());
   return db.examSession.count({ where: buildSessionPortalWhere(filters) });
+}
+
+// ─── ExamAppeal portal list (adds a single-OR deep-join search) ───────────────
+// Row shape === ExamAppealRecord. Search across student name/number + the appeal's
+// subject (result.levelSubject.subject.name) + session title (result.candidate.session.
+// title) in one OR — a single query; count shares the same WHERE.
+
+const appealPortalSelect = {
+  id: true, organizationId: true, examResultId: true, studentId: true, requestedById: true,
+  reason: true, status: true, decision: true, decisionReason: true, decidedById: true,
+  decidedAt: true, closedAt: true, createdAt: true, updatedAt: true,
+} as const;
+
+export interface AppealPortalFilters {
+  organizationId: string;
+  status?: string;
+  studentId?: string;
+  search?: string;
+}
+
+function buildAppealPortalWhere(f: AppealPortalFilters): Record<string, unknown> {
+  const where: Record<string, unknown> = { organizationId: f.organizationId };
+  if (f.status) where.status = f.status;
+  if (f.studentId) where.studentId = f.studentId;
+  const q = f.search?.trim();
+  if (q) {
+    where.OR = [
+      { student: { firstName: { contains: q } } },
+      { student: { lastName: { contains: q } } },
+      { student: { code: { contains: q } } },
+      { result: { levelSubject: { subject: { name: { contains: q } } } } },
+      { result: { candidate: { session: { title: { contains: q } } } } },
+    ];
+  }
+  return where;
+}
+
+export async function listAppealsForPortal(
+  filters: AppealPortalFilters & { skip: number; take: number },
+  client?: PrismaClientOrTx
+): Promise<ExamAppealRecord[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.examAppeal.findMany({
+    where: buildAppealPortalWhere(filters),
+    select: appealPortalSelect,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    skip: filters.skip,
+    take: filters.take,
+  });
+  return rows as ExamAppealRecord[];
+}
+
+export async function countAppealsForPortal(
+  filters: AppealPortalFilters,
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  return db.examAppeal.count({ where: buildAppealPortalWhere(filters) });
 }
 
 // =============================================================================

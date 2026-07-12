@@ -14,11 +14,13 @@ export function AppealsTable({
   page,
   pageSize,
   total,
+  emptyTitle = "Nenhum recurso submetido.",
 }: {
   items: ExamAppealListItemDto[];
   page: number;
   pageSize: number;
   total: number;
+  emptyTitle?: string;
 }) {
   const columns: ExaminationColumn<ExamAppealListItemDto>[] = [
     { key: "student", header: "Aluno", render: (a) => (
@@ -52,7 +54,7 @@ export function AppealsTable({
       page={page}
       pageSize={pageSize}
       total={total}
-      emptyTitle="Nenhum recurso submetido."
+      emptyTitle={emptyTitle}
     />
   );
 }
