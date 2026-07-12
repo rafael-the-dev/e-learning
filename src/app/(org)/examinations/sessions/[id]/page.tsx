@@ -125,7 +125,7 @@ export default async function ExamSessionDetailPage({
         </TabsContent>
 
         <TabsContent value="results">
-          <ResultsTab items={results.items} page={results.page} pageSize={results.pageSize} total={results.total} />
+          <ResultsTab sessionId={id} items={results.items} page={results.page} pageSize={results.pageSize} total={results.total} />
         </TabsContent>
 
         <TabsContent value="invigilators">
