@@ -34,7 +34,8 @@ export default async function ExamSessionDetailPage({ params }: { params: Promis
   // Session-scoped reads, batched. Each read service re-asserts view access + tenant scope.
   const [candidates, roster, results, readiness, binding, integration] = await Promise.all([
     examCandidateAdminReadService.listBySession(context, id, {}),
-    examAttendanceAdminReadService.getRoster(context, id, {}),
+    // Load the whole roster (up to the page cap) so inline marking rarely paginates.
+    examAttendanceAdminReadService.getRoster(context, id, { pageSize: 100 }),
     examResultAdminReadService.listBySession(context, id, {}),
     examPublicationAdminReadService.getReadiness(context, id),
     examIntegrationAdminReadService.getBinding(context, id),

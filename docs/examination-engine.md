@@ -1592,6 +1592,28 @@ results) filter every field in-memory over the bounded roster (no N+1).
 **Still deferred to Increment 3:** all React pages, client components, and nav wiring.
 Phase 12 remains OPEN until Increment 3.
 
+### Increment 4 — UX hardening (IN PROGRESS, portal-layer only, engine frozen)
+
+Follow-up to the production-readiness UX audit. Everything here lives in the **portal layer**
+(routes over existing commands, portal read repo, React) — the examination **engine stays
+frozen** (no new domain command, no core-repo or schema change). Ordered: (1) inline
+attendance + no-reload, (2) invigilator list+assign, (3) entity pickers, (4) server-side portal
+bulk endpoints, (5) remaining text search.
+
+**Explicit v1 decisions recorded here:**
+- **Invigilator assignments are append-only.** v1 supports list / assign / duplicate-conflict
+  detection / Operations→tab linking, but **NOT** unassignment. `ExamInvigilatorAssignment`
+  has no `deletedAt` and no removal lifecycle; unassigning would require a hard delete, an
+  invented state, or a schema/migration on a frozen engine — all rejected. Unassignment is a
+  future formal domain change (likely `cancelledAt`/`cancelledById`/`reason` or `deletedAt`),
+  never a silent delete.
+- **Bulk = one HTTP call, one transaction per item, partial success.** No browser-side N-call
+  loops. Portal bulk endpoints (`…/candidates/bulk-register`, `…/results/bulk`, `bulk-submit`,
+  `bulk-review`, `bulk-approve`) delegate sequentially to the existing single commands via a
+  neutral portal bulk service — zero duplicated rules. Contract: one request → per-item tx →
+  typed per-item errors → `succeeded/failed/skipped` counts → optional `stopOnFailure`. This
+  mirrors the attendance bulk command that already exists.
+
 ### Increment 3 — Admin Portal UI (COMPLETE)
 
 React UI over the frozen backend. **The frontend decides nothing** — it renders the
