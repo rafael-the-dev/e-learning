@@ -1,15 +1,25 @@
 "use client";
 
+import { useState } from "react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import type { ExamPublicationReadinessDto } from "@/modules/examinations/types/portal";
 import { AllowedActionButton } from "./allowed-action-button";
 
-// Publication readiness — blockers are ALWAYS shown (never hidden). Publish/Retract
-// are gated purely by readiness.allowedActions (server-computed); the command remains
-// the authority. No status branching here.
-export function PublicationReadinessCard({ readiness }: { readiness: ExamPublicationReadinessDto }) {
+// Publication readiness — blockers are ALWAYS shown. Publish/Retract are gated purely by
+// readiness.allowedActions (server-computed). Publish/retract change several projections at
+// once, so on success we do a DIRECTED refetch of THIS card's readiness (never invent state,
+// never global router.refresh). Cross-tab projections (results/integration) update via their
+// own surfaces. No status branching here.
+export function PublicationReadinessCard({ readiness: initial }: { readiness: ExamPublicationReadinessDto }) {
+  const [readiness, setReadiness] = useState(initial);
   const id = readiness.examSessionId;
+
+  async function refetch(): Promise<void> {
+    const res = await fetch(`/api/examinations/sessions/${id}/publication-readiness`);
+    if (res.ok) setReadiness((await res.json()) as ExamPublicationReadinessDto);
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -30,9 +40,7 @@ export function PublicationReadinessCard({ readiness }: { readiness: ExamPublica
           </div>
         </div>
 
-        {readiness.downstreamConsumed && (
-          <Badge variant="info">Consumido a jusante (integrado)</Badge>
-        )}
+        {readiness.downstreamConsumed && <Badge variant="info">Consumido a jusante (integrado)</Badge>}
 
         {readiness.blockers.length > 0 && (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
@@ -51,6 +59,7 @@ export function PublicationReadinessCard({ readiness }: { readiness: ExamPublica
             url={`/api/examinations/sessions/${id}/publish`}
             label="Publicar"
             successMessage="Resultados publicados"
+            onSuccess={refetch}
           />
           <AllowedActionButton
             allowed={readiness.allowedActions.canRetract}
@@ -61,6 +70,7 @@ export function PublicationReadinessCard({ readiness }: { readiness: ExamPublica
             reasonLabel="Motivo da retração"
             confirmTitle="Retirar publicação"
             successMessage="Publicação retirada"
+            onSuccess={refetch}
           />
         </div>
       </CardContent>

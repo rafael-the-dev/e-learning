@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import type {
@@ -9,16 +10,29 @@ import type {
 import { ExaminationStatusBadge } from "./status-badges";
 import { AllowedActionButton } from "./allowed-action-button";
 
-// Grade binding + per-result integration state. Binding is EXPLICIT (no heuristic);
-// maxScore/maxGrade mismatch + non-scored UNSUPPORTED are shown honestly. Integrate/
-// reconcile are gated by each row's server-computed flags. No Transcript/Certificate.
+// Grade binding + per-result integration state. Integrate/reconcile update THIS card's
+// read model in place (directed refetch of the integration-status + binding endpoints) —
+// no global reload, tab/scroll preserved. The server response is the source of truth.
 export function IntegrationStatusCard({
-  binding,
-  status,
+  binding: initialBinding,
+  status: initialStatus,
 }: {
   binding: ExamGradeBindingDto;
   status: ExamIntegrationStatusDto;
 }) {
+  const [binding, setBinding] = useState(initialBinding);
+  const [status, setStatus] = useState(initialStatus);
+  const sessionId = status.examSessionId;
+
+  async function refetch(): Promise<void> {
+    const [s, b] = await Promise.all([
+      fetch(`/api/examinations/sessions/${sessionId}/integration-status`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/api/examinations/sessions/${sessionId}/grade-binding`).then((r) => (r.ok ? r.json() : null)),
+    ]);
+    if (s) setStatus(s as ExamIntegrationStatusDto);
+    if (b) setBinding(b as ExamGradeBindingDto);
+  }
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -55,7 +69,7 @@ export function IntegrationStatusCard({
           {(["current", "missing", "stale", "unsupported", "failed"] as const).map((k) => (
             <div key={k} className="rounded border p-2 text-center">
               <div className="text-lg font-semibold tabular-nums">{status.summary[k]}</div>
-              <div className="text-muted-foreground capitalize">{k}</div>
+              <div className="capitalize text-muted-foreground">{k}</div>
             </div>
           ))}
         </div>
@@ -73,6 +87,7 @@ export function IntegrationStatusCard({
                   url={`/api/examinations/results/${r.examResultId}/integrate`}
                   label="Integrar"
                   successMessage="Resultado integrado"
+                  onSuccess={refetch}
                 />
                 <AllowedActionButton
                   allowed={r.canReconcile}
@@ -81,6 +96,7 @@ export function IntegrationStatusCard({
                   label="Reconciliar"
                   variant="secondary"
                   successMessage="Integração reconciliada"
+                  onSuccess={refetch}
                 />
               </div>
             </div>

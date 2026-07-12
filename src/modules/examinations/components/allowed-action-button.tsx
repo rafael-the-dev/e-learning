@@ -48,8 +48,13 @@ export interface AllowedActionButtonProps {
   successMessage?: string;
   /** Hide entirely when disallowed (default renders a disabled button). */
   hideWhenDisallowed?: boolean;
-  /** Called after a successful mutation (defaults to router.refresh). */
-  onSuccess?: () => void;
+  /**
+   * Called after a successful mutation, with the command's parsed result. The SURFACE
+   * uses it to update its own read model in place (directed refetch / row replace) —
+   * the button stays generic (loading / error / toast only). When omitted, the button
+   * falls back to a global `router.refresh()` (fine for low-frequency lists).
+   */
+  onSuccess?: (result: unknown) => void | Promise<void>;
 }
 
 export function AllowedActionButton({
@@ -102,8 +107,11 @@ export function AllowedActionButton({
         });
         return;
       }
+      // Parse the authoritative result so the surface can reconcile from the server
+      // response (never invent the new state locally).
+      const result = await res.json().catch(() => null);
       if (successMessage) toast({ title: successMessage });
-      if (onSuccess) onSuccess();
+      if (onSuccess) await onSuccess(result);
       else router.refresh();
     } catch {
       toast({ title: "Erro de rede", description: "Tente novamente.", variant: "destructive" });
