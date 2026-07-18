@@ -20,6 +20,8 @@ import { TeacherMyClasses } from "@/modules/teacher-portal/components/teacher-my
 import { TeacherStudentRiskList } from "@/modules/teacher-portal/components/teacher-student-risk-list";
 import { TeacherNotificationsPanel } from "@/modules/teacher-portal/components/teacher-notifications-panel";
 import { TeacherUpcomingDeadlines } from "@/modules/teacher-portal/components/teacher-upcoming-deadlines";
+import { teacherExaminationService } from "@/modules/teacher-examinations/services/teacher-examination.service";
+import { TeacherExamSummaryCard } from "@/modules/teacher-examinations/components/teacher-exam-summary-card";
 
 export const metadata = { title: "Portal do Professor" };
 
@@ -66,6 +68,7 @@ export default async function TeacherPortalPage() {
   const canViewOrgWide = context.ability.can(PERMISSIONS.TEACHERS_VIEW_360);
 
   const data = await getTeacherPortalData(teacher.id, teacher.fullName, context.userId, context.organizationId);
+  const examOverview = await teacherExaminationService.getOverview(context.organizationId, teacher.id);
 
   return (
     <>
@@ -83,6 +86,8 @@ export default async function TeacherPortalPage() {
           </ExecutiveLeftColumn>
 
           <ExecutiveRightColumn>
+            <TeacherExamSummaryCard overview={examOverview} />
+
             <DashboardSideCard
               title="Alunos em Risco"
               icon={<ShieldAlert className="size-4" />}
