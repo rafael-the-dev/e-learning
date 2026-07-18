@@ -175,3 +175,37 @@ describe("TeacherExaminationService — overview counts only assigned sessions",
     expect(o.attendancePendingCount).toBe(1); // s-today: CHIEF, IN_PROGRESS, attendance incomplete
   });
 });
+
+describe("Sprint 2 — canBulkMarkAttendance (markable AND pending exist)", () => {
+  it("true only when the teacher can mark AND there is something pending", () => {
+    expect(computeTeacherCapabilities("CHIEF", "IN_PROGRESS", 3).canBulkMarkAttendance).toBe(true);
+    expect(computeTeacherCapabilities("CHIEF", "IN_PROGRESS", 0).canBulkMarkAttendance).toBe(false); // nothing pending
+    expect(computeTeacherCapabilities("OBSERVER", "IN_PROGRESS", 5).canBulkMarkAttendance).toBe(false); // can't mark
+    expect(computeTeacherCapabilities("CHIEF", "COMPLETED", 5).canBulkMarkAttendance).toBe(false); // mark closed
+  });
+});
+
+describe("Sprint 2 — getSessionAttendanceView (fail-closed roster for revalidation)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns null when the teacher is not assigned to the session", async () => {
+    vi.mocked(findAssignedSession).mockResolvedValue(null);
+    const v = await teacherExaminationService.getSessionAttendanceView(ORG, T, "not-mine");
+    expect(v).toBeNull();
+  });
+
+  it("returns roster + progress + capabilities, with bulk enabled when pending exist", async () => {
+    vi.mocked(findAssignedSession).mockResolvedValue(row({ role: "CHIEF", sessionStatus: "IN_PROGRESS" }));
+    const candidates: TeacherCandidateRow[] = [
+      { examCandidateId: "c1", studentName: "A", studentNumber: "1", candidateStatus: "REGISTERED", attendanceStatus: "PRESENT", resultStatus: null, resultCode: null, normalizedScore: null },
+      { examCandidateId: "c2", studentName: "B", studentNumber: "2", candidateStatus: "REGISTERED", attendanceStatus: null, resultStatus: null, resultCode: null, normalizedScore: null },
+    ];
+    vi.mocked(listSessionCandidates).mockResolvedValue(candidates);
+
+    const v = await teacherExaminationService.getSessionAttendanceView(ORG, T, "sess-1");
+    expect(v?.progress).toMatchObject({ candidateCount: 2, attendanceMarked: 1 });
+    expect(v?.capabilities.canMarkAttendance).toBe(true);
+    expect(v?.capabilities.canBulkMarkAttendance).toBe(true); // 1 pending
+    expect(v?.candidates).toHaveLength(2);
+  });
+});

@@ -11,6 +11,7 @@ import {
   type TeacherSessionFacets,
 } from "@/modules/teacher-examinations/repositories/teacher-exam.repository";
 import type {
+  TeacherExamAttendanceViewDto,
   TeacherExamCapabilitiesDto,
   TeacherExamOverviewDto,
   TeacherExamSessionDetailDto,
@@ -40,13 +41,20 @@ const RESULT_STATES = new Set(["IN_PROGRESS", "COMPLETED"]);
 const RECENT_STATES = new Set(["COMPLETED", "RESULTS_RECORDED", "PUBLISHED"]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Capabilities from role + session state + engine rules (NOT admin allowedActions). */
-export function computeTeacherCapabilities(role: string, sessionStatus: string): TeacherExamCapabilitiesDto {
+/** Capabilities from role + session state + engine rules (NOT admin allowedActions).
+ *  `pendingForBulk` = candidates still without a recorded attendance — bulk is only
+ *  offered when there is something to mark (and never overwrites existing rows). */
+export function computeTeacherCapabilities(
+  role: string,
+  sessionStatus: string,
+  pendingForBulk = 0
+): TeacherExamCapabilitiesDto {
   const attendanceRole = ATTENDANCE_ROLES.has(role);
   const resultRole = RESULT_ROLES.has(role);
 
   const canMarkAttendance = attendanceRole && MARK_STATES.has(sessionStatus);
   const canCorrectAttendance = attendanceRole && CORRECT_STATES.has(sessionStatus);
+  const canBulkMarkAttendance = canMarkAttendance && pendingForBulk > 0;
   const canEnterResults = resultRole && RESULT_STATES.has(sessionStatus);
   const canUpdateResults = resultRole && RESULT_STATES.has(sessionStatus);
   const canSubmitResults = resultRole && sessionStatus === "COMPLETED";
@@ -64,6 +72,7 @@ export function computeTeacherCapabilities(role: string, sessionStatus: string):
   return {
     canMarkAttendance,
     canCorrectAttendance,
+    canBulkMarkAttendance,
     canEnterResults,
     canUpdateResults,
     canSubmitResults,
@@ -80,7 +89,7 @@ function nextAction(caps: TeacherExamCapabilitiesDto, p: TeacherSessionProgressR
 }
 
 function toListItem(row: TeacherSessionRow, p: TeacherSessionProgressRow): TeacherExamSessionListItemDto {
-  const caps = computeTeacherCapabilities(row.role, row.sessionStatus);
+  const caps = computeTeacherCapabilities(row.role, row.sessionStatus, p.candidateCount - p.attendanceMarked);
   return {
     examSessionId: row.examSessionId,
     title: row.title,
@@ -112,12 +121,15 @@ export class TeacherExaminationService {
     // Bounded load of the teacher's assigned sessions + batched progress.
     const rows = await listAssignedSessions(organizationId, teacherId, {}, 0, MAX_PAGE_SIZE * 5);
     const progress = await loadSessionsProgress(organizationId, rows.map((r) => r.examSessionId));
-    const items = rows.map((r) => ({
-      row: r,
-      item: toListItem(r, progress.get(r.examSessionId)!),
-      caps: computeTeacherCapabilities(r.role, r.sessionStatus),
-      p: progress.get(r.examSessionId)!,
-    }));
+    const items = rows.map((r) => {
+      const p = progress.get(r.examSessionId)!;
+      return {
+        row: r,
+        item: toListItem(r, p),
+        caps: computeTeacherCapabilities(r.role, r.sessionStatus, p.candidateCount - p.attendanceMarked),
+        p,
+      };
+    });
 
     const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).getTime();
     const dayEnd = dayStart + DAY_MS;
@@ -222,7 +234,43 @@ export class TeacherExaminationService {
         resultsDraft: progress.resultsDraft,
         resultsSubmitted: progress.resultsSubmitted,
       },
-      capabilities: computeTeacherCapabilities(row.role, row.sessionStatus),
+      capabilities: computeTeacherCapabilities(
+        row.role,
+        row.sessionStatus,
+        progress.candidateCount - progress.attendanceMarked
+      ),
+      candidates,
+    };
+  }
+
+  /** The interactive attendance view (roster + gating), fail-closed to null when the
+   *  teacher is not assigned to the session. Used by the roster GET endpoint so the
+   *  client can revalidate after each mutation with fresh capabilities/progress. */
+  async getSessionAttendanceView(
+    organizationId: string,
+    teacherId: string,
+    examSessionId: string
+  ): Promise<TeacherExamAttendanceViewDto | null> {
+    const row = await findAssignedSession(organizationId, teacherId, examSessionId);
+    if (!row) return null;
+
+    const candidates = await listSessionCandidates(organizationId, examSessionId);
+    const progress = {
+      candidateCount: candidates.filter((c) => c.candidateStatus === "REGISTERED").length,
+      attendanceMarked: candidates.filter((c) => c.attendanceStatus != null).length,
+      resultsDraft: candidates.filter((c) => c.resultStatus === "DRAFT").length,
+      resultsSubmitted: candidates.filter((c) => c.resultStatus === "SUBMITTED").length,
+    };
+    return {
+      examSessionId: row.examSessionId,
+      sessionStatus: row.sessionStatus,
+      role: row.role,
+      capabilities: computeTeacherCapabilities(
+        row.role,
+        row.sessionStatus,
+        progress.candidateCount - progress.attendanceMarked
+      ),
+      progress,
       candidates,
     };
   }

@@ -16,11 +16,24 @@
 export interface TeacherExamCapabilitiesDto {
   canMarkAttendance: boolean;
   canCorrectAttendance: boolean;
+  /** canMarkAttendance AND there are still candidates without a recorded attendance
+   *  (bulk "mark all present" only targets the pending — never overwrites). */
+  canBulkMarkAttendance: boolean;
   canEnterResults: boolean;
   canUpdateResults: boolean;
   canSubmitResults: boolean;
   attendanceBlockReason: string | null;
   resultsBlockReason: string | null;
+}
+
+/** The interactive attendance view (roster + gating) for a session detail. */
+export interface TeacherExamAttendanceViewDto {
+  examSessionId: string;
+  sessionStatus: string;
+  role: string;
+  capabilities: TeacherExamCapabilitiesDto;
+  progress: TeacherExamSessionProgressDto;
+  candidates: TeacherExamCandidateRowDto[];
 }
 
 /** Operational progress of a session's work. */

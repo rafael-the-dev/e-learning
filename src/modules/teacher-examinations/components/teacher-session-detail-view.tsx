@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import type { TeacherExamSessionDetailDto } from "@/modules/teacher-examinations/types";
 import { TeacherExamCapabilitiesPanel } from "./teacher-exam-capabilities-panel";
-import { TeacherCandidatesTable } from "./teacher-candidates-table";
+import { TeacherAttendanceSection } from "./teacher-attendance-section";
 import {
   SessionStatusBadge,
   RoleBadge,
@@ -96,13 +96,13 @@ export function TeacherSessionDetailView({ session }: { session: TeacherExamSess
         </SectionCard>
       </div>
 
-      {/* Candidatos */}
+      {/* Assiduidade (Sprint 2 — escrita) */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">Candidatos</CardTitle>
+          <CardTitle className="text-sm font-semibold">Assiduidade</CardTitle>
         </CardHeader>
         <CardContent>
-          <TeacherCandidatesTable candidates={session.candidates} />
+          <TeacherAttendanceSection sessionId={session.examSessionId} />
         </CardContent>
       </Card>
     </div>
