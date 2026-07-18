@@ -1,4 +1,4 @@
-# Student Examination Portal — Architecture & Product Closure (v1.0.0)
+# Student Examination Portal — Architecture & Product Closure (v1.0.1)
 
 > **Official closure document for the Student Examination Portal.** It consolidates,
 > at freeze time, what the module does, how it is built, why the key decisions were
@@ -12,8 +12,9 @@
 | | |
 |---|---|
 | **Module** | Student Examination Portal (the student-facing exam experience) |
-| **Version** | **v1.0.0** |
+| **Version** | **v1.0.1** (v1.0.0 initial build + the three UX-audit fixes) |
 | **Status** | **Production Ready · Frozen** (UX Audit: Overall 7.5/10, 0 Critical / 0 High) |
+| **Lifecycle** | **Maintenance** |
 | **Date** | 2026-07-18 |
 | **Runs over** | The **frozen** Examination Engine ([ADR-013](adr/ADR-013-examination-engine.md)). No engine behaviour, schema, or migration changed. |
 | **Sibling** | [Examination Administration Portal v1.1.0](examination-portal-v1.1-closure.md) (admin/secretary). This is the second portal on the same engine. |
@@ -182,13 +183,15 @@ Full rationale: [ADR-016 — Student Examination Portal Freeze](adr/ADR-016-stud
 
 ## Closure statement
 
-The Student Examination Portal is **frozen at v1.0.0 · Production Ready**. It answers
-its central question — a student can run their whole exam experience without the
-secretariat — with a fail-closed security posture and zero engine change. The v1.1
-backlog (§9) is separated from this release.
+The Student Examination Portal is **frozen at v1.0.1 · Production Ready · Maintenance**.
+It answers its central question — a student can run their whole exam experience without
+the secretariat — with a fail-closed security posture and zero engine change. v1.0.1
+folds in the three UX-audit fixes (history drill-through, appeal discoverability,
+explanatory empty states); the remaining v1.1 backlog (§9) is separated from this
+release.
 
 **Related:** [ADR-016](adr/ADR-016-student-examination-portal-freeze.md) ·
 [CHANGELOG](student-examination-portal-CHANGELOG.md) ·
-[Release Notes v1.0.0](releases/student-examination-portal-v1.0.0.md) ·
+[Release Notes v1.0.1](releases/student-examination-portal-v1.0.1.md) ·
 [Admin portal closure](examination-portal-v1.1-closure.md) ·
 [ADR-013 (engine)](adr/ADR-013-examination-engine.md).

@@ -1,6 +1,6 @@
 # ADR-016 — Student Examination Portal Freeze
 
-- **Status:** **Accepted** · Portal **frozen v1.0.0** (2026-07-18)
+- **Status:** **Accepted** · Portal **frozen v1.0.1** · Lifecycle **Maintenance** (2026-07-18)
 - **Date:** 2026-07-18
 - **Scope:** Student Examination Portal (the student-facing `/student/examinations` module)
 - **Builds on:** [ADR-013](./ADR-013-examination-engine.md) (Examination Engine design
@@ -11,8 +11,8 @@
 > named `ADR-016` to keep the repository's single numeric ADR sequence (ADR-013 = engine,
 > ADR-015 = admin portal, ADR-016 = student portal). Content is unaffected by the number.
 
-> **Related:** [Architecture & Product Closure v1.0.0](../student-examination-portal-v1.0-closure.md),
-> [Release Notes](../releases/student-examination-portal-v1.0.0.md).
+> **Related:** [Architecture & Product Closure v1.0.1](../student-examination-portal-v1.0-closure.md),
+> [Release Notes](../releases/student-examination-portal-v1.0.1.md).
 
 ## Context
 
@@ -21,7 +21,7 @@ v1.1.0 (ADR-015). The next portal on the same engine is the **student** experien
 student should be able to see upcoming exams, exam details/eligibility, published
 results, file/track/withdraw appeals, and browse history — **without contacting the
 secretariat** — with strict per-student data isolation. This ADR records the decisions
-that shaped the student portal and freezes it at v1.0.0, so future maintainers (and the
+that shaped the student portal and freezes it at v1.0.1, so future maintainers (and the
 upcoming Teacher/Guardian portals) understand why it is shaped this way.
 
 ## Decisions

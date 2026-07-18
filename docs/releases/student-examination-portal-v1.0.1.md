@@ -1,9 +1,15 @@
-# Student Examination Portal v1.0.0 — 2026-07-18
+# Student Examination Portal v1.0.1 — 2026-07-18
 
-**Status: Production Ready · Frozen.** The first student-facing exam experience, a
-dedicated `/student/examinations` module over the **frozen** Examination Engine — no
-schema, migration, or engine change. Frozen after a UX Audit (Overall 7.5/10, 0
-Critical / 0 High) and a Security Review.
+**Status: Production Ready · Frozen · Maintenance.** The first student-facing exam
+experience, a dedicated `/student/examinations` module over the **frozen** Examination
+Engine — no schema, migration, or engine change. Frozen after a UX Audit (Overall
+7.5/10, 0 Critical / 0 High) and a Security Review. v1.0.1 folds in the three UX-audit
+fixes on top of the v1.0.0 feature build:
+
+- **History drill-through** — each history row links to the result (or exam) detail.
+- **Appeal discoverability** — the Recursos empty state explains that appeals start from
+  a published result and links to Resultados.
+- **Explanatory empty states** — every empty screen says why it's empty and what's next.
 
 Full detail: [Architecture & Product Closure](../student-examination-portal-v1.0-closure.md) ·
 [CHANGELOG](../student-examination-portal-CHANGELOG.md) ·
