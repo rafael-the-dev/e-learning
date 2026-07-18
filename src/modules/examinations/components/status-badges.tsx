@@ -70,6 +70,14 @@ const GRADE_STATE: Registry = {
   MISSING: { label: "Em falta", variant: "warning" },
   STALE: { label: "Desatualizado", variant: "warning" },
   UNSUPPORTED: { label: "Não suportado", variant: "secondary" },
+  FAILED: { label: "Falhou", variant: "destructive" },
+};
+// Reconciliation progression state (integration card caption). Domain union stays
+// English (`NOT_RUN | CURRENT | REQUIRES_RECALCULATION`); labels are PT-PT only.
+const PROGRESSION_STATE: Registry = {
+  CURRENT: { label: "Atual", variant: "success" },
+  REQUIRES_RECALCULATION: { label: "Requer recálculo", variant: "warning" },
+  NOT_RUN: { label: "Não executado", variant: "secondary" },
 };
 const RESULT_CODE: Registry = {
   SCORED: { label: "Pontuado", variant: "info" },
@@ -87,6 +95,7 @@ const REGISTRIES = {
   attendance: ATTENDANCE,
   appeal: APPEAL,
   gradeState: GRADE_STATE,
+  progressionState: PROGRESSION_STATE,
   resultCode: RESULT_CODE,
 } as const;
 
@@ -96,6 +105,13 @@ export type ExaminationBadgeKind = keyof typeof REGISTRIES;
  *  filter labels identical to the badges (single source of truth). */
 export function getStatusOptions(kind: ExaminationBadgeKind): Array<{ value: string; label: string }> {
   return Object.entries(REGISTRIES[kind]).map(([value, entry]) => ({ value, label: entry.label }));
+}
+
+/** PT-PT label for a status VALUE (same source as the badges/filters). Falls back to
+ *  the raw value for unmapped states — callers rendering a closed vocabulary should
+ *  pass only registered values so nothing reaches the fallback. */
+export function getStatusLabel(kind: ExaminationBadgeKind, value: string): string {
+  return REGISTRIES[kind][value]?.label ?? value;
 }
 
 export function ExaminationStatusBadge({

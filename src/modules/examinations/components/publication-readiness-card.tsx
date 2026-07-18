@@ -65,7 +65,10 @@ export function PublicationReadinessCard({ readiness: initial }: { readiness: Ex
           <AllowedActionButton
             allowed={readiness.allowedActions.canPublish}
             url={`/api/examinations/sessions/${id}/publish`}
-            label="Publicar"
+            label="Publicar resultados"
+            confirm
+            confirmTitle="Publicar resultados?"
+            confirmDescription="Os resultados aprovados desta sessão ficarão visíveis para os candidatos e poderão desencadear as integrações configuradas. Confirma que pretende publicar estes resultados?"
             successMessage="Resultados publicados"
             onSuccess={refetch}
           />

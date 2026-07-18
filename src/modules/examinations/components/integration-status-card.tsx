@@ -10,9 +10,19 @@ import type {
   ExamIntegrationStatusDto,
 } from "@/modules/examinations/types/portal";
 import type { BulkSummary } from "@/modules/examinations/lib/bulk-runner";
-import { ExaminationStatusBadge } from "./status-badges";
+import { ExaminationStatusBadge, getStatusLabel } from "./status-badges";
 import { AllowedActionButton } from "./allowed-action-button";
 import { BulkSummaryDialog } from "./bulk-summary-dialog";
+
+// Integration summary tiles: each summary bucket maps to the matching gradeState value,
+// so the tile label comes from the SAME central registry as the badges (no drift, PT-PT).
+const INTEGRATION_TILES = [
+  { key: "current", state: "CURRENT" },
+  { key: "missing", state: "MISSING" },
+  { key: "stale", state: "STALE" },
+  { key: "unsupported", state: "UNSUPPORTED" },
+  { key: "failed", state: "FAILED" },
+] as const;
 
 // Grade binding + per-result integration state. Integrate/reconcile update THIS card's
 // read model in place (directed refetch of the integration-status + binding endpoints) —
@@ -107,10 +117,10 @@ export function IntegrationStatusCard({
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
-          {(["current", "missing", "stale", "unsupported", "failed"] as const).map((k) => (
-            <div key={k} className="rounded border p-2 text-center">
-              <div className="text-lg font-semibold tabular-nums">{status.summary[k]}</div>
-              <div className="capitalize text-muted-foreground">{k}</div>
+          {INTEGRATION_TILES.map((t) => (
+            <div key={t.key} className="rounded border p-2 text-center">
+              <div className="text-lg font-semibold tabular-nums">{status.summary[t.key]}</div>
+              <div className="text-muted-foreground">{getStatusLabel("gradeState", t.state)}</div>
             </div>
           ))}
         </div>
@@ -120,7 +130,9 @@ export function IntegrationStatusCard({
             <div key={r.examResultId} className="flex items-center justify-between gap-2 rounded border p-2 text-sm">
               <div className="flex items-center gap-2">
                 <ExaminationStatusBadge kind="gradeState" status={r.gradeState} />
-                <span className="text-xs text-muted-foreground">{r.progressionState}</span>
+                <span className="text-xs text-muted-foreground">
+                  {getStatusLabel("progressionState", r.progressionState)}
+                </span>
               </div>
               <div className="flex gap-2">
                 <AllowedActionButton
