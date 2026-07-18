@@ -44,6 +44,31 @@ const RESULT_CODE: Registry = {
   DISQUALIFIED: { label: "Desqualificado", variant: "destructive" },
 };
 
+// Attendance status recorded for the candidacy.
+const ATTENDANCE: Registry = {
+  PRESENT: { label: "Presente", variant: "success" },
+  ABSENT: { label: "Ausente", variant: "destructive" },
+  LATE: { label: "Atrasado", variant: "warning" },
+  EXCUSED: { label: "Justificado", variant: "secondary" },
+  DISQUALIFIED: { label: "Desqualificado", variant: "destructive" },
+};
+
+// Appeal lifecycle status.
+const APPEAL: Registry = {
+  PENDING: { label: "Pendente", variant: "warning" },
+  UNDER_REVIEW: { label: "Em análise", variant: "info" },
+  APPROVED: { label: "Aprovado", variant: "success" },
+  REJECTED: { label: "Rejeitado", variant: "destructive" },
+  WITHDRAWN: { label: "Retirado", variant: "secondary" },
+  CLOSED: { label: "Encerrado", variant: "secondary" },
+};
+
+// Public decision on an appeal (never the private decisionReason).
+const APPEAL_DECISION: Registry = {
+  APPROVED: { label: "Aprovado", variant: "success" },
+  REJECTED: { label: "Rejeitado", variant: "destructive" },
+};
+
 // Eligibility blocker codes → PT-PT reasons. Label-only (no badge variant); an
 // unknown code renders its raw value so nothing is silently swallowed.
 const ELIGIBILITY_BLOCKER: Record<string, string> = {
@@ -64,6 +89,9 @@ const REGISTRIES = {
   session: SESSION,
   candidate: CANDIDATE,
   resultCode: RESULT_CODE,
+  attendance: ATTENDANCE,
+  appeal: APPEAL,
+  appealDecision: APPEAL_DECISION,
 } as const;
 
 export type StudentExamBadgeKind = keyof typeof REGISTRIES;
@@ -99,6 +127,15 @@ export const CandidateStatusBadge = ({ status }: { status: string | null | undef
 );
 export const ResultCodeBadge = ({ status }: { status: string | null | undefined }) => (
   <StudentExamStatusBadge kind="resultCode" status={status} />
+);
+export const AttendanceStatusBadge = ({ status }: { status: string | null | undefined }) => (
+  <StudentExamStatusBadge kind="attendance" status={status} />
+);
+export const AppealStatusBadge = ({ status }: { status: string | null | undefined }) => (
+  <StudentExamStatusBadge kind="appeal" status={status} />
+);
+export const AppealDecisionBadge = ({ status }: { status: string | null | undefined }) => (
+  <StudentExamStatusBadge kind="appealDecision" status={status} />
 );
 
 // ─── Shared formatting helpers (pt-PT) ───────────────────────────────────────

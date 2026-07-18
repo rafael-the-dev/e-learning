@@ -1,14 +1,32 @@
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/shared/lib/pagination";
 import {
   listStudentCandidacies,
   findStudentCandidacy,
   countPendingAppeals,
+  findStudentResultDetail,
+  findStudentAppeal,
+  findLatestAppealForResult,
+  hasActiveAppealForResult,
+  listStudentAppeals,
+  listStudentHistory,
+  countStudentHistory,
+  listStudentHistoryFacets,
   type StudentCandidacyRow,
+  type StudentAppealRow,
+  type StudentHistoryFacets,
 } from "@/modules/student-examinations/repositories/student-exam.repository";
 import type {
+  StudentExamAppealDetailDto,
+  StudentExamAppealListItemDto,
+  StudentExamAppealSummaryDto,
   StudentExamDetailDto,
   StudentExamEligibilityDto,
+  StudentExamHistoryFilters,
+  StudentExamHistoryItemDto,
+  StudentExamHistoryPageDto,
   StudentExamListItemDto,
   StudentExamOverviewDto,
+  StudentExamResultDetailDto,
   StudentExamResultListItemDto,
   StudentExamResultSummaryDto,
   StudentExamTimelineDto,
@@ -136,6 +154,48 @@ function upcomingSorted(rows: StudentCandidacyRow[], now: Date): StudentCandidac
   return rows.filter((r) => isUpcoming(r, now)).sort(byStartsAtAsc);
 }
 
+function toAppealSummary(a: StudentAppealRow): StudentExamAppealSummaryDto {
+  return {
+    appealId: a.appealId,
+    status: a.status,
+    submittedAt: a.submittedAt,
+    decidedAt: a.decidedAt,
+    publicDecision: a.decision, // outcome enum only — never the private decisionReason
+    canWithdraw: a.status === "PENDING",
+  };
+}
+
+/** Why a withdraw is unavailable (null = it IS available: PENDING only). */
+function withdrawBlockedReason(status: string): string | null {
+  if (status === "PENDING") return null;
+  if (status === "UNDER_REVIEW") return "O recurso já está em análise e não pode ser retirado.";
+  return "O recurso já foi decidido.";
+}
+
+function toHistoryItem(row: StudentCandidacyRow): StudentExamHistoryItemDto {
+  const r = row.result;
+  return {
+    examCandidateId: row.examCandidateId,
+    subjectName: row.session.subjectName,
+    sessionDate: row.session.startsAt,
+    roomName: row.session.roomName,
+    candidateStatus: row.candidateStatus,
+    attendanceStatus: row.attendanceStatus,
+    // Masked: a result is surfaced only once PUBLISHED.
+    result:
+      r && r.status === "PUBLISHED"
+        ? {
+            examResultId: r.examResultId,
+            score: r.score,
+            maxScore: r.maxScore,
+            normalizedScore: r.normalizedScore,
+            resultCode: r.resultCode,
+            publishedAt: r.publishedAt,
+          }
+        : null,
+  };
+}
+
 export class StudentExaminationService {
   /** Attention-only KPIs + the module home lists. */
   async getOverview(
@@ -250,6 +310,112 @@ export class StudentExaminationService {
       timeline: toTimeline(row, now),
       result: toResultSummary(row),
     };
+  }
+
+  /** PUBLISHED result detail + related appeal + create-appeal capability. Returns
+   *  null when the result is not the student's own, cross-org, or not yet PUBLISHED
+   *  (the page renders notFound()). */
+  async getResultDetail(
+    organizationId: string,
+    studentId: string,
+    examResultId: string
+  ): Promise<StudentExamResultDetailDto | null> {
+    const r = await findStudentResultDetail(organizationId, studentId, examResultId);
+    if (!r) return null;
+
+    const [latestAppeal, active] = await Promise.all([
+      findLatestAppealForResult(organizationId, studentId, examResultId),
+      hasActiveAppealForResult(organizationId, studentId, examResultId),
+    ]);
+
+    return {
+      examResultId: r.examResultId,
+      examCandidateId: r.examCandidateId,
+      examSessionId: r.examSessionId,
+      subjectName: r.subjectName,
+      courseName: r.courseName,
+      levelName: r.levelName,
+      sessionDate: r.sessionDate,
+      publishedAt: r.publishedAt,
+      score: r.score,
+      maxScore: r.maxScore,
+      normalizedScore: r.normalizedScore,
+      resultCode: r.resultCode,
+      publicComment: null, // no designated public comment on the frozen result
+      appeal: latestAppeal ? toAppealSummary(latestAppeal) : null,
+      canCreateAppeal: !active,
+      createAppealBlockedReason: active
+        ? "Já existe um recurso em curso para este resultado."
+        : null,
+    };
+  }
+
+  /** The student's appeals, most recent first. */
+  async listAppeals(
+    organizationId: string,
+    studentId: string
+  ): Promise<StudentExamAppealListItemDto[]> {
+    const rows = await listStudentAppeals(organizationId, studentId);
+    return rows.map((a) => ({
+      appealId: a.appealId,
+      examResultId: a.examResultId,
+      subjectName: a.subjectName,
+      sessionDate: a.sessionDate,
+      submittedAt: a.submittedAt,
+      status: a.status,
+      publicDecision: a.decision,
+      canWithdraw: a.status === "PENDING",
+    }));
+  }
+
+  /** Single appeal detail, ownership-enforced → null when not the student's own. */
+  async getAppealDetail(
+    organizationId: string,
+    studentId: string,
+    appealId: string
+  ): Promise<StudentExamAppealDetailDto | null> {
+    const a = await findStudentAppeal(organizationId, studentId, appealId);
+    if (!a) return null;
+    return {
+      appealId: a.appealId,
+      examResultId: a.examResultId,
+      subjectName: a.subjectName,
+      sessionDate: a.sessionDate,
+      reason: a.reason,
+      submittedAt: a.submittedAt,
+      status: a.status,
+      publicDecision: a.decision,
+      decidedAt: a.decidedAt,
+      canWithdraw: a.status === "PENDING",
+      withdrawBlockedReason: withdrawBlockedReason(a.status),
+    };
+  }
+
+  /** Candidacy-based history, filtered + server-side paginated. */
+  async listHistory(
+    organizationId: string,
+    studentId: string,
+    filters: StudentExamHistoryFilters = {}
+  ): Promise<StudentExamHistoryPageDto> {
+    const page = Math.max(1, filters.page ?? 1);
+    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, filters.pageSize ?? DEFAULT_PAGE_SIZE));
+    const repoFilters = {
+      year: filters.year,
+      subjectId: filters.subjectId,
+      status: filters.status,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    };
+    const [rows, total] = await Promise.all([
+      listStudentHistory(organizationId, studentId, repoFilters),
+      countStudentHistory(organizationId, studentId, repoFilters),
+    ]);
+    return { items: rows.map(toHistoryItem), total, page, pageSize };
+  }
+
+  /** Distinct years + subjects for the History filter dropdowns. */
+  async getHistoryFacets(organizationId: string, studentId: string): Promise<StudentHistoryFacets> {
+    return listStudentHistoryFacets(organizationId, studentId);
   }
 }
 

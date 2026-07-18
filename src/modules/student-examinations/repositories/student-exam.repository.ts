@@ -239,3 +239,303 @@ export async function countPendingAppeals(
     where: { organizationId, studentId, status: { in: ["PENDING", "UNDER_REVIEW"] } },
   });
 }
+
+// =============================================================================
+// PHASE 2 — Result Details, Appeals, History (all studentId-scoped, READ-ONLY)
+// =============================================================================
+
+export interface StudentResultDetailRow {
+  examResultId: string;
+  examCandidateId: string;
+  examSessionId: string;
+  subjectName: string | null;
+  courseName: string | null;
+  levelName: string | null;
+  sessionDate: Date;
+  publishedAt: Date | null;
+  score: number | null;
+  maxScore: number;
+  normalizedScore: number | null;
+  resultCode: string | null;
+}
+
+interface RawResultDetail {
+  id: string;
+  examCandidateId: string;
+  score: unknown;
+  maxScore: unknown;
+  normalizedScore: unknown;
+  resultCode: string | null;
+  publishedAt: Date | null;
+  levelSubject: {
+    subject: { name: string } | null;
+    courseLevel: { name: string; course: { name: string } | null } | null;
+  } | null;
+  candidate: { examSessionId: string; session: { startsAt: Date; room: { name: string } | null } } | null;
+}
+
+/** A single PUBLISHED result, ownership-enforced (id AND studentId AND org AND
+ *  status=PUBLISHED). Returns null for any of: missing, other student, other org,
+ *  not-yet-published — the page turns null into notFound(). */
+export async function findStudentResultDetail(
+  organizationId: string,
+  studentId: string,
+  examResultId: string,
+  client?: PrismaClientOrTx
+): Promise<StudentResultDetailRow | null> {
+  const db = client ?? (await getDb());
+  const r = (await db.examResult.findFirst({
+    where: { id: examResultId, organizationId, studentId, status: "PUBLISHED" },
+    select: {
+      id: true,
+      examCandidateId: true,
+      score: true,
+      maxScore: true,
+      normalizedScore: true,
+      resultCode: true,
+      publishedAt: true,
+      levelSubject: {
+        select: {
+          subject: { select: { name: true } },
+          courseLevel: { select: { name: true, course: { select: { name: true } } } },
+        },
+      },
+      candidate: {
+        select: { examSessionId: true, session: { select: { startsAt: true, room: { select: { name: true } } } } },
+      },
+    },
+  })) as RawResultDetail | null;
+  if (!r) return null;
+  const cl = r.levelSubject?.courseLevel ?? null;
+  return {
+    examResultId: r.id,
+    examCandidateId: r.examCandidateId,
+    examSessionId: r.candidate?.examSessionId ?? "",
+    subjectName: r.levelSubject?.subject?.name ?? null,
+    courseName: cl?.course?.name ?? null,
+    levelName: cl?.name ?? null,
+    sessionDate: r.candidate?.session?.startsAt as Date,
+    publishedAt: r.publishedAt ?? null,
+    score: toNum(r.score),
+    maxScore: Number(r.maxScore),
+    normalizedScore: toNum(r.normalizedScore),
+    resultCode: r.resultCode ?? null,
+  };
+}
+
+export interface StudentAppealRow {
+  appealId: string;
+  examResultId: string;
+  subjectName: string | null;
+  sessionDate: Date | null;
+  reason: string;
+  status: string;
+  decision: string | null;
+  decidedAt: Date | null;
+  submittedAt: Date;
+}
+
+interface RawAppeal {
+  id: string;
+  examResultId: string;
+  reason: string;
+  status: string;
+  decision: string | null;
+  decidedAt: Date | null;
+  createdAt: Date;
+  result: {
+    levelSubject: { subject: { name: string } | null } | null;
+    candidate: { session: { startsAt: Date } | null } | null;
+  } | null;
+}
+
+const appealSelectWithJoins = {
+  id: true,
+  examResultId: true,
+  reason: true,
+  status: true,
+  decision: true,
+  decidedAt: true,
+  createdAt: true,
+  result: {
+    select: {
+      levelSubject: { select: { subject: { select: { name: true } } } },
+      candidate: { select: { session: { select: { startsAt: true } } } },
+    },
+  },
+} as const;
+
+function toAppealRow(r: RawAppeal): StudentAppealRow {
+  return {
+    appealId: r.id,
+    examResultId: r.examResultId,
+    subjectName: r.result?.levelSubject?.subject?.name ?? null,
+    sessionDate: r.result?.candidate?.session?.startsAt ?? null,
+    reason: r.reason,
+    status: r.status,
+    decision: r.decision ?? null,
+    decidedAt: r.decidedAt ?? null,
+    submittedAt: r.createdAt,
+  };
+}
+
+/** All of the student's appeals, most recent first. */
+export async function listStudentAppeals(
+  organizationId: string,
+  studentId: string,
+  client?: PrismaClientOrTx
+): Promise<StudentAppealRow[]> {
+  const db = client ?? (await getDb());
+  const rows = (await db.examAppeal.findMany({
+    where: { organizationId, studentId },
+    select: appealSelectWithJoins,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+  })) as RawAppeal[];
+  return rows.map(toAppealRow);
+}
+
+/** A single appeal, ownership-enforced (id AND studentId AND org) → null otherwise. */
+export async function findStudentAppeal(
+  organizationId: string,
+  studentId: string,
+  appealId: string,
+  client?: PrismaClientOrTx
+): Promise<StudentAppealRow | null> {
+  const db = client ?? (await getDb());
+  const row = (await db.examAppeal.findFirst({
+    where: { id: appealId, organizationId, studentId },
+    select: appealSelectWithJoins,
+  })) as RawAppeal | null;
+  return row ? toAppealRow(row) : null;
+}
+
+/** The latest appeal for one of the student's results (any status), if any. */
+export async function findLatestAppealForResult(
+  organizationId: string,
+  studentId: string,
+  examResultId: string,
+  client?: PrismaClientOrTx
+): Promise<StudentAppealRow | null> {
+  const db = client ?? (await getDb());
+  const row = (await db.examAppeal.findFirst({
+    where: { organizationId, studentId, examResultId },
+    select: appealSelectWithJoins,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+  })) as RawAppeal | null;
+  return row ? toAppealRow(row) : null;
+}
+
+/** True when the student already has an ACTIVE (PENDING | UNDER_REVIEW) appeal for
+ *  a result — the create-appeal duplicate guard, student-scoped. */
+export async function hasActiveAppealForResult(
+  organizationId: string,
+  studentId: string,
+  examResultId: string,
+  client?: PrismaClientOrTx
+): Promise<boolean> {
+  const db = client ?? (await getDb());
+  const row = await db.examAppeal.findFirst({
+    where: { organizationId, studentId, examResultId, status: { in: ["PENDING", "UNDER_REVIEW"] } },
+    select: { id: true },
+  });
+  return row != null;
+}
+
+export interface StudentHistoryFilters {
+  year?: number;
+  subjectId?: string;
+  status?: string;
+  skip?: number;
+  take?: number;
+}
+
+function buildHistoryWhere(
+  organizationId: string,
+  studentId: string,
+  filters: StudentHistoryFilters
+): Record<string, unknown> {
+  const where: Record<string, unknown> = { organizationId, studentId, deletedAt: null };
+  const session: Record<string, unknown> = {};
+  if (filters.year !== undefined) {
+    session.startsAt = {
+      gte: new Date(Date.UTC(filters.year, 0, 1)),
+      lt: new Date(Date.UTC(filters.year + 1, 0, 1)),
+    };
+  }
+  if (filters.subjectId) session.levelSubject = { subjectId: filters.subjectId };
+  if (Object.keys(session).length > 0) where.session = session;
+  if (filters.status) where.status = filters.status;
+  return where;
+}
+
+/** Candidacy-based history (paginated, filtered) — reuses the rich candidacy select. */
+export async function listStudentHistory(
+  organizationId: string,
+  studentId: string,
+  filters: StudentHistoryFilters,
+  client?: PrismaClientOrTx
+): Promise<StudentCandidacyRow[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.examCandidate.findMany({
+    where: buildHistoryWhere(organizationId, studentId, filters),
+    select: candidacySelect,
+    orderBy: [{ session: { startsAt: "desc" } }, { id: "asc" }],
+    skip: filters.skip,
+    take: filters.take,
+  });
+  return (rows as unknown as RawCandidacy[]).map(toRow);
+}
+
+export async function countStudentHistory(
+  organizationId: string,
+  studentId: string,
+  filters: StudentHistoryFilters,
+  client?: PrismaClientOrTx
+): Promise<number> {
+  const db = client ?? (await getDb());
+  return db.examCandidate.count({ where: buildHistoryWhere(organizationId, studentId, filters) });
+}
+
+export interface StudentHistoryFacets {
+  years: number[];
+  subjects: Array<{ id: string; name: string }>;
+}
+
+interface RawFacetRow {
+  session: { startsAt: Date; levelSubject: { subjectId: string; subject: { name: string } | null } | null } | null;
+}
+
+/** Distinct years + subjects across ALL the student's candidacies — the History
+ *  filter options (never just the current page). */
+export async function listStudentHistoryFacets(
+  organizationId: string,
+  studentId: string,
+  client?: PrismaClientOrTx
+): Promise<StudentHistoryFacets> {
+  const db = client ?? (await getDb());
+  const rows = (await db.examCandidate.findMany({
+    where: { organizationId, studentId, deletedAt: null },
+    select: {
+      session: {
+        select: {
+          startsAt: true,
+          levelSubject: { select: { subjectId: true, subject: { select: { name: true } } } },
+        },
+      },
+    },
+  })) as RawFacetRow[];
+
+  const years = new Set<number>();
+  const subjects = new Map<string, string>();
+  for (const r of rows) {
+    if (r.session?.startsAt) years.add(new Date(r.session.startsAt).getUTCFullYear());
+    const ls = r.session?.levelSubject;
+    if (ls?.subjectId) subjects.set(ls.subjectId, ls.subject?.name ?? ls.subjectId);
+  }
+  return {
+    years: [...years].sort((a, b) => b - a),
+    subjects: [...subjects.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-PT")),
+  };
+}

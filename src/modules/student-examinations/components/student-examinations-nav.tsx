@@ -5,11 +5,13 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/shared/lib/utils";
 
 // Secondary navigation for the student examination portal. Mirrors the admin
-// `examination-nav.tsx` style. Appeals + History are Phase 2 — not listed yet.
+// `examination-nav.tsx` style.
 const TABS: Array<{ href: string; label: string; exact?: boolean }> = [
   { href: "/student/examinations", label: "Resumo", exact: true },
   { href: "/student/examinations/upcoming", label: "Próximos" },
   { href: "/student/examinations/results", label: "Resultados" },
+  { href: "/student/examinations/appeals", label: "Recursos" },
+  { href: "/student/examinations/history", label: "Histórico" },
 ];
 
 export function StudentExaminationsNav() {
