@@ -48,7 +48,10 @@ export function UpcomingShortList({ items }: { items: StudentExamListItemDto[] }
       </CardHeader>
       <CardContent>
         {items.length === 0 ? (
-          <ExaminationEmptyState title="Não tens exames agendados." />
+          <ExaminationEmptyState
+            title="Não tens exames agendados."
+            description="Os teus próximos exames aparecerão aqui quando fores inscrito."
+          />
         ) : (
           <ul className="divide-y">
             {items.map((item) => (
@@ -82,7 +85,10 @@ export function LatestResultsShortList({ items }: { items: StudentExamResultList
       </CardHeader>
       <CardContent>
         {items.length === 0 ? (
-          <ExaminationEmptyState title="Ainda não tens resultados publicados." />
+          <ExaminationEmptyState
+            title="Ainda não tens resultados publicados."
+            description="Assim que a tua escola publicar um resultado, ele aparecerá aqui."
+          />
         ) : (
           <ul className="divide-y">
             {items.map((item) => (

@@ -21,7 +21,17 @@ import {
 
 export function AppealsTable({ items }: { items: StudentExamAppealListItemDto[] }) {
   if (items.length === 0) {
-    return <ExaminationEmptyState title="Ainda não submeteste recursos." />;
+    return (
+      <ExaminationEmptyState
+        title="Ainda não submeteste recursos."
+        description="Para submeter um recurso, abre um resultado publicado em Resultados e usa “Submeter recurso”."
+        action={
+          <Button asChild variant="outline" size="sm" className="mt-1">
+            <Link href="/student/examinations/results">Ver resultados</Link>
+          </Button>
+        }
+      />
+    );
   }
 
   return (

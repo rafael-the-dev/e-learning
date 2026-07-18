@@ -20,12 +20,14 @@ import { ResultCodeBadge, formatExamDate } from "./student-exam-status-labels";
 export function StudentResultsTable({
   items,
   emptyTitle = "Ainda não tens resultados publicados.",
+  emptyDescription = "Os resultados aparecem aqui assim que forem oficialmente publicados pela tua escola.",
 }: {
   items: StudentExamResultListItemDto[];
   emptyTitle?: string;
+  emptyDescription?: string;
 }) {
   if (items.length === 0) {
-    return <ExaminationEmptyState title={emptyTitle} />;
+    return <ExaminationEmptyState title={emptyTitle} description={emptyDescription} />;
   }
 
   return (

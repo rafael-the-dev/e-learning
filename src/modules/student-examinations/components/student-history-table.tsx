@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -6,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { Button } from "@/shared/components/ui/button";
 import { ExaminationEmptyState } from "@/modules/examinations/components/examination-states";
 import type { StudentExamHistoryPageDto } from "@/modules/student-examinations/types";
 import { StudentHistoryPager } from "./student-history-pager";
@@ -21,7 +23,12 @@ import {
 
 export function StudentHistoryTable({ page }: { page: StudentExamHistoryPageDto }) {
   if (page.items.length === 0) {
-    return <ExaminationEmptyState title="Sem exames no histórico." />;
+    return (
+      <ExaminationEmptyState
+        title="Sem exames no histórico."
+        description="O teu histórico de exames aparecerá aqui à medida que fores inscrito e realizares exames."
+      />
+    );
   }
 
   return (
@@ -36,6 +43,7 @@ export function StudentHistoryTable({ page }: { page: StudentExamHistoryPageDto 
               <TableHead>Estado</TableHead>
               <TableHead>Presença</TableHead>
               <TableHead>Resultado</TableHead>
+              <TableHead className="w-1 text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -58,6 +66,19 @@ export function StudentHistoryTable({ page }: { page: StudentExamHistoryPageDto 
                   {item.result && item.result.normalizedScore != null
                     ? `${item.result.normalizedScore}%`
                     : "Sem resultado"}
+                </TableCell>
+                <TableCell className="text-right">
+                  {item.result ? (
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`/student/examinations/results/${item.result.examResultId}`}>
+                        Ver resultado
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`/student/examinations/${item.examCandidateId}`}>Ver exame</Link>
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

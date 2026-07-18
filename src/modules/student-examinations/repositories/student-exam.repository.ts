@@ -203,31 +203,6 @@ export async function findStudentCandidacy(
   return row ? toRow(row as unknown as RawCandidacy) : null;
 }
 
-/** Current-official overlay: for a published result whose `currentRevisionId` is
- *  set, the CURRENT revision's revised score (appeals, Phase 2). Read-only; no
- *  pass/fail. Batched by result id. */
-export interface CurrentRevisionOverlay {
-  examResultId: string;
-  revisedScore: number | null;
-}
-
-export async function listCurrentRevisionsByResultIds(
-  organizationId: string,
-  revisionIds: string[],
-  client?: PrismaClientOrTx
-): Promise<CurrentRevisionOverlay[]> {
-  if (revisionIds.length === 0) return [];
-  const db = client ?? (await getDb());
-  const rows = await db.examResultRevision.findMany({
-    where: { organizationId, id: { in: revisionIds }, isCurrent: true },
-    select: { examResultId: true, revisedScore: true },
-  });
-  return rows.map((r) => ({
-    examResultId: r.examResultId,
-    revisedScore: toNum(r.revisedScore),
-  }));
-}
-
 /** Count of the student's undecided appeals (PENDING | UNDER_REVIEW). */
 export async function countPendingAppeals(
   organizationId: string,

@@ -23,12 +23,14 @@ import {
 export function UpcomingExamsTable({
   items,
   emptyTitle = "Não tens exames agendados.",
+  emptyDescription = "Quando fores inscrito num exame, ele aparecerá aqui com a data, a hora e a sala.",
 }: {
   items: StudentExamListItemDto[];
   emptyTitle?: string;
+  emptyDescription?: string;
 }) {
   if (items.length === 0) {
-    return <ExaminationEmptyState title={emptyTitle} />;
+    return <ExaminationEmptyState title={emptyTitle} description={emptyDescription} />;
   }
 
   return (
