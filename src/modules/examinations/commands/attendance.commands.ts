@@ -7,8 +7,12 @@ import {
   NotFoundError,
   ValidationError,
 } from "@/shared/lib/command";
-import { createAbility, getUserPermissions } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import {
+  assertExamWriteCapability,
+  enforceExamSessionWriteScope,
+  ATTENDANCE_WRITE_ROLES,
+} from "./execution-scope-shared";
 import {
   ExamCandidateStatus,
   ExamEventAggregateType,
@@ -84,20 +88,6 @@ function isUniqueConstraintError(err: unknown): boolean {
   );
 }
 
-async function authorizeMark(userId: string, organizationId: string): Promise<void> {
-  const perms = await getUserPermissions(userId, organizationId);
-  if (!createAbility(perms).can(PERMISSIONS.EXAMS_MARK_ATTENDANCE)) {
-    throw new AuthorizationError();
-  }
-}
-
-async function authorizeCorrect(userId: string, organizationId: string): Promise<void> {
-  const perms = await getUserPermissions(userId, organizationId);
-  if (!createAbility(perms).can(PERMISSIONS.EXAMS_CORRECT_ATTENDANCE)) {
-    throw new AuthorizationError();
-  }
-}
-
 // ─── Mark ────────────────────────────────────────────────────────────────────
 
 /** DTO returned by `MarkExamCandidateAttendanceCommand`. */
@@ -122,7 +112,7 @@ export class MarkExamCandidateAttendanceCommand extends BaseCommand<
   }
 
   async authorize(): Promise<void> {
-    await authorizeMark(this.context.userId, this.context.organizationId);
+    await assertExamWriteCapability(this.context, PERMISSIONS.EXAMS_MARK_ATTENDANCE);
   }
 
   async execute(): Promise<MarkExamAttendanceResult> {
@@ -156,6 +146,16 @@ export class MarkExamCandidateAttendanceCommand extends BaseCommand<
           sessionStatus: session.status,
         });
       }
+
+      // 3b. Assignment-scoped write gate (ADR-017) — in-tx on the RESOLVED session.
+      //     Admin (exams.markAttendance) is unchanged; a teacher must hold
+      //     exams.executeAssignedSessions AND an active assignment on this session in
+      //     an attendance-authorizing role (CHIEF | INVIGILATOR | MARKER).
+      await enforceExamSessionWriteScope(this.context, tx, {
+        examSessionId: session.id,
+        adminPermission: PERMISSIONS.EXAMS_MARK_ATTENDANCE,
+        allowedRoles: ATTENDANCE_WRITE_ROLES,
+      });
 
       // 4. One row per candidate — a duplicate is rejected, never overwritten.
       const existing = await findAttendanceByCandidateId(
@@ -247,7 +247,7 @@ export class CorrectExamCandidateAttendanceCommand extends BaseCommand<
   }
 
   async authorize(): Promise<void> {
-    await authorizeCorrect(this.context.userId, this.context.organizationId);
+    await assertExamWriteCapability(this.context, PERMISSIONS.EXAMS_CORRECT_ATTENDANCE);
   }
 
   async execute(): Promise<CorrectExamAttendanceResult> {
@@ -279,6 +279,13 @@ export class CorrectExamCandidateAttendanceCommand extends BaseCommand<
           sessionStatus: session.status,
         });
       }
+
+      // 2b. Assignment-scoped write gate (ADR-017) — in-tx on the RESOLVED session.
+      await enforceExamSessionWriteScope(this.context, tx, {
+        examSessionId: session.id,
+        adminPermission: PERMISSIONS.EXAMS_CORRECT_ATTENDANCE,
+        allowedRoles: ATTENDANCE_WRITE_ROLES,
+      });
 
       // 3. Conditional write pinning the previously-read status (race-safe).
       const previousStatus = attendance.status;
@@ -383,8 +390,10 @@ export class BulkMarkExamAttendanceCommand extends BaseCommand<
   }
 
   async authorize(): Promise<void> {
-    // Authorized ONCE up-front; each delegated command also re-checks (defence in depth).
-    await authorizeMark(this.context.userId, this.context.organizationId);
+    // Coarse capability up-front; each delegated single Mark command re-checks the
+    // authoritative in-tx assignment gate PER ITEM against that item's own session —
+    // so a mixed-session batch can never produce an unauthorized write (ADR-017).
+    await assertExamWriteCapability(this.context, PERMISSIONS.EXAMS_MARK_ATTENDANCE);
   }
 
   async execute(): Promise<BulkMarkExamAttendanceResult> {

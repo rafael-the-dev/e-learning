@@ -438,6 +438,13 @@ describe("CreateExamResultCommand", () => {
 // ─── Update draft ────────────────────────────────────────────────────────────
 
 describe("UpdateDraftExamResultCommand", () => {
+  // UpdateDraft now resolves the canonical session (result → candidate → session)
+  // for the ADR-017 assignment gate, so the owning candidate + session must exist.
+  beforeEach(() => {
+    seedSession();
+    seedCandidate();
+  });
+
   it("37. edits a DRAFT result and recomputes normalizedScore", async () => {
     seedResult({ score: 45, maxScore: 60, normalizedScore: 75 });
     seedAttendance({ status: "PRESENT" });

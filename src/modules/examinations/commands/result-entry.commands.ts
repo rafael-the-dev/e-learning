@@ -1,14 +1,17 @@
 import { getDb } from "@/server/db";
 import type { PrismaClientOrTx } from "@/server/db";
 import {
-  AuthorizationError,
   BaseCommand,
   BusinessRuleError,
   NotFoundError,
   ValidationError,
 } from "@/shared/lib/command";
-import { createAbility, getUserPermissions } from "@/server/auth/rbac";
 import { PERMISSIONS } from "@/server/auth/permissions";
+import {
+  assertExamWriteCapability,
+  enforceExamSessionWriteScope,
+  RESULT_WRITE_ROLES,
+} from "./execution-scope-shared";
 import {
   ExamCandidateStatus,
   ExamEventAggregateType,
@@ -101,20 +104,6 @@ function isUniqueConstraintError(err: unknown): boolean {
   );
 }
 
-async function authorizeEnter(userId: string, organizationId: string): Promise<void> {
-  const perms = await getUserPermissions(userId, organizationId);
-  if (!createAbility(perms).can(PERMISSIONS.EXAMS_ENTER_RESULTS)) {
-    throw new AuthorizationError();
-  }
-}
-
-async function authorizeSubmit(userId: string, organizationId: string): Promise<void> {
-  const perms = await getUserPermissions(userId, organizationId);
-  if (!createAbility(perms).can(PERMISSIONS.EXAMS_SUBMIT_RESULTS)) {
-    throw new AuthorizationError();
-  }
-}
-
 // ─── Create ──────────────────────────────────────────────────────────────────
 
 /** DTO returned by `CreateExamResultCommand`. */
@@ -141,7 +130,7 @@ export class CreateExamResultCommand extends BaseCommand<
   }
 
   async authorize(): Promise<void> {
-    await authorizeEnter(this.context.userId, this.context.organizationId);
+    await assertExamWriteCapability(this.context, PERMISSIONS.EXAMS_ENTER_RESULTS);
   }
 
   async execute(): Promise<CreateExamResultResult> {
@@ -175,6 +164,16 @@ export class CreateExamResultCommand extends BaseCommand<
           sessionStatus: session.status,
         });
       }
+
+      // 3b. Assignment-scoped write gate (ADR-017) — in-tx on the RESOLVED session.
+      //     Admin (exams.enterResults) unchanged; a teacher must hold
+      //     exams.executeAssignedSessions AND an active assignment on this session in
+      //     a result-authorizing role (CHIEF | MARKER).
+      await enforceExamSessionWriteScope(this.context, tx, {
+        examSessionId: session.id,
+        adminPermission: PERMISSIONS.EXAMS_ENTER_RESULTS,
+        allowedRoles: RESULT_WRITE_ROLES,
+      });
 
       // 4. Attendance MUST already be marked — never inferred / written here.
       const attendance = await findAttendanceByCandidateId(
@@ -292,7 +291,7 @@ export class UpdateDraftExamResultCommand extends BaseCommand<
   }
 
   async authorize(): Promise<void> {
-    await authorizeEnter(this.context.userId, this.context.organizationId);
+    await assertExamWriteCapability(this.context, PERMISSIONS.EXAMS_ENTER_RESULTS);
   }
 
   async execute(): Promise<UpdateDraftExamResultResult> {
@@ -309,6 +308,25 @@ export class UpdateDraftExamResultCommand extends BaseCommand<
       if (result.status !== ExamResultStatus.DRAFT) {
         throw new BusinessRuleError("RESULT_NOT_DRAFT", { resultStatus: result.status });
       }
+
+      // 2b. Assignment-scoped write gate (ADR-017): resolve the CANONICAL session via
+      //     result → candidate → session (never a client-supplied sessionId), then
+      //     enforce in-tx.
+      const candidate = await findExamCandidateById(
+        { organizationId, id: result.examCandidateId },
+        tx
+      );
+      if (!candidate) throw new NotFoundError(CANDIDATE_ENTITY, result.examCandidateId);
+      const session = await findExamSessionById(
+        { organizationId, id: candidate.examSessionId },
+        tx
+      );
+      if (!session) throw new NotFoundError(SESSION_ENTITY, candidate.examSessionId);
+      await enforceExamSessionWriteScope(this.context, tx, {
+        examSessionId: session.id,
+        adminPermission: PERMISSIONS.EXAMS_ENTER_RESULTS,
+        allowedRoles: RESULT_WRITE_ROLES,
+      });
 
       // 3. Re-load the CURRENT attendance fact — a correction may have changed it.
       const attendance = await findAttendanceByCandidateId(
@@ -411,7 +429,7 @@ export class SubmitExamResultCommand extends BaseCommand<
   }
 
   async authorize(): Promise<void> {
-    await authorizeSubmit(this.context.userId, this.context.organizationId);
+    await assertExamWriteCapability(this.context, PERMISSIONS.EXAMS_SUBMIT_RESULTS);
   }
 
   async execute(): Promise<SubmitExamResultResult> {
@@ -438,6 +456,13 @@ export class SubmitExamResultCommand extends BaseCommand<
       if (session.status !== ExamSessionStatus.COMPLETED) {
         throw new BusinessRuleError("SESSION_NOT_COMPLETED", { sessionStatus: session.status });
       }
+
+      // 2b. Assignment-scoped write gate (ADR-017) — in-tx on the RESOLVED session.
+      await enforceExamSessionWriteScope(this.context, tx, {
+        examSessionId: session.id,
+        adminPermission: PERMISSIONS.EXAMS_SUBMIT_RESULTS,
+        allowedRoles: RESULT_WRITE_ROLES,
+      });
 
       // 3. Internal-consistency check (no re-derivation — the row must already agree).
       const isScored = result.resultCode === ExamResultCode.SCORED;
@@ -540,7 +565,7 @@ export class BulkCreateExamResultsCommand extends BaseCommand<
 
   async authorize(): Promise<void> {
     // Authorized ONCE up-front; each delegated command also re-checks (defence in depth).
-    await authorizeEnter(this.context.userId, this.context.organizationId);
+    await assertExamWriteCapability(this.context, PERMISSIONS.EXAMS_ENTER_RESULTS);
   }
 
   async execute(): Promise<BulkCreateExamResultsResult> {
@@ -641,7 +666,7 @@ export class BulkSubmitExamResultsCommand extends BaseCommand<
   }
 
   async authorize(): Promise<void> {
-    await authorizeSubmit(this.context.userId, this.context.organizationId);
+    await assertExamWriteCapability(this.context, PERMISSIONS.EXAMS_SUBMIT_RESULTS);
   }
 
   async execute(): Promise<BulkSubmitExamResultsResult> {

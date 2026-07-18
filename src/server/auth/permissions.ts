@@ -512,6 +512,14 @@ export const PERMISSIONS = {
   // Object.values. The Examination Engine NEVER writes Grade / Progression tables
   // directly — it calls the official Grade/Progression services via an adapter (E-13).
   EXAMS_INTEGRATE_RESULTS: "exams.integrateResults",
+  // Teacher Portal (ADR-017) — assignment-scoped execution. A NON-admin permission
+  // held by TEACHER: it grants NO org-wide exam write. It only unlocks the
+  // assignment-scoped path in the mark/correct/enter/update/submit commands, which
+  // ADDITIONALLY require an ACTIVE ExamInvigilatorAssignment on the TARGET session in
+  // an authorizing role (attendance: CHIEF/INVIGILATOR/MARKER; results: CHIEF/MARKER),
+  // checked in the mutation transaction. Admin/secretary behaviour is unchanged — they
+  // take the operation's specific admin-permission branch (exams.markAttendance, …).
+  EXAMS_EXECUTE_ASSIGNED_SESSIONS: "exams.executeAssignedSessions",
 
   // Prerequisites & Eligibility
   PREREQUISITES_MANAGE: "prerequisites.manage",
@@ -813,6 +821,10 @@ export const ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     PERMISSIONS.TEACHERS_VIEW_PERFORMANCE,
     PERMISSIONS.TEACHER_DOCUMENTS_VIEW,
     PERMISSIONS.TEACHER_PORTAL_VIEW,
+    // Examination Engine (Teacher Portal, ADR-017): assignment-scoped execution of
+    // attendance + result entry/submit — ONLY on sessions the teacher is actively
+    // assigned to, in an authorizing role. Never an org-wide exam write.
+    PERMISSIONS.EXAMS_EXECUTE_ASSIGNED_SESSIONS,
   ],
 
   STUDENT: [
