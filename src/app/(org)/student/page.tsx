@@ -24,6 +24,8 @@ import { StudentAttendancePanel } from "@/modules/student-portal/components/stud
 import { StudentPaymentsPanel } from "@/modules/student-portal/components/student-payments-panel";
 import { StudentNotificationsPanel } from "@/modules/student-portal/components/student-notifications-panel";
 import { StudentDocumentsPanel } from "@/modules/student-portal/components/student-documents-panel";
+import { studentExaminationService } from "@/modules/student-examinations/services/student-examination.service";
+import { StudentExamSummaryCard } from "@/modules/student-examinations/components/student-exam-summary-card";
 
 export const metadata = { title: "Portal do Aluno" };
 
@@ -65,12 +67,15 @@ export default async function StudentPortalPage() {
     );
   }
 
-  const data = await getStudentPortalData(
-    student.id,
-    student.fullName,
-    context.userId,
-    context.organizationId
-  );
+  const [data, examOverview] = await Promise.all([
+    getStudentPortalData(
+      student.id,
+      student.fullName,
+      context.userId,
+      context.organizationId
+    ),
+    studentExaminationService.getOverview(context.organizationId, student.id),
+  ]);
 
   return (
     <>
@@ -100,6 +105,8 @@ export default async function StudentPortalPage() {
           </ExecutiveLeftColumn>
 
           <ExecutiveRightColumn>
+            <StudentExamSummaryCard overview={examOverview} />
+
             <DashboardSideCard
               title="Notificações"
               icon={<Bell className="size-4" />}

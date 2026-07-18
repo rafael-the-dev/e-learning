@@ -92,6 +92,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         requiredPermission: "studentPortal.view",
       },
       {
+        href: "/student/examinations",
+        label: "Exames",
+        iconName: "GraduationCap",
+        requiredPermission: "studentPortal.view",
+      },
+      {
         href: "/guardian",
         label: "Portal do Encarregado",
         iconName: "LayoutGrid",
