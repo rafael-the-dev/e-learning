@@ -401,6 +401,7 @@ export function TeacherAttendanceSection({ sessionId }: { sessionId: string }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Procurar por nome ou nº"
+            aria-label="Procurar candidato por nome ou número"
             className="pl-8"
           />
         </div>

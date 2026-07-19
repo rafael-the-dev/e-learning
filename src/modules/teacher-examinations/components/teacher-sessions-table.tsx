@@ -86,14 +86,21 @@ export function TeacherSessionsTable({
   page,
   pageSize,
   total,
+  filtered = false,
 }: {
   items: TeacherExamSessionListItemDto[];
   page: number;
   pageSize: number;
   total: number;
+  filtered?: boolean;
 }) {
   if (items.length === 0) {
-    return (
+    return filtered ? (
+      <ExaminationEmptyState
+        title="Nenhuma sessão corresponde aos filtros."
+        description="Ajusta ou limpa os filtros para ver as tuas sessões atribuídas."
+      />
+    ) : (
       <ExaminationEmptyState
         title="Não tens sessões de exame atribuídas."
         description="As atribuições de sessões de exame são feitas pela secretaria. Quando fores designado como vigilante ou corretor, as sessões aparecerão aqui."

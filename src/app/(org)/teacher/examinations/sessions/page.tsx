@@ -28,6 +28,11 @@ export default async function TeacherExamSessionsPage({
 
   const sp = await searchParams;
   const page = Math.max(1, Number(param(sp.page)) || 1);
+  // Whether any filter is active — so an empty result reads as "no match" (not "no
+  // assignments"), which would otherwise look like a broken portal.
+  const filtered = Boolean(
+    param(sp.status) || param(sp.subjectId) || param(sp.periodId) || param(sp.role) || param(sp.pending)
+  );
 
   const [facets, sessions] = await Promise.all([
     teacherExaminationService.getSessionFacets(context.organizationId, teacher.id),
@@ -69,6 +74,7 @@ export default async function TeacherExamSessionsPage({
         page={sessions.page}
         pageSize={sessions.pageSize}
         total={sessions.total}
+        filtered={filtered}
       />
     </div>
   );
