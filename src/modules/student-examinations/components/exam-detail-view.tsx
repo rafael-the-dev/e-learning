@@ -39,8 +39,7 @@ export function ExamDetailView({ exam }: { exam: StudentExamDetailDto }) {
   const duration = formatExamDuration(exam.durationMinutes);
   const period =
     exam.periodName ??
-    [exam.academicYear, exam.term].filter(Boolean).join(" · ") ||
-    null;
+    ([exam.academicYear, exam.term].filter(Boolean).join(" · ") || null);
 
   return (
     <div className="space-y-6">

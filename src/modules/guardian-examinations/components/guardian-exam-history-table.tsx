@@ -33,13 +33,18 @@ import {
 export function GuardianExamHistoryTable({
   page,
   filtered,
+  backUrl,
 }: {
   page: GuardianExamHistoryPageDto;
   /** True when any of year/subjectId/status is set — distinguishes "no match" from
    *  "no history at all" in the empty state. */
   filtered: boolean;
+  /** The current History URL (student + filters), forwarded to each row's detail link
+   *  as `?back=` so "Voltar" returns here instead of dropping the guardian on Resumo. */
+  backUrl: string;
 }) {
   const showAttendance = page.attendanceVisible;
+  const backParam = `?back=${encodeURIComponent(backUrl)}`;
 
   if (page.items.length === 0) {
     return filtered ? (
@@ -69,7 +74,7 @@ export function GuardianExamHistoryTable({
               <TableHead>Resultado</TableHead>
               <TableHead>Código</TableHead>
               <TableHead>Recurso</TableHead>
-              <TableHead className="w-1 text-right">Ação</TableHead>
+              <TableHead className="w-1 text-right">Detalhe</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -103,7 +108,9 @@ export function GuardianExamHistoryTable({
                 </TableCell>
                 <TableCell className="text-right">
                   <Button asChild variant="ghost" size="sm">
-                    <Link href={`/guardian/examinations/${item.examCandidateId}`}>Ver</Link>
+                    <Link href={`/guardian/examinations/${item.examCandidateId}${backParam}`}>
+                      Ver
+                    </Link>
                   </Button>
                 </TableCell>
               </TableRow>

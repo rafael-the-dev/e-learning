@@ -33,7 +33,7 @@ export async function POST(
       {
         examCandidateId: candidateId,
         status: body.status as string,
-        checkedInAt: body.checkedInAt as string | undefined,
+        checkedInAt: body.checkedInAt ? new Date(body.checkedInAt as string) : undefined,
         remarks: body.remarks as string | undefined,
         reason: body.reason as string | undefined,
       },
@@ -62,7 +62,7 @@ export async function PATCH(
       {
         examCandidateId: candidateId,
         status: body.status as string,
-        checkedInAt: body.checkedInAt as string | undefined,
+        checkedInAt: body.checkedInAt ? new Date(body.checkedInAt as string) : undefined,
         remarks: body.remarks as string | undefined,
         reason: body.reason as string,
       },

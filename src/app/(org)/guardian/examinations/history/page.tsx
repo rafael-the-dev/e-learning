@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { guardianExaminationService } from "@/modules/guardian-examinations/services/guardian-examination.service";
@@ -76,7 +76,34 @@ export default async function GuardianExamHistoryPage({
   // Fail-closed: null = not linked / no academic visibility for this educando.
   if (!history) notFound();
 
+  // Self-heal stale per-student filters: facets are scoped to the SELECTED student, so a
+  // year/disciplina carried over from a previous educando (the shared filter bar only
+  // resets `page` on change) would silently produce a false "Nenhum exame corresponde aos
+  // filtros." Drop any filter value absent from this student's facets and reload clean.
+  const staleYear = Boolean(sp.year && !history.facets.years.some((y) => String(y) === sp.year));
+  const staleSubject = Boolean(
+    sp.subjectId && !history.facets.subjects.some((s) => s.id === sp.subjectId)
+  );
+  if (staleYear || staleSubject) {
+    const clean = new URLSearchParams();
+    clean.set("student", selectedStudentId);
+    if (sp.status) clean.set("status", sp.status);
+    if (sp.year && !staleYear) clean.set("year", sp.year);
+    if (sp.subjectId && !staleSubject) clean.set("subjectId", sp.subjectId);
+    redirect(`/guardian/examinations/history?${clean.toString()}`);
+  }
+
   const filtered = Boolean(sp.year || sp.subjectId || sp.status);
+
+  // The current History URL (student + active filters + page) — forwarded to each row's
+  // detail link so "Voltar" returns here with the selection intact.
+  const backParams = new URLSearchParams();
+  backParams.set("student", selectedStudentId);
+  if (sp.year) backParams.set("year", sp.year);
+  if (sp.subjectId) backParams.set("subjectId", sp.subjectId);
+  if (sp.status) backParams.set("status", sp.status);
+  if (sp.page) backParams.set("page", sp.page);
+  const backUrl = `/guardian/examinations/history?${backParams.toString()}`;
 
   return (
     <div className="space-y-4">
@@ -108,7 +135,7 @@ export default async function GuardianExamHistoryPage({
           },
         ]}
       />
-      <GuardianExamHistoryTable page={history} filtered={filtered} />
+      <GuardianExamHistoryTable page={history} filtered={filtered} backUrl={backUrl} />
     </div>
   );
 }
