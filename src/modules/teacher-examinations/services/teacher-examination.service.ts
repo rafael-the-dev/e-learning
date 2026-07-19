@@ -10,14 +10,21 @@ import {
   type TeacherSessionProgressRow,
   type TeacherSessionFacets,
 } from "@/modules/teacher-examinations/repositories/teacher-exam.repository";
+import { resultCodeForAttendance } from "@/modules/examinations/commands/result-entry-shared";
+import type {
+  TeacherCandidateRow,
+} from "@/modules/teacher-examinations/repositories/teacher-exam.repository";
 import type {
   TeacherExamAttendanceViewDto,
   TeacherExamCapabilitiesDto,
   TeacherExamOverviewDto,
+  TeacherExamResultsViewDto,
   TeacherExamSessionDetailDto,
   TeacherExamSessionFilters,
   TeacherExamSessionListItemDto,
   TeacherExamSessionPageDto,
+  TeacherResultCandidateCapabilitiesDto,
+  TeacherResultRowDto,
 } from "@/modules/teacher-examinations/types";
 
 // =============================================================================
@@ -42,22 +49,26 @@ const RECENT_STATES = new Set(["COMPLETED", "RESULTS_RECORDED", "PUBLISHED"]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Capabilities from role + session state + engine rules (NOT admin allowedActions).
- *  `pendingForBulk` = candidates still without a recorded attendance — bulk is only
- *  offered when there is something to mark (and never overwrites existing rows). */
+ *  The counts gate the bulk affordances (bulk is only offered when there is something
+ *  to act on): `pendingAttendance` = candidates without a recorded attendance;
+ *  `eligibleResultCreate` = candidates eligible to create a result;
+ *  `draftResults` = DRAFT results available to submit. */
 export function computeTeacherCapabilities(
   role: string,
   sessionStatus: string,
-  pendingForBulk = 0
+  counts: { pendingAttendance?: number; eligibleResultCreate?: number; draftResults?: number } = {}
 ): TeacherExamCapabilitiesDto {
   const attendanceRole = ATTENDANCE_ROLES.has(role);
   const resultRole = RESULT_ROLES.has(role);
 
   const canMarkAttendance = attendanceRole && MARK_STATES.has(sessionStatus);
   const canCorrectAttendance = attendanceRole && CORRECT_STATES.has(sessionStatus);
-  const canBulkMarkAttendance = canMarkAttendance && pendingForBulk > 0;
+  const canBulkMarkAttendance = canMarkAttendance && (counts.pendingAttendance ?? 0) > 0;
   const canEnterResults = resultRole && RESULT_STATES.has(sessionStatus);
   const canUpdateResults = resultRole && RESULT_STATES.has(sessionStatus);
   const canSubmitResults = resultRole && sessionStatus === "COMPLETED";
+  const canBulkEnterResults = canEnterResults && (counts.eligibleResultCreate ?? 0) > 0;
+  const canBulkSubmitResults = canSubmitResults && (counts.draftResults ?? 0) > 0;
 
   let attendanceBlockReason: string | null = null;
   if (!attendanceRole) attendanceBlockReason = "O teu papel nesta sessão não permite registar presenças.";
@@ -76,6 +87,8 @@ export function computeTeacherCapabilities(
     canEnterResults,
     canUpdateResults,
     canSubmitResults,
+    canBulkEnterResults,
+    canBulkSubmitResults,
     attendanceBlockReason,
     resultsBlockReason,
   };
@@ -89,7 +102,9 @@ function nextAction(caps: TeacherExamCapabilitiesDto, p: TeacherSessionProgressR
 }
 
 function toListItem(row: TeacherSessionRow, p: TeacherSessionProgressRow): TeacherExamSessionListItemDto {
-  const caps = computeTeacherCapabilities(row.role, row.sessionStatus, p.candidateCount - p.attendanceMarked);
+  const caps = computeTeacherCapabilities(row.role, row.sessionStatus, {
+    pendingAttendance: p.candidateCount - p.attendanceMarked,
+  });
   return {
     examSessionId: row.examSessionId,
     title: row.title,
@@ -111,6 +126,87 @@ function durationMinutes(startsAt: Date, endsAt: Date): number | null {
   return ms > 0 ? Math.round(ms / 60000) : null;
 }
 
+const RESULT_MSG = {
+  role: "O teu papel nesta sessão não permite lançar resultados.",
+  phase: "A sessão ainda não está na fase de resultados.",
+  notRegistered: "O candidato não está inscrito.",
+  attendance: "Marca a presença antes de lançar o resultado.",
+  notCompleted: "A sessão tem de estar concluída para submeter.",
+  notDraft: "O resultado já não é um rascunho e não pode ser alterado pelo docente.",
+} as const;
+
+/** Per-candidate result capabilities from role + session state + candidate/attendance/
+ *  result state + engine rules. UI hints only — the hardened Create/Update/Submit
+ *  commands remain the final authority. */
+function resultRowCapabilities(
+  role: string,
+  sessionStatus: string,
+  c: TeacherCandidateRow
+): TeacherResultCandidateCapabilitiesDto {
+  const resultRole = RESULT_ROLES.has(role);
+  const inResultsPhase = RESULT_STATES.has(sessionStatus);
+  const isCompleted = sessionStatus === "COMPLETED";
+  const registered = c.candidateStatus === "REGISTERED";
+  const attendanceMarked = c.attendanceStatus != null;
+  const hasResult = c.resultId != null;
+  const isDraft = c.resultStatus === "DRAFT";
+
+  const canCreateResult = resultRole && inResultsPhase && registered && attendanceMarked && !hasResult;
+  let createBlockReason: string | null = null;
+  if (canCreateResult || hasResult) createBlockReason = null;
+  else if (!resultRole) createBlockReason = RESULT_MSG.role;
+  else if (!inResultsPhase) createBlockReason = RESULT_MSG.phase;
+  else if (!registered) createBlockReason = RESULT_MSG.notRegistered;
+  else if (!attendanceMarked) createBlockReason = RESULT_MSG.attendance;
+
+  const canUpdateDraft = resultRole && inResultsPhase && hasResult && isDraft;
+  let updateBlockReason: string | null = null;
+  if (canUpdateDraft || !hasResult) updateBlockReason = null;
+  else if (!resultRole) updateBlockReason = RESULT_MSG.role;
+  else if (!isDraft) updateBlockReason = RESULT_MSG.notDraft;
+  else if (!inResultsPhase) updateBlockReason = RESULT_MSG.phase;
+
+  const canSubmitResult = resultRole && isCompleted && hasResult && isDraft;
+  let submitBlockReason: string | null = null;
+  if (canSubmitResult || !hasResult) submitBlockReason = null;
+  else if (!resultRole) submitBlockReason = RESULT_MSG.role;
+  else if (!isDraft) submitBlockReason = RESULT_MSG.notDraft;
+  else if (!isCompleted) submitBlockReason = RESULT_MSG.notCompleted;
+
+  return {
+    canCreateResult,
+    canUpdateDraft,
+    canSubmitResult,
+    createBlockReason,
+    updateBlockReason,
+    submitBlockReason,
+  };
+}
+
+function toResultRow(role: string, sessionStatus: string, c: TeacherCandidateRow): TeacherResultRowDto {
+  return {
+    examCandidateId: c.examCandidateId,
+    studentNumber: c.studentNumber,
+    studentName: c.studentName,
+    candidateStatus: c.candidateStatus,
+    attendanceStatus: c.attendanceStatus,
+    // The engine-derived code the attendance dictates (never a free choice).
+    expectedResultCode: c.attendanceStatus ? resultCodeForAttendance(c.attendanceStatus) : null,
+    result:
+      c.resultId != null && c.resultStatus != null
+        ? {
+            examResultId: c.resultId,
+            score: c.score,
+            maxScore: c.maxScore,
+            normalizedScore: c.normalizedScore,
+            resultCode: c.resultCode,
+            status: c.resultStatus,
+          }
+        : null,
+    capabilities: resultRowCapabilities(role, sessionStatus, c),
+  };
+}
+
 export class TeacherExaminationService {
   /** Operational overview — teacher-scoped, no admin/global metrics. */
   async getOverview(
@@ -126,7 +222,9 @@ export class TeacherExaminationService {
       return {
         row: r,
         item: toListItem(r, p),
-        caps: computeTeacherCapabilities(r.role, r.sessionStatus, p.candidateCount - p.attendanceMarked),
+        caps: computeTeacherCapabilities(r.role, r.sessionStatus, {
+          pendingAttendance: p.candidateCount - p.attendanceMarked,
+        }),
         p,
       };
     });
@@ -234,11 +332,9 @@ export class TeacherExaminationService {
         resultsDraft: progress.resultsDraft,
         resultsSubmitted: progress.resultsSubmitted,
       },
-      capabilities: computeTeacherCapabilities(
-        row.role,
-        row.sessionStatus,
-        progress.candidateCount - progress.attendanceMarked
-      ),
+      capabilities: computeTeacherCapabilities(row.role, row.sessionStatus, {
+        pendingAttendance: progress.candidateCount - progress.attendanceMarked,
+      }),
       candidates,
     };
   }
@@ -265,13 +361,43 @@ export class TeacherExaminationService {
       examSessionId: row.examSessionId,
       sessionStatus: row.sessionStatus,
       role: row.role,
-      capabilities: computeTeacherCapabilities(
-        row.role,
-        row.sessionStatus,
-        progress.candidateCount - progress.attendanceMarked
-      ),
+      capabilities: computeTeacherCapabilities(row.role, row.sessionStatus, {
+        pendingAttendance: progress.candidateCount - progress.attendanceMarked,
+      }),
       progress,
       candidates,
+    };
+  }
+
+  /** The interactive results view (roster + per-candidate + session gating), fail-
+   *  closed to null when the teacher is not assigned. */
+  async getSessionResultsView(
+    organizationId: string,
+    teacherId: string,
+    examSessionId: string
+  ): Promise<TeacherExamResultsViewDto | null> {
+    const row = await findAssignedSession(organizationId, teacherId, examSessionId);
+    if (!row) return null;
+
+    const candidates = await listSessionCandidates(organizationId, examSessionId);
+    const rows = candidates.map((c) => toResultRow(row.role, row.sessionStatus, c));
+
+    const eligibleResultCreate = candidates.filter(
+      (c) => c.candidateStatus === "REGISTERED" && c.attendanceStatus != null && c.resultId == null
+    ).length;
+    const draftResults = candidates.filter((c) => c.resultStatus === "DRAFT").length;
+    const maxScore = candidates.find((c) => c.maxScore != null)?.maxScore ?? null;
+
+    return {
+      examSessionId: row.examSessionId,
+      sessionStatus: row.sessionStatus,
+      role: row.role,
+      capabilities: computeTeacherCapabilities(row.role, row.sessionStatus, {
+        eligibleResultCreate,
+        draftResults,
+      }),
+      maxScore,
+      rows,
     };
   }
 

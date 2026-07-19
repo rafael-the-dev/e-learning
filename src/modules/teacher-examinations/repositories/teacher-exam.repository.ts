@@ -204,8 +204,11 @@ export interface TeacherCandidateRow {
   studentNumber: string | null;
   candidateStatus: string;
   attendanceStatus: string | null;
+  resultId: string | null;
   resultStatus: string | null;
   resultCode: string | null;
+  score: number | null;
+  maxScore: number | null;
   normalizedScore: number | null;
 }
 
@@ -214,7 +217,14 @@ type RawDetailCandidate = {
   status: string;
   student: { firstName: string; lastName: string; code: string | null } | null;
   attendance: { status: string } | null;
-  result: { status: string; resultCode: string | null; normalizedScore: unknown } | null;
+  result: {
+    id: string;
+    status: string;
+    resultCode: string | null;
+    score: unknown;
+    maxScore: unknown;
+    normalizedScore: unknown;
+  } | null;
 };
 
 /** The candidate roster of a session (read-only). Caller must have already resolved
@@ -232,7 +242,9 @@ export async function listSessionCandidates(
       status: true,
       student: { select: { firstName: true, lastName: true, code: true } },
       attendance: { select: { status: true } },
-      result: { select: { status: true, resultCode: true, normalizedScore: true } },
+      result: {
+        select: { id: true, status: true, resultCode: true, score: true, maxScore: true, normalizedScore: true },
+      },
     },
     orderBy: [{ student: { lastName: "asc" } }, { id: "asc" }],
   })) as RawDetailCandidate[];
@@ -243,8 +255,11 @@ export async function listSessionCandidates(
     studentNumber: c.student?.code ?? null,
     candidateStatus: c.status,
     attendanceStatus: c.attendance?.status ?? null,
+    resultId: c.result?.id ?? null,
     resultStatus: c.result?.status ?? null,
     resultCode: c.result?.resultCode ?? null,
+    score: toNum(c.result?.score),
+    maxScore: toNum(c.result?.maxScore),
     normalizedScore: toNum(c.result?.normalizedScore),
   }));
 }

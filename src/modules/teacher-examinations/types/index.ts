@@ -22,8 +22,54 @@ export interface TeacherExamCapabilitiesDto {
   canEnterResults: boolean;
   canUpdateResults: boolean;
   canSubmitResults: boolean;
+  /** canEnterResults AND there are candidates eligible to create a result. */
+  canBulkEnterResults: boolean;
+  /** canSubmitResults AND there are DRAFT results to submit. */
+  canBulkSubmitResults: boolean;
   attendanceBlockReason: string | null;
   resultsBlockReason: string | null;
+}
+
+/** Per-candidate result capabilities (NOT admin allowedActions). */
+export interface TeacherResultCandidateCapabilitiesDto {
+  canCreateResult: boolean;
+  canUpdateDraft: boolean;
+  canSubmitResult: boolean;
+  createBlockReason: string | null;
+  updateBlockReason: string | null;
+  submitBlockReason: string | null;
+}
+
+/** A candidate's result row in the results grid. `result` is null before entry. */
+export interface TeacherResultRowDto {
+  examCandidateId: string;
+  studentNumber: string | null;
+  studentName: string | null;
+  candidateStatus: string;
+  attendanceStatus: string | null;
+  /** The engine-derived result code the attendance dictates (SCORED needs a score;
+   *  ABSENT/EXCUSED/DISQUALIFIED are code-only) — null when no attendance yet. */
+  expectedResultCode: string | null;
+  result: {
+    examResultId: string;
+    score: number | null;
+    maxScore: number | null;
+    normalizedScore: number | null;
+    resultCode: string | null;
+    status: string;
+  } | null;
+  capabilities: TeacherResultCandidateCapabilitiesDto;
+}
+
+/** The interactive results view for a session detail. */
+export interface TeacherExamResultsViewDto {
+  examSessionId: string;
+  sessionStatus: string;
+  role: string;
+  capabilities: TeacherExamCapabilitiesDto;
+  /** The session's canonical exam max score (from an existing result), else null. */
+  maxScore: number | null;
+  rows: TeacherResultRowDto[];
 }
 
 /** The interactive attendance view (roster + gating) for a session detail. */

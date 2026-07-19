@@ -54,6 +54,22 @@ const progress = (o: Partial<{ candidateCount: number; attendanceMarked: number;
   ...o,
 });
 
+function cand(o: Partial<TeacherCandidateRow> & { examCandidateId: string }): TeacherCandidateRow {
+  return {
+    studentName: "Aluno",
+    studentNumber: "1",
+    candidateStatus: "REGISTERED",
+    attendanceStatus: null,
+    resultId: null,
+    resultStatus: null,
+    resultCode: null,
+    score: null,
+    maxScore: null,
+    normalizedScore: null,
+    ...o,
+  };
+}
+
 describe("computeTeacherCapabilities — role × session-state matrix (ADR-017 lockstep)", () => {
   it("CHIEF: attendance in LOCKED/IN_PROGRESS, results in IN_PROGRESS/COMPLETED, submit only COMPLETED", () => {
     const inProg = computeTeacherCapabilities("CHIEF", "IN_PROGRESS");
@@ -113,8 +129,8 @@ describe("TeacherExaminationService — detail (fail-closed, no admin fields)", 
   it("maps role + capabilities + progress and exposes NO admin fields", async () => {
     vi.mocked(findAssignedSession).mockResolvedValue(row({ role: "MARKER", sessionStatus: "COMPLETED" }));
     const candidates: TeacherCandidateRow[] = [
-      { examCandidateId: "c1", studentName: "Ana Silva", studentNumber: "A1", candidateStatus: "REGISTERED", attendanceStatus: "PRESENT", resultStatus: "SUBMITTED", resultCode: "SCORED", normalizedScore: 80 },
-      { examCandidateId: "c2", studentName: "Rui Sá", studentNumber: "A2", candidateStatus: "REGISTERED", attendanceStatus: null, resultStatus: null, resultCode: null, normalizedScore: null },
+      cand({ examCandidateId: "c1", studentName: "Ana Silva", studentNumber: "A1", attendanceStatus: "PRESENT", resultId: "r1", resultStatus: "SUBMITTED", resultCode: "SCORED", score: 16, maxScore: 20, normalizedScore: 80 }),
+      cand({ examCandidateId: "c2", studentName: "Rui Sá", studentNumber: "A2" }),
     ];
     vi.mocked(listSessionCandidates).mockResolvedValue(candidates);
 
@@ -178,10 +194,10 @@ describe("TeacherExaminationService — overview counts only assigned sessions",
 
 describe("Sprint 2 — canBulkMarkAttendance (markable AND pending exist)", () => {
   it("true only when the teacher can mark AND there is something pending", () => {
-    expect(computeTeacherCapabilities("CHIEF", "IN_PROGRESS", 3).canBulkMarkAttendance).toBe(true);
-    expect(computeTeacherCapabilities("CHIEF", "IN_PROGRESS", 0).canBulkMarkAttendance).toBe(false); // nothing pending
-    expect(computeTeacherCapabilities("OBSERVER", "IN_PROGRESS", 5).canBulkMarkAttendance).toBe(false); // can't mark
-    expect(computeTeacherCapabilities("CHIEF", "COMPLETED", 5).canBulkMarkAttendance).toBe(false); // mark closed
+    expect(computeTeacherCapabilities("CHIEF", "IN_PROGRESS", { pendingAttendance: 3 }).canBulkMarkAttendance).toBe(true);
+    expect(computeTeacherCapabilities("CHIEF", "IN_PROGRESS", { pendingAttendance: 0 }).canBulkMarkAttendance).toBe(false); // nothing pending
+    expect(computeTeacherCapabilities("OBSERVER", "IN_PROGRESS", { pendingAttendance: 5 }).canBulkMarkAttendance).toBe(false); // can't mark
+    expect(computeTeacherCapabilities("CHIEF", "COMPLETED", { pendingAttendance: 5 }).canBulkMarkAttendance).toBe(false); // mark closed
   });
 });
 
@@ -197,8 +213,8 @@ describe("Sprint 2 — getSessionAttendanceView (fail-closed roster for revalida
   it("returns roster + progress + capabilities, with bulk enabled when pending exist", async () => {
     vi.mocked(findAssignedSession).mockResolvedValue(row({ role: "CHIEF", sessionStatus: "IN_PROGRESS" }));
     const candidates: TeacherCandidateRow[] = [
-      { examCandidateId: "c1", studentName: "A", studentNumber: "1", candidateStatus: "REGISTERED", attendanceStatus: "PRESENT", resultStatus: null, resultCode: null, normalizedScore: null },
-      { examCandidateId: "c2", studentName: "B", studentNumber: "2", candidateStatus: "REGISTERED", attendanceStatus: null, resultStatus: null, resultCode: null, normalizedScore: null },
+      cand({ examCandidateId: "c1", studentName: "A", attendanceStatus: "PRESENT" }),
+      cand({ examCandidateId: "c2", studentName: "B" }),
     ];
     vi.mocked(listSessionCandidates).mockResolvedValue(candidates);
 
@@ -207,5 +223,72 @@ describe("Sprint 2 — getSessionAttendanceView (fail-closed roster for revalida
     expect(v?.capabilities.canMarkAttendance).toBe(true);
     expect(v?.capabilities.canBulkMarkAttendance).toBe(true); // 1 pending
     expect(v?.candidates).toHaveLength(2);
+  });
+});
+
+describe("Sprint 3 — results view (capabilities matrix + fail-closed + no admin fields)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns null when the teacher is not assigned (fail-closed)", async () => {
+    vi.mocked(findAssignedSession).mockResolvedValue(null);
+    expect(await teacherExaminationService.getSessionResultsView(ORG, T, "x")).toBeNull();
+  });
+
+  it("MARKER can create for a present candidate; a candidate without attendance cannot", async () => {
+    vi.mocked(findAssignedSession).mockResolvedValue(row({ role: "MARKER", sessionStatus: "IN_PROGRESS" }));
+    vi.mocked(listSessionCandidates).mockResolvedValue([
+      cand({ examCandidateId: "c1", attendanceStatus: "PRESENT" }),
+      cand({ examCandidateId: "c2", attendanceStatus: null }),
+    ]);
+    const v = await teacherExaminationService.getSessionResultsView(ORG, T, "sess-1");
+    const c1 = v!.rows.find((r) => r.examCandidateId === "c1")!;
+    const c2 = v!.rows.find((r) => r.examCandidateId === "c2")!;
+    expect(c1.expectedResultCode).toBe("SCORED");
+    expect(c1.capabilities.canCreateResult).toBe(true);
+    expect(c2.capabilities.canCreateResult).toBe(false);
+    expect(c2.capabilities.createBlockReason).toMatch(/presença/i);
+    expect(v!.capabilities.canBulkEnterResults).toBe(true); // c1 eligible
+  });
+
+  it("INVIGILATOR cannot create results (role gate)", async () => {
+    vi.mocked(findAssignedSession).mockResolvedValue(row({ role: "INVIGILATOR", sessionStatus: "IN_PROGRESS" }));
+    vi.mocked(listSessionCandidates).mockResolvedValue([cand({ examCandidateId: "c1", attendanceStatus: "PRESENT" })]);
+    const v = await teacherExaminationService.getSessionResultsView(ORG, T, "sess-1");
+    expect(v!.rows[0].capabilities.canCreateResult).toBe(false);
+    expect(v!.rows[0].capabilities.createBlockReason).toMatch(/papel/i);
+  });
+
+  it("DRAFT updatable; submit only when COMPLETED; SUBMITTED is read-only", async () => {
+    const draftCand = cand({ examCandidateId: "c1", attendanceStatus: "PRESENT", resultId: "r1", resultStatus: "DRAFT", resultCode: "SCORED", score: 12, maxScore: 20, normalizedScore: 60 });
+
+    vi.mocked(findAssignedSession).mockResolvedValue(row({ role: "MARKER", sessionStatus: "IN_PROGRESS" }));
+    vi.mocked(listSessionCandidates).mockResolvedValue([draftCand]);
+    let v = await teacherExaminationService.getSessionResultsView(ORG, T, "sess-1");
+    expect(v!.rows[0].capabilities.canUpdateDraft).toBe(true);
+    expect(v!.rows[0].capabilities.canSubmitResult).toBe(false); // not completed
+    expect(v!.capabilities.canBulkSubmitResults).toBe(false);
+
+    vi.mocked(findAssignedSession).mockResolvedValue(row({ role: "MARKER", sessionStatus: "COMPLETED" }));
+    v = await teacherExaminationService.getSessionResultsView(ORG, T, "sess-1");
+    expect(v!.rows[0].capabilities.canSubmitResult).toBe(true);
+    expect(v!.capabilities.canBulkSubmitResults).toBe(true);
+
+    vi.mocked(listSessionCandidates).mockResolvedValue([{ ...draftCand, resultStatus: "SUBMITTED" }]);
+    v = await teacherExaminationService.getSessionResultsView(ORG, T, "sess-1");
+    expect(v!.rows[0].capabilities.canUpdateDraft).toBe(false);
+    expect(v!.rows[0].capabilities.canSubmitResult).toBe(false);
+    expect(v!.rows[0].capabilities.submitBlockReason).toMatch(/rascunho/i);
+  });
+
+  it("result DTO exposes no admin/private fields", async () => {
+    vi.mocked(findAssignedSession).mockResolvedValue(row({ role: "MARKER", sessionStatus: "IN_PROGRESS" }));
+    vi.mocked(listSessionCandidates).mockResolvedValue([
+      cand({ examCandidateId: "c1", attendanceStatus: "PRESENT", resultId: "r1", resultStatus: "DRAFT" }),
+    ]);
+    const v = await teacherExaminationService.getSessionResultsView(ORG, T, "sess-1");
+    const resultKeys = Object.keys(v!.rows[0].result as object);
+    for (const k of ["markerId", "reviewedById", "approvedById", "publishedAt", "remarks", "resultChecksum"]) {
+      expect(resultKeys).not.toContain(k);
+    }
   });
 });

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui
 import type { TeacherExamSessionDetailDto } from "@/modules/teacher-examinations/types";
 import { TeacherExamCapabilitiesPanel } from "./teacher-exam-capabilities-panel";
 import { TeacherAttendanceSection } from "./teacher-attendance-section";
+import { TeacherResultsSection } from "./teacher-results-section";
 import {
   SessionStatusBadge,
   RoleBadge,
@@ -103,6 +104,16 @@ export function TeacherSessionDetailView({ session }: { session: TeacherExamSess
         </CardHeader>
         <CardContent>
           <TeacherAttendanceSection sessionId={session.examSessionId} />
+        </CardContent>
+      </Card>
+
+      {/* Resultados (Sprint 3 — escrita, limite: submetido) */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">Resultados</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TeacherResultsSection sessionId={session.examSessionId} />
         </CardContent>
       </Card>
     </div>
