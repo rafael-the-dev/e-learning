@@ -14,6 +14,10 @@ vi.mock("@/modules/student-examinations/repositories/student-exam.repository", (
   countPendingAppeals: vi.fn(),
   findStudentCandidacy: vi.fn(),
   findLatestAppealForResult: vi.fn(),
+  listStudentHistory: vi.fn(),
+  countStudentHistory: vi.fn(),
+  listStudentHistoryFacets: vi.fn(),
+  listStudentAppeals: vi.fn(),
 }));
 
 import {
@@ -26,6 +30,10 @@ import {
   countPendingAppeals,
   findStudentCandidacy,
   findLatestAppealForResult,
+  listStudentHistory,
+  countStudentHistory,
+  listStudentHistoryFacets,
+  listStudentAppeals,
 } from "@/modules/student-examinations/repositories/student-exam.repository";
 import { guardianExaminationService } from "@/modules/guardian-examinations/services/guardian-examination.service";
 
@@ -218,5 +226,68 @@ describe("GuardianExaminationService.getExamDetail — read-only, fail-closed, f
     // The appeal DTO carries no reason / decisionReason.
     expect(Object.keys(d!.appeal as object)).not.toContain("reason");
     expect(Object.keys(d!.appeal as object)).not.toContain("decisionReason");
+  });
+});
+
+describe("GuardianExaminationService — History (scoped, fail-closed, flag-gated)", () => {
+  const STU = "stu-1";
+
+  it("getHistoryStudentOptions returns only academic-visible linked students", async () => {
+    vi.mocked(findGuardianLinks).mockResolvedValue([
+      link({ studentId: "stu-1" }),
+      link({ studentId: "stu-2", canViewAcademic: false }),
+    ]);
+    const opts = await guardianExaminationService.getHistoryStudentOptions(ORG, GU);
+    expect(opts.map((s) => s.studentId)).toEqual(["stu-1"]); // stu-2 excluded
+  });
+
+  it("null when the selected student is not the guardian's / other-org / inactive link", async () => {
+    vi.mocked(findGuardianLink).mockResolvedValue(null);
+    expect(await guardianExaminationService.getHistory(ORG, GU, "not-mine", {})).toBeNull();
+    expect(listStudentHistory).not.toHaveBeenCalled();
+  });
+
+  it("null when canViewAcademic=false (no silent fallback to another student)", async () => {
+    vi.mocked(findGuardianLink).mockResolvedValue(link({ studentId: STU, canViewAcademic: false }));
+    expect(await guardianExaminationService.getHistory(ORG, GU, STU, {})).toBeNull();
+  });
+
+  it("masks non-published, withholds attendance when canViewAttendance=false, and maps appeal status", async () => {
+    vi.mocked(findGuardianLink).mockResolvedValue(link({ studentId: STU, canViewAttendance: false }));
+    vi.mocked(countStudentHistory).mockResolvedValue(3);
+    vi.mocked(listStudentHistoryFacets).mockResolvedValue({ years: [2026], subjects: [{ id: "sub-1", name: "Matemática" }] });
+    vi.mocked(listStudentAppeals).mockResolvedValue([
+      { appealId: "a1", examResultId: "r1", subjectName: "M", sessionDate: new Date(), reason: "x", status: "UNDER_REVIEW", decision: null, decidedAt: null, submittedAt: new Date() } as never,
+    ]);
+    vi.mocked(listStudentHistory).mockResolvedValue([
+      cand({ examCandidateId: "c-pub", startsAt: new Date("2026-07-01T09:00:00Z"), attendanceStatus: "PRESENT", result: { ...publishedResult } }),
+      cand({ examCandidateId: "c-draft", startsAt: new Date("2026-07-02T09:00:00Z"), attendanceStatus: "ABSENT", result: { ...publishedResult, examResultId: "r2", status: "DRAFT", publishedAt: null } }),
+      cand({ examCandidateId: "c-none", startsAt: new Date("2026-07-03T09:00:00Z"), attendanceStatus: "ABSENT" }),
+    ]);
+
+    const h = await guardianExaminationService.getHistory(ORG, GU, STU, { page: 1 });
+    const byId = Object.fromEntries(h!.items.map((i) => [i.examCandidateId, i]));
+    expect(h!.attendanceVisible).toBe(false);
+    expect(byId["c-pub"].attendanceStatus).toBeNull(); // withheld despite PRESENT
+    expect(byId["c-pub"].result?.normalizedScore).toBe(75);
+    expect(byId["c-pub"].appealStatus).toBe("UNDER_REVIEW"); // appeal on r1
+    expect(byId["c-draft"].result).toBeNull(); // draft masked
+    expect(byId["c-none"].result).toBeNull();
+    expect(h!.facets.subjects).toEqual([{ id: "sub-1", name: "Matemática" }]);
+    expect(h!.total).toBe(3);
+  });
+
+  it("paginates server-side and scopes facets to the selected student", async () => {
+    vi.mocked(findGuardianLink).mockResolvedValue(link({ studentId: STU }));
+    vi.mocked(listStudentHistory).mockResolvedValue([]);
+    vi.mocked(countStudentHistory).mockResolvedValue(0);
+    vi.mocked(listStudentHistoryFacets).mockResolvedValue({ years: [], subjects: [] });
+    vi.mocked(listStudentAppeals).mockResolvedValue([]);
+
+    const h = await guardianExaminationService.getHistory(ORG, GU, STU, { page: 2, pageSize: 10, subjectId: "sub-1" });
+    expect(h!.page).toBe(2);
+    expect(h!.pageSize).toBe(10);
+    expect(vi.mocked(listStudentHistory)).toHaveBeenCalledWith(ORG, STU, expect.objectContaining({ skip: 10, take: 10, subjectId: "sub-1" }));
+    expect(vi.mocked(listStudentHistoryFacets)).toHaveBeenCalledWith(ORG, STU); // facets scoped to the student, not the page
   });
 });

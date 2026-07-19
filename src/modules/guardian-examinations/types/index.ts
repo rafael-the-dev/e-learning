@@ -111,3 +111,51 @@ export interface GuardianExamDetailDto {
   /** Read-only appeal status, if any. */
   appeal: GuardianExamAppealStatusDto | null;
 }
+
+// ─── Sprint 3: History (supervision, read-only) ──────────────────────────────
+
+/** One history row — candidacy-based, so it includes exams with no published result,
+ *  absences, and withdrawals. `attendanceStatus` is withheld (null) when the link's
+ *  canViewAttendance is false. `appealStatus` is the (read-only) status of the appeal
+ *  on this row's published result, if any. Drill-through via `examCandidateId`. */
+export interface GuardianExamHistoryItemDto {
+  examCandidateId: string;
+  subjectName: string | null;
+  sessionTitle: string;
+  sessionDate: Date;
+  roomName: string | null;
+  candidateStatus: string;
+  attendanceStatus: string | null;
+  result: {
+    examResultId: string;
+    normalizedScore: number | null;
+    resultCode: string | null;
+    publishedAt: Date | null;
+  } | null;
+  appealStatus: string | null;
+}
+
+export interface GuardianExamHistoryFacetsDto {
+  years: number[];
+  subjects: Array<{ id: string; name: string }>;
+}
+
+export interface GuardianExamHistoryFilters {
+  year?: number;
+  subjectId?: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** The history view for ONE selected (validated) student. `attendanceVisible` hides
+ *  the whole attendance column when false. */
+export interface GuardianExamHistoryPageDto {
+  student: GuardianLinkedStudentDto;
+  attendanceVisible: boolean;
+  items: GuardianExamHistoryItemDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+  facets: GuardianExamHistoryFacetsDto;
+}

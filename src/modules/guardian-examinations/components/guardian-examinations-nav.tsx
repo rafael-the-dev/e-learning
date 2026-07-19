@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/shared/lib/utils";
 
 // Secondary navigation for the guardian examination portal (supervision, read-only).
-// Sprint 1 exposes only "Resumo"; Detalhe (Sprint 2) and Histórico (Sprint 3) are
-// intentionally not added yet.
+// Resumo (Sprint 1) + Histórico (Sprint 3). Detalhe (Sprint 2) is a drill-through,
+// not a top-level tab.
 const TABS: Array<{ href: string; label: string; exact?: boolean }> = [
   { href: "/guardian/examinations", label: "Resumo", exact: true },
+  { href: "/guardian/examinations/history", label: "Histórico" },
 ];
 
 export function GuardianExaminationsNav() {

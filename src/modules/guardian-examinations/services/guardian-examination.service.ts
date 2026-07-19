@@ -3,16 +3,24 @@ import {
   findGuardianLink,
   type GuardianLinkRow,
 } from "@/modules/guardian-portal/repositories/guardian-portal.repository";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/shared/lib/pagination";
 import { findExamCandidateById } from "@/modules/examinations/repositories/exam-candidate.repository";
 import {
   listStudentCandidacies,
   countPendingAppeals,
   findStudentCandidacy,
   findLatestAppealForResult,
+  listStudentHistory,
+  countStudentHistory,
+  listStudentHistoryFacets,
+  listStudentAppeals,
   type StudentCandidacyRow,
 } from "@/modules/student-examinations/repositories/student-exam.repository";
 import type {
   GuardianExamDetailDto,
+  GuardianExamHistoryFilters,
+  GuardianExamHistoryItemDto,
+  GuardianExamHistoryPageDto,
   GuardianExamOverviewDto,
   GuardianExamResultBriefDto,
   GuardianExamStudentSummaryDto,
@@ -230,6 +238,88 @@ export class GuardianExaminationService {
       attendanceStatus: link.canViewAttendance ? row.attendanceStatus : null,
       result,
       appeal,
+    };
+  }
+
+  /** The academic-visible linked students — the History student selector. A student
+   *  whose link has canViewAcademic=false is excluded (no exam history to show). */
+  async getHistoryStudentOptions(
+    organizationId: string,
+    guardianUserId: string
+  ): Promise<GuardianLinkedStudentDto[]> {
+    const links = await findGuardianLinks(organizationId, guardianUserId);
+    return links.filter((l) => l.canViewAcademic).map(toLinkedStudent);
+  }
+
+  /** Candidacy-based history for ONE selected student — fail-closed to null when the
+   *  guardian has no active link to that student or the link lacks canViewAcademic.
+   *  A studentId in the URL is only a SELECTION; it is validated here, never trusted.
+   *  Results are PUBLISHED-only; attendance is withheld unless canViewAttendance;
+   *  facets are scoped to the selected student. */
+  async getHistory(
+    organizationId: string,
+    guardianUserId: string,
+    studentId: string,
+    filters: GuardianExamHistoryFilters = {}
+  ): Promise<GuardianExamHistoryPageDto | null> {
+    const link = await findGuardianLink(organizationId, guardianUserId, studentId);
+    if (!link || !link.canViewAcademic) return null;
+
+    const page = Math.max(1, filters.page ?? 1);
+    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, filters.pageSize ?? DEFAULT_PAGE_SIZE));
+    const repoFilters = {
+      year: filters.year,
+      subjectId: filters.subjectId,
+      status: filters.status,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    };
+
+    const [rows, total, facets, appeals] = await Promise.all([
+      listStudentHistory(organizationId, studentId, repoFilters),
+      countStudentHistory(organizationId, studentId, repoFilters),
+      listStudentHistoryFacets(organizationId, studentId),
+      listStudentAppeals(organizationId, studentId),
+    ]);
+
+    // Latest appeal status per result (listStudentAppeals is most-recent-first).
+    const appealByResult = new Map<string, string>();
+    for (const a of appeals) {
+      if (!appealByResult.has(a.examResultId)) appealByResult.set(a.examResultId, a.status);
+    }
+
+    const items: GuardianExamHistoryItemDto[] = rows.map((r) => {
+      const published = r.result?.status === "PUBLISHED";
+      const result =
+        published && r.result
+          ? {
+              examResultId: r.result.examResultId,
+              normalizedScore: r.result.normalizedScore,
+              resultCode: r.result.resultCode,
+              publishedAt: r.result.publishedAt,
+            }
+          : null;
+      return {
+        examCandidateId: r.examCandidateId,
+        subjectName: r.session.subjectName,
+        sessionTitle: r.session.title,
+        sessionDate: r.session.startsAt,
+        roomName: r.session.roomName,
+        candidateStatus: r.candidateStatus,
+        attendanceStatus: link.canViewAttendance ? r.attendanceStatus : null,
+        result,
+        appealStatus: result ? appealByResult.get(result.examResultId) ?? null : null,
+      };
+    });
+
+    return {
+      student: toLinkedStudent(link),
+      attendanceVisible: link.canViewAttendance,
+      items,
+      total,
+      page,
+      pageSize,
+      facets: { years: facets.years, subjects: facets.subjects },
     };
   }
 }

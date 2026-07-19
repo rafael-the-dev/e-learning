@@ -25,6 +25,16 @@ const SESSION: Registry = {
   CANCELLED: { label: "Cancelado", variant: "destructive" },
 };
 
+// Candidate lifecycle status (supervision view — the linked student's candidacy).
+const CANDIDATE: Registry = {
+  PENDING_ELIGIBILITY: { label: "Pendente", variant: "secondary" },
+  ELIGIBLE: { label: "Elegível", variant: "info" },
+  INELIGIBLE: { label: "Não elegível", variant: "destructive" },
+  REGISTERED: { label: "Inscrito", variant: "success" },
+  WITHDRAWN: { label: "Retirado", variant: "secondary" },
+  DISQUALIFIED: { label: "Desqualificado", variant: "destructive" },
+};
+
 // Published-result outcome code.
 const RESULT_CODE: Registry = {
   SCORED: { label: "Pontuado", variant: "info" },
@@ -69,6 +79,7 @@ const ATTENDANCE: Registry = {
 
 const REGISTRIES = {
   session: SESSION,
+  candidate: CANDIDATE,
   resultCode: RESULT_CODE,
   relationship: RELATIONSHIP,
   appealStatus: APPEAL_STATUS,
@@ -98,6 +109,9 @@ export function GuardianExamStatusBadge({
 
 export const SessionStatusBadge = ({ status }: { status: string | null | undefined }) => (
   <GuardianExamStatusBadge kind="session" status={status} />
+);
+export const CandidateStatusBadge = ({ status }: { status: string | null | undefined }) => (
+  <GuardianExamStatusBadge kind="candidate" status={status} />
 );
 export const ResultCodeBadge = ({ status }: { status: string | null | undefined }) => (
   <GuardianExamStatusBadge kind="resultCode" status={status} />
