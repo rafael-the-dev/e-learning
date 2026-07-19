@@ -2,6 +2,8 @@ import { Bell, FileText } from "lucide-react";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getGuardianPortalData } from "@/modules/guardian-portal/services/guardian-portal.service";
+import { guardianExaminationService } from "@/modules/guardian-examinations/services/guardian-examination.service";
+import { GuardianExamSummaryCard } from "@/modules/guardian-examinations/components/guardian-exam-summary-card";
 import {
   ExecutiveMainGrid,
   ExecutiveLeftColumn,
@@ -36,6 +38,12 @@ export default async function GuardianPortalPage({
   const requestedStudentId = Array.isArray(studentId) ? studentId[0] ?? null : studentId ?? null;
 
   const data = await getGuardianPortalData(context, requestedStudentId);
+  // Supervision exam overview across all linked educandos (READ-ONLY). Scoped to the
+  // authenticated guardian (context.userId), never a studentId from the URL.
+  const examOverview = await guardianExaminationService.getOverview(
+    context.organizationId,
+    context.userId
+  );
 
   // Blocked state — no ACTIVE links to any student.
   if (data.students.length === 0 || !data.selected) {
@@ -107,6 +115,8 @@ export default async function GuardianPortalPage({
             >
               <GuardianNotificationsPanel notifications={data.notifications} />
             </DashboardSideCard>
+
+            {examOverview.hasLinks && <GuardianExamSummaryCard overview={examOverview} />}
 
             {permissions.canViewDocuments && selected.documents !== null && (
               <DashboardSideCard title="Documentos" icon={<FileText className="size-4" />}>

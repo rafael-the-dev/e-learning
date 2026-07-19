@@ -110,6 +110,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         requiredPermission: "guardianPortal.view",
       },
       {
+        href: "/guardian/examinations",
+        label: "Exames",
+        iconName: "GraduationCap",
+        requiredPermission: "guardianPortal.view",
+      },
+      {
         href: "/notifications",
         label: "Notificações",
         iconName: "Bell",
