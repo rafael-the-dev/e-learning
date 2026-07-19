@@ -42,10 +42,38 @@ const RELATIONSHIP: Registry = {
   OTHER: { label: "Outro", variant: "outline" },
 };
 
+// Appeal lifecycle status (read-only supervision view).
+const APPEAL_STATUS: Registry = {
+  PENDING: { label: "Pendente", variant: "warning" },
+  UNDER_REVIEW: { label: "Em análise", variant: "info" },
+  APPROVED: { label: "Aprovado", variant: "success" },
+  REJECTED: { label: "Rejeitado", variant: "destructive" },
+  WITHDRAWN: { label: "Retirado", variant: "secondary" },
+  CLOSED: { label: "Encerrado", variant: "secondary" },
+};
+
+// Public appeal decision outcome.
+const APPEAL_DECISION: Registry = {
+  APPROVED: { label: "Aprovado", variant: "success" },
+  REJECTED: { label: "Rejeitado", variant: "destructive" },
+};
+
+// Candidate attendance status.
+const ATTENDANCE: Registry = {
+  PRESENT: { label: "Presente", variant: "success" },
+  ABSENT: { label: "Ausente", variant: "destructive" },
+  LATE: { label: "Atrasado", variant: "warning" },
+  EXCUSED: { label: "Justificado", variant: "secondary" },
+  DISQUALIFIED: { label: "Desqualificado", variant: "destructive" },
+};
+
 const REGISTRIES = {
   session: SESSION,
   resultCode: RESULT_CODE,
   relationship: RELATIONSHIP,
+  appealStatus: APPEAL_STATUS,
+  appealDecision: APPEAL_DECISION,
+  attendance: ATTENDANCE,
 } as const;
 
 export type GuardianExamBadgeKind = keyof typeof REGISTRIES;
@@ -77,6 +105,15 @@ export const ResultCodeBadge = ({ status }: { status: string | null | undefined 
 export const RelationshipBadge = ({ status }: { status: string | null | undefined }) => (
   <GuardianExamStatusBadge kind="relationship" status={status} />
 );
+export const AppealStatusBadge = ({ status }: { status: string | null | undefined }) => (
+  <GuardianExamStatusBadge kind="appealStatus" status={status} />
+);
+export const AppealDecisionBadge = ({ status }: { status: string | null | undefined }) => (
+  <GuardianExamStatusBadge kind="appealDecision" status={status} />
+);
+export const AttendanceStatusBadge = ({ status }: { status: string | null | undefined }) => (
+  <GuardianExamStatusBadge kind="attendance" status={status} />
+);
 
 // ─── Shared formatting helpers (pt-PT) ───────────────────────────────────────
 
@@ -87,3 +124,12 @@ export const formatExamDate = (d: Date | string): string =>
 /** Time only, e.g. "14:30". */
 export const formatExamTime = (d: Date | string): string =>
   new Date(d).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+
+/** Duration in minutes → "2h00" / "45min". */
+export const formatExamDuration = (minutes: number | null): string | null => {
+  if (minutes == null) return null;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}min`;
+  return `${h}h${String(m).padStart(2, "0")}`;
+};

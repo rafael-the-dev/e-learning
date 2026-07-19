@@ -4,16 +4,28 @@ import type { StudentCandidacyRow } from "@/modules/student-examinations/reposit
 
 vi.mock("@/modules/guardian-portal/repositories/guardian-portal.repository", () => ({
   findGuardianLinks: vi.fn(),
+  findGuardianLink: vi.fn(),
+}));
+vi.mock("@/modules/examinations/repositories/exam-candidate.repository", () => ({
+  findExamCandidateById: vi.fn(),
 }));
 vi.mock("@/modules/student-examinations/repositories/student-exam.repository", () => ({
   listStudentCandidacies: vi.fn(),
   countPendingAppeals: vi.fn(),
+  findStudentCandidacy: vi.fn(),
+  findLatestAppealForResult: vi.fn(),
 }));
 
-import { findGuardianLinks } from "@/modules/guardian-portal/repositories/guardian-portal.repository";
+import {
+  findGuardianLinks,
+  findGuardianLink,
+} from "@/modules/guardian-portal/repositories/guardian-portal.repository";
+import { findExamCandidateById } from "@/modules/examinations/repositories/exam-candidate.repository";
 import {
   listStudentCandidacies,
   countPendingAppeals,
+  findStudentCandidacy,
+  findLatestAppealForResult,
 } from "@/modules/student-examinations/repositories/student-exam.repository";
 import { guardianExaminationService } from "@/modules/guardian-examinations/services/guardian-examination.service";
 
@@ -133,5 +145,78 @@ describe("GuardianExaminationService.getOverview", () => {
     expect(o.students[0].academicVisible).toBe(true);
     expect(o.students[1].student.studentName).toBe("Rui Sá");
     expect(o.students[1].academicVisible).toBe(false); // stu-2 link has canViewAcademic=false
+  });
+});
+
+describe("GuardianExaminationService.getExamDetail — read-only, fail-closed, flag-gated", () => {
+  const CID = "cand-1";
+  const withCandidate = (studentId = "stu-1") =>
+    vi.mocked(findExamCandidateById).mockResolvedValue({ studentId } as never);
+
+  it("null when the candidacy does not exist / cross-org (org-scoped read)", async () => {
+    vi.mocked(findExamCandidateById).mockResolvedValue(null);
+    expect(await guardianExaminationService.getExamDetail(ORG, GU, CID)).toBeNull();
+    expect(findGuardianLink).not.toHaveBeenCalled();
+  });
+
+  it("null when the guardian has no active link to that student (other guardian / other student / inactive link)", async () => {
+    withCandidate("stu-other");
+    vi.mocked(findGuardianLink).mockResolvedValue(null); // findGuardianLink filters org+guardianUserId+studentId+deletedAt
+    expect(await guardianExaminationService.getExamDetail(ORG, GU, CID)).toBeNull();
+    expect(findStudentCandidacy).not.toHaveBeenCalled();
+  });
+
+  it("null when the link has canViewAcademic=false (academic gate)", async () => {
+    withCandidate();
+    vi.mocked(findGuardianLink).mockResolvedValue(link({ studentId: "stu-1", canViewAcademic: false }));
+    expect(await guardianExaminationService.getExamDetail(ORG, GU, CID)).toBeNull();
+    expect(findStudentCandidacy).not.toHaveBeenCalled();
+  });
+
+  it("masks a non-published result and exposes NO admin/private fields", async () => {
+    withCandidate();
+    vi.mocked(findGuardianLink).mockResolvedValue(link({ studentId: "stu-1" }));
+    vi.mocked(findStudentCandidacy).mockResolvedValue(
+      cand({ startsAt: new Date("2026-07-01T09:00:00Z"), attendanceStatus: "PRESENT", result: { ...publishedResult, status: "DRAFT", publishedAt: null } })
+    );
+    const d = await guardianExaminationService.getExamDetail(ORG, GU, CID);
+    expect(d?.result).toBeNull(); // draft masked
+    expect(findLatestAppealForResult).not.toHaveBeenCalled();
+    for (const k of ["markerId", "reviewedById", "approvedById", "publishedById", "decisionReason", "allowedActions", "canCreateAppeal"]) {
+      expect(Object.keys(d as object)).not.toContain(k);
+    }
+  });
+
+  it("hides the whole attendance section when canViewAttendance=false", async () => {
+    withCandidate();
+    vi.mocked(findGuardianLink).mockResolvedValue(link({ studentId: "stu-1", canViewAttendance: false }));
+    vi.mocked(findStudentCandidacy).mockResolvedValue(
+      cand({ startsAt: new Date("2026-07-01T09:00:00Z"), attendanceStatus: "PRESENT" })
+    );
+    const d = await guardianExaminationService.getExamDetail(ORG, GU, CID);
+    expect(d?.attendanceVisible).toBe(false);
+    expect(d?.attendanceStatus).toBeNull(); // withheld even though attendance was PRESENT
+  });
+
+  it("surfaces a published result + read-only appeal status (no private reason)", async () => {
+    withCandidate();
+    vi.mocked(findGuardianLink).mockResolvedValue(link({ studentId: "stu-1" }));
+    vi.mocked(findStudentCandidacy).mockResolvedValue(
+      cand({ startsAt: new Date("2026-07-01T09:00:00Z"), attendanceStatus: "PRESENT", result: { ...publishedResult } })
+    );
+    vi.mocked(findLatestAppealForResult).mockResolvedValue({
+      appealId: "app-1", examResultId: "r1", subjectName: "Matemática", sessionDate: new Date(),
+      reason: "PRIVATE student reason", status: "REJECTED", decision: "REJECTED",
+      decidedAt: new Date("2026-07-15T00:00:00Z"), submittedAt: new Date("2026-07-12T00:00:00Z"),
+    } as never);
+
+    const d = await guardianExaminationService.getExamDetail(ORG, GU, CID);
+    expect(d?.result?.normalizedScore).toBe(75);
+    expect(d?.attendanceVisible).toBe(true);
+    expect(d?.appeal?.status).toBe("REJECTED");
+    expect(d?.appeal?.publicDecision).toBe("REJECTED");
+    // The appeal DTO carries no reason / decisionReason.
+    expect(Object.keys(d!.appeal as object)).not.toContain("reason");
+    expect(Object.keys(d!.appeal as object)).not.toContain("decisionReason");
   });
 });

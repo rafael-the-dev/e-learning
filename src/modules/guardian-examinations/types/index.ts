@@ -31,8 +31,10 @@ export interface GuardianUpcomingExamDto {
   sessionStatus: string;
 }
 
-/** A brief published-result ref for the overview. */
+/** A brief published-result ref for the overview. `examCandidateId` links to the
+ *  exam detail (the canonical entity, mirroring the Student Portal). */
 export interface GuardianExamResultBriefDto {
+  examCandidateId: string;
   examResultId: string;
   subjectName: string | null;
   normalizedScore: number | null;
@@ -56,4 +58,56 @@ export interface GuardianExamStudentSummaryDto {
 export interface GuardianExamOverviewDto {
   hasLinks: boolean;
   students: GuardianExamStudentSummaryDto[];
+}
+
+// ─── Sprint 2: Exam Details (supervision, read-only) ─────────────────────────
+
+/** A PUBLISHED result, guardian view. No drafts/submitted/review/approval/internal
+ *  remarks/audit — only what the Student Portal publishes. */
+export interface GuardianExamResultDetailDto {
+  examResultId: string;
+  score: number | null;
+  maxScore: number;
+  normalizedScore: number | null;
+  resultCode: string | null;
+  publishedAt: Date | null;
+}
+
+/** Read-only appeal STATUS. No create/withdraw/edit; no private decisionReason. */
+export interface GuardianExamAppealStatusDto {
+  appealId: string;
+  status: string;
+  publicDecision: string | null;
+  submittedAt: Date;
+  decidedAt: Date | null;
+}
+
+/** Full exam detail for `/guardian/examinations/[examId]` (examId = examCandidateId).
+ *  100% read-only; no admin config (invigilators/examiners/integration/operations),
+ *  no write capability. Attendance is gated by `attendanceVisible` (canViewAttendance)
+ *  — the whole section is hidden when false. */
+export interface GuardianExamDetailDto {
+  student: GuardianLinkedStudentDto;
+  examCandidateId: string;
+  examSessionId: string;
+  title: string;
+  subjectName: string | null;
+  levelName: string | null;
+  courseName: string | null;
+  periodName: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  durationMinutes: number | null;
+  roomName: string | null;
+  instructions: string | null;
+  sessionStatus: string;
+  candidateStatus: string;
+  /** canViewAttendance — when false, hide the entire attendance section. */
+  attendanceVisible: boolean;
+  /** The attendance status, or null when not recorded (only meaningful if visible). */
+  attendanceStatus: string | null;
+  /** PUBLISHED result only (masked otherwise). */
+  result: GuardianExamResultDetailDto | null;
+  /** Read-only appeal status, if any. */
+  appeal: GuardianExamAppealStatusDto | null;
 }

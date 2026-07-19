@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
 import type { GuardianExamStudentSummaryDto } from "@/modules/guardian-examinations/types";
@@ -11,10 +12,11 @@ import {
 // =============================================================================
 // GUARDIAN STUDENT EXAM CARD — per-student supervision summary (READ-ONLY)
 // -----------------------------------------------------------------------------
-// One card per linked student. Purely presentational and NON-interactive: no
-// buttons, no action links, no deep-links (those arrive in Sprint 2). When the
-// link has no academic visibility, ALL exam data is withheld — only the muted
-// gate message (from `alerts`) is shown.
+// One card per linked student. READ-ONLY supervision: the ONLY interactive
+// elements are read-only deep-links (Sprint 2) — the next exam and each recent
+// result link to `/guardian/examinations/{examCandidateId}`. No buttons, no
+// actions, no mutations. When the link has no academic visibility, ALL exam
+// data is withheld — only the muted gate message (from `alerts`) is shown.
 // =============================================================================
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {
@@ -54,13 +56,16 @@ export function GuardianStudentExamCard({ summary }: { summary: GuardianExamStud
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground">Próximo exame</p>
               {nextExam ? (
-                <>
+                <Link
+                  href={`/guardian/examinations/${nextExam.examCandidateId}`}
+                  className="block rounded-md transition-colors hover:bg-muted/50"
+                >
                   <p className="text-sm font-semibold">{nextExam.subjectName ?? "Exame"}</p>
                   <p className="text-xs text-muted-foreground">
                     {formatExamDate(nextExam.startsAt)} · {formatExamTime(nextExam.startsAt)}
                     {nextExam.roomName ? ` · ${nextExam.roomName}` : ""}
                   </p>
-                </>
+                </Link>
               ) : (
                 <p className="text-sm text-muted-foreground">Sem exames agendados.</p>
               )}
@@ -79,21 +84,25 @@ export function GuardianStudentExamCard({ summary }: { summary: GuardianExamStud
               ) : (
                 <ul className="divide-y">
                   {latestResults.map((result) => (
-                    <li
-                      key={result.examResultId}
-                      className="flex items-center justify-between gap-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{result.subjectName ?? "—"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Percentagem:{" "}
-                          {result.normalizedScore != null ? `${result.normalizedScore}%` : "—"}
-                          {result.publishedAt
-                            ? ` · ${formatExamDate(result.publishedAt)}`
-                            : ""}
-                        </p>
-                      </div>
-                      <ResultCodeBadge status={result.resultCode} />
+                    <li key={result.examResultId}>
+                      <Link
+                        href={`/guardian/examinations/${result.examCandidateId}`}
+                        className="flex items-center justify-between gap-3 rounded-md py-2 transition-colors hover:bg-muted/50"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {result.subjectName ?? "—"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Percentagem:{" "}
+                            {result.normalizedScore != null ? `${result.normalizedScore}%` : "—"}
+                            {result.publishedAt
+                              ? ` · ${formatExamDate(result.publishedAt)}`
+                              : ""}
+                          </p>
+                        </div>
+                        <ResultCodeBadge status={result.resultCode} />
+                      </Link>
                     </li>
                   ))}
                 </ul>
