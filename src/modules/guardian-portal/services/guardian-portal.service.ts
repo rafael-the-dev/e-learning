@@ -1,6 +1,6 @@
 import { getDb } from "@/server/db";
 import { NotFoundError } from "@/shared/lib/command";
-import { getStudent360Core, resolveCurrentEnrollmentLevel } from "@/modules/students/student-360/services/student-360.service";
+import { getStudent360Core } from "@/modules/students/student-360/services/student-360.service";
 import { findAttendanceRecordsByStudent } from "@/modules/students/student-360/repositories/student-360.repository";
 import { getStudentDocuments } from "@/modules/student-documents/services/student-document.service";
 import {
@@ -114,7 +114,8 @@ async function buildSelectedStudentData(
     canViewInvoices: permissions.canViewFinance,
     canViewWallet: permissions.canViewFinance,
   });
-  const level = resolveCurrentEnrollmentLevel(core.currentEnrollment);
+  // Current level from the canonical academic summary (M1) — not re-resolved here.
+  const level = core.academicSummary.currentLevel;
 
   const activeClassGroupIds = unique(
     core.activeEnrollments.map((e) => e.classGroupId).filter((id): id is string => Boolean(id))

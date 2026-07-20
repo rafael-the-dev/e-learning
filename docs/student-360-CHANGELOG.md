@@ -57,6 +57,16 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Completed the academic-domain separation (M1): the Student 360 aggregator no longer
+  queries the prerequisites module's progression tables nor resolves progression state
+  itself. The per-student level/course-progress reads moved to the prerequisites
+  repositories (`findLevelProgressByStudent` / `findCourseProgressByStudent`); the
+  current-level resolver (`resolveCurrentEnrollmentLevel`) is now owned by the academic
+  summary contract, and the overview/portals read `academicSummary.currentLevel`. Pure
+  refactor — no behaviour change; added architecture-guard tests. (The audit confirmed the
+  academic *derivations* — label, tallies, risk, average — were already consolidated by
+  H2/H6; M1 finished the residual reads/resolver.)
+
 ### Removed
 - The 8-KPI summary-cards band and the large health card (`StudentSummaryCards`,
   `StudentHealthCard`) and the `buildSummaryCards` builder — superseded by the H7 status

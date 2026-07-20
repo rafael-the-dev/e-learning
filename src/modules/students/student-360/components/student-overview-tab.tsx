@@ -2,7 +2,6 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/shared/components/ui
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { GENDER_LABELS, ID_TYPE_LABELS } from "@/modules/students/types";
 import { User, GraduationCap } from "lucide-react";
-import { resolveCurrentEnrollmentLevel } from "@/modules/students/student-360/services/student-360.service";
 import type { Student360Core } from "@/modules/students/student-360/services/student-360.service";
 import { StudentPortalAccountCard } from "@/modules/students/student-360/components/student-portal-account-card";
 import type { StudentPortalAccountDto } from "@/modules/students/services/student-user-provisioning.service";
@@ -25,8 +24,9 @@ export function StudentOverviewTab({
   guardianLinks?: StudentGuardianLinkDto[];
   canManageGuardians?: boolean;
 }) {
-  const { student, currentEnrollment } = core;
-  const currentLevel = resolveCurrentEnrollmentLevel(currentEnrollment);
+  const { student, currentEnrollment, academicSummary } = core;
+  // Current level comes from the canonical academic summary (M1) — not re-resolved here.
+  const currentLevel = academicSummary.currentLevel;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

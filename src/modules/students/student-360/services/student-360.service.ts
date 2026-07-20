@@ -15,14 +15,23 @@ import { evaluateEligibilityForAllSubjects } from "@/modules/prerequisites/engin
 import { getWalletByStudentId, getRecentTransactions } from "@/modules/wallets/services/wallet.service";
 import {
   findAttendanceRecordsByStudent,
-  findLevelProgressByStudent,
-  findCourseProgressByStudent,
   findLastActivityAt,
 } from "@/modules/students/student-360/repositories/student-360.repository";
+// Academic progression state is OWNED by the prerequisites module — Student 360 consumes
+// its reads, never queries its tables (M1).
+import { findLevelProgressByStudent } from "@/modules/prerequisites/repositories/student-level-progress.repository";
+import { findCourseProgressByStudent } from "@/modules/prerequisites/repositories/student-course-progress.repository";
 import {
   buildStudentAcademicSummary,
+  resolveCurrentEnrollmentLevel,
   type StudentAcademicSummary,
+  type ResolvedEnrollmentLevel,
 } from "@/modules/students/services/student-academic-summary.service";
+
+// Re-exported from the academic contract for the Student 360 tab loaders + callers that
+// still reference it; the definition (progression knowledge) lives in the academic summary.
+export { resolveCurrentEnrollmentLevel };
+export type { ResolvedEnrollmentLevel };
 import {
   buildStudentRiskSummary,
   type StudentRiskSummary,
@@ -325,22 +334,6 @@ export async function getGradesTabData(
 export interface SubjectEligibilityRow {
   levelSubject: LevelSubject;
   eligibility: SubjectEligibilityResult;
-}
-
-export interface ResolvedEnrollmentLevel {
-  id: string | null;
-  name: string | null;
-}
-
-// level-progression.engine.ts only ever writes currentLevelId on promotion — courseLevelId
-// stays frozen at the original enrollment level. currentLevelId is the source of truth
-// whenever it's set; courseLevelId is the fallback for a student who hasn't progressed yet.
-export function resolveCurrentEnrollmentLevel(enrollment: Enrollment | null): ResolvedEnrollmentLevel {
-  if (!enrollment) return { id: null, name: null };
-  return {
-    id: enrollment.currentLevelId ?? enrollment.courseLevelId ?? null,
-    name: enrollment.currentLevelName ?? enrollment.courseLevelName ?? null,
-  };
 }
 
 export async function getProgressTabData(

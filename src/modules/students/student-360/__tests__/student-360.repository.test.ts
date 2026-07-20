@@ -2,8 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockAttendanceRecordFindMany = vi.fn();
 const mockAttendanceRecordCount = vi.fn();
-const mockStudentLevelProgressFindMany = vi.fn();
-const mockStudentCourseProgressFindMany = vi.fn();
 const mockStudentTimelineEventFindFirst = vi.fn();
 
 vi.mock("@/server/db", () => ({
@@ -12,16 +10,12 @@ vi.mock("@/server/db", () => ({
       findMany: mockAttendanceRecordFindMany,
       count: mockAttendanceRecordCount,
     },
-    studentLevelProgress: { findMany: mockStudentLevelProgressFindMany },
-    studentCourseProgress: { findMany: mockStudentCourseProgressFindMany },
     studentTimelineEvent: { findFirst: mockStudentTimelineEventFindFirst },
   }),
 }));
 
 import {
   findAttendanceRecordsByStudent,
-  findLevelProgressByStudent,
-  findCourseProgressByStudent,
   findLastActivityAt,
 } from "../repositories/student-360.repository";
 
@@ -107,25 +101,8 @@ describe("findAttendanceRecordsByStudent", () => {
   });
 });
 
-describe("findLevelProgressByStudent / findCourseProgressByStudent", () => {
-  it("scopes level progress queries by studentId and organizationId", async () => {
-    mockStudentLevelProgressFindMany.mockResolvedValue([]);
-    await findLevelProgressByStudent(STUDENT, ORG);
-    expect(mockStudentLevelProgressFindMany.mock.calls[0][0].where).toEqual({
-      studentId: STUDENT,
-      organizationId: ORG,
-    });
-  });
-
-  it("scopes course progress queries by studentId and organizationId", async () => {
-    mockStudentCourseProgressFindMany.mockResolvedValue([]);
-    await findCourseProgressByStudent(STUDENT, ORG);
-    expect(mockStudentCourseProgressFindMany.mock.calls[0][0].where).toEqual({
-      studentId: STUDENT,
-      organizationId: ORG,
-    });
-  });
-});
+// findLevelProgressByStudent / findCourseProgressByStudent moved to the prerequisites
+// module (M1) and are covered by its repository tests.
 
 describe("findLastActivityAt", () => {
   it("scopes the query by studentId and organizationId, never trusting studentId alone", async () => {

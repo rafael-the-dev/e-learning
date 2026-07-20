@@ -61,9 +61,17 @@ function deriveProgressionStatus(
   return "Regular";
 }
 
-// currentLevelId is written on promotion; courseLevelId is the frozen original level.
-// Same resolution the eligibility engine uses — the level the student is really at now.
-function resolveCurrentLevel(enrollment: Enrollment | null): { id: string | null; name: string | null } {
+export interface ResolvedEnrollmentLevel {
+  id: string | null;
+  name: string | null;
+}
+
+// The single owner of "which level is the student really at now" (M1) — progression
+// knowledge that used to live in the Student 360 aggregator. currentLevelId is written on
+// promotion; courseLevelId is the frozen original level. currentLevelId wins whenever set;
+// courseLevelId is the fallback for a student who hasn't progressed yet. Consumers read
+// this (or the `currentLevel` field below) from the academic contract, never re-derive it.
+export function resolveCurrentEnrollmentLevel(enrollment: Enrollment | null): ResolvedEnrollmentLevel {
   if (!enrollment) return { id: null, name: null };
   return {
     id: enrollment.currentLevelId ?? enrollment.courseLevelId ?? null,
@@ -96,7 +104,7 @@ export function buildStudentAcademicSummary(input: StudentAcademicSummaryInput):
     failedSubjects: subjectProgress.filter((p) => p.status === "FAILED").length,
     inProgressSubjects: subjectProgress.filter((p) => p.status === "IN_PROGRESS").length,
     incompleteSubjects: subjectProgress.filter((p) => p.status === "INCOMPLETE").length,
-    currentLevel: resolveCurrentLevel(currentEnrollment),
+    currentLevel: resolveCurrentEnrollmentLevel(currentEnrollment),
     progressionStatus: deriveProgressionStatus(subjectProgress, levelProgress),
   };
 }

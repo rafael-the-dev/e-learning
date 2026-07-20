@@ -12,7 +12,6 @@ import {
   getProgressTabData,
   getDocumentsTabData,
   getTimelineTabData,
-  resolveCurrentEnrollmentLevel,
 } from "@/modules/students/student-360/services/student-360.service";
 import { getStudentPortalAccountStatus } from "@/modules/students/services/student-user-provisioning.service";
 import { getStudentGuardianLinks } from "@/modules/guardian-portal/services/guardian-provisioning.service";
@@ -254,7 +253,7 @@ async function ActiveTabPanel({
 
     case "progress": {
       const { eligibility } = await getProgressTabData(organizationId, core.currentEnrollment);
-      const hasResolvedLevel = resolveCurrentEnrollmentLevel(core.currentEnrollment).id != null;
+      const hasResolvedLevel = core.academicSummary.currentLevel.id != null;
       return (
         <StudentProgressTab
           courseProgress={core.courseProgress}

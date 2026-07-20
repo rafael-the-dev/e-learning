@@ -1,4 +1,4 @@
-import { getStudent360Core, resolveCurrentEnrollmentLevel } from "@/modules/students/student-360/services/student-360.service";
+import { getStudent360Core } from "@/modules/students/student-360/services/student-360.service";
 import type { Student360Core } from "@/modules/students/student-360/services/student-360.service";
 import { findAttendanceRecordsByStudent } from "@/modules/students/student-360/repositories/student-360.repository";
 import { getStudentDocuments } from "@/modules/student-documents/services/student-document.service";
@@ -63,7 +63,8 @@ function unique(values: string[]): string[] {
 }
 
 function buildAcademicOverview(core: Student360Core, studentName: string): StudentAcademicOverview {
-  const level = resolveCurrentEnrollmentLevel(core.currentEnrollment);
+  // Current level from the canonical academic summary (M1) — not re-resolved here.
+  const level = core.academicSummary.currentLevel;
   const totalSubjects = core.subjectProgress.length;
   const passedSubjects = core.academicSummary.passedSubjects;
 

@@ -1,7 +1,23 @@
 "use server";
 
-import { getDb } from "@/server/db";
+import { getDb, type PrismaClientOrTx } from "@/server/db";
 import type { StudentCourseProgress } from "@/modules/prerequisites/types";
+
+// All of a student's course-progress rows (across enrolments). Owned here (prerequisites),
+// consumed by read models like Student 360 — which must not query this module's tables.
+export async function findCourseProgressByStudent(
+  studentId: string,
+  organizationId: string,
+  client?: PrismaClientOrTx
+): Promise<StudentCourseProgress[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.studentCourseProgress.findMany({
+    where: { studentId, organizationId },
+    include: { course: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map(mapRow);
+}
 
 export async function findCourseProgressByEnrollment(
   enrollmentId: string,

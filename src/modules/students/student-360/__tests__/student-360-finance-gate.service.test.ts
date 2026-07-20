@@ -70,9 +70,14 @@ vi.mock("@/modules/wallets/services/wallet.service", () => ({
 }));
 vi.mock("@/modules/students/student-360/repositories/student-360.repository", () => ({
   findAttendanceRecordsByStudent: h.findAttendanceRecordsByStudent,
-  findLevelProgressByStudent: h.findLevelProgressByStudent,
-  findCourseProgressByStudent: h.findCourseProgressByStudent,
   findLastActivityAt: h.findLastActivityAt,
+}));
+// Academic progression reads are owned by the prerequisites module (M1).
+vi.mock("@/modules/prerequisites/repositories/student-level-progress.repository", () => ({
+  findLevelProgressByStudent: h.findLevelProgressByStudent,
+}));
+vi.mock("@/modules/prerequisites/repositories/student-course-progress.repository", () => ({
+  findCourseProgressByStudent: h.findCourseProgressByStudent,
 }));
 
 import { getStudent360Core } from "../services/student-360.service";

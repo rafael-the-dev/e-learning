@@ -2,11 +2,12 @@ import { getDb } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult, PaginationParams } from "@/shared/types/common";
 import type { AttendanceRecordRow } from "@/modules/students/student-360/types";
-import type { StudentLevelProgress, StudentCourseProgress } from "@/modules/prerequisites/types";
 
 // =============================================================================
 // STUDENT 360 REPOSITORY
 // All queries are scoped to organizationId + studentId. Never query cross-tenant.
+// Academic progression (level/course progress) is owned by the prerequisites module
+// and read from there (M1) — this repository does not query those tables.
 // =============================================================================
 
 export async function findAttendanceRecordsByStudent(
@@ -55,64 +56,6 @@ export async function findAttendanceRecordsByStudent(
   }));
 
   return buildPaginationMeta(mapped, total, params);
-}
-
-export async function findLevelProgressByStudent(
-  studentId: string,
-  organizationId: string
-): Promise<StudentLevelProgress[]> {
-  const db = await getDb();
-  const rows = await db.studentLevelProgress.findMany({
-    where: { studentId, organizationId },
-    include: { courseLevel: { select: { name: true, order: true } } },
-    orderBy: { courseLevel: { order: "asc" } },
-  });
-  return rows.map((row) => ({
-    id: row.id,
-    organizationId: row.organizationId,
-    enrollmentId: row.enrollmentId,
-    studentId: row.studentId,
-    courseId: row.courseId,
-    courseLevelId: row.courseLevelId,
-    finalGrade: row.finalGrade != null ? Number(row.finalGrade) : null,
-    earnedCredits: row.earnedCredits,
-    status: row.status,
-    progressReason: row.progressReason,
-    completedAt: row.completedAt,
-    calculatedAt: row.calculatedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    courseLevelName: row.courseLevel?.name ?? null,
-    courseLevelOrder: row.courseLevel?.order ?? null,
-  }));
-}
-
-export async function findCourseProgressByStudent(
-  studentId: string,
-  organizationId: string
-): Promise<StudentCourseProgress[]> {
-  const db = await getDb();
-  const rows = await db.studentCourseProgress.findMany({
-    where: { studentId, organizationId },
-    include: { course: { select: { name: true } } },
-    orderBy: { createdAt: "desc" },
-  });
-  return rows.map((row) => ({
-    id: row.id,
-    organizationId: row.organizationId,
-    enrollmentId: row.enrollmentId,
-    studentId: row.studentId,
-    courseId: row.courseId,
-    finalGrade: row.finalGrade != null ? Number(row.finalGrade) : null,
-    earnedCredits: row.earnedCredits,
-    status: row.status,
-    progressReason: row.progressReason,
-    completedAt: row.completedAt,
-    calculatedAt: row.calculatedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    courseName: row.course?.name ?? null,
-  }));
 }
 
 export async function findLastActivityAt(

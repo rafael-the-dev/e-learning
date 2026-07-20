@@ -19,6 +19,23 @@ export async function findLevelProgressByEnrollment(
   return rows.map(mapRow);
 }
 
+// All of a student's level-progress rows (across enrolments), ordered by level. Owned here
+// (prerequisites), consumed by read models like Student 360 — which must not query this
+// module's tables directly.
+export async function findLevelProgressByStudent(
+  studentId: string,
+  organizationId: string,
+  client?: PrismaClientOrTx
+): Promise<StudentLevelProgress[]> {
+  const db = client ?? (await getDb());
+  const rows = await db.studentLevelProgress.findMany({
+    where: { studentId, organizationId },
+    include: { courseLevel: { select: { name: true, order: true } } },
+    orderBy: { courseLevel: { order: "asc" } },
+  });
+  return rows.map(mapRow);
+}
+
 export async function findLevelProgress(
   enrollmentId: string,
   courseLevelId: string,
