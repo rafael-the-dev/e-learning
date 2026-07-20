@@ -179,8 +179,10 @@ async function buildSelectedStudentData(
     : null;
 
   // ── Attendance ──────────────────────────────────────────────────────────────
+  // Headline attendance % from the canonical summary (H5) — identical to Student 360 and
+  // the Student portal; the per-status counts stay from the precise raw records.
   const attendanceKpis: StudentAttendanceKpis | null = permissions.canViewAttendance
-    ? buildStudentAttendanceKpis(attendanceStatsRaw)
+    ? { ...buildStudentAttendanceKpis(attendanceStatsRaw), attendancePercentage: core.attendanceSummary.attendancePercentage }
     : null;
   const attendanceTrend: StudentAttendanceMonthlyPoint[] = permissions.canViewAttendance
     ? buildStudentAttendanceTrend(attendanceStatsRaw)

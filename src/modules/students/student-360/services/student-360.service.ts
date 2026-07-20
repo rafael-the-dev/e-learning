@@ -4,7 +4,7 @@ import { getStudentFinancialStatement } from "@/modules/reports/finance/services
 import { findProgressByOrganization } from "@/modules/assessments/repositories/student-subject-progress.repository";
 import {
   getStudentSubjectAttendanceViews,
-  getStudentAttendanceCounts,
+  getStudentAttendanceSummary,
 } from "@/modules/attendance/services/attendance-read-model.service";
 import { findJustificationsByOrganization } from "@/modules/attendance/repositories/attendance-justification.repository";
 import { findStudentAssessmentResults } from "@/modules/grades/repositories/student-assessment-result.repository";
@@ -35,7 +35,7 @@ import type { StudentFinancialStatement } from "@/modules/reports/finance/types"
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
 import { SUBJECT_ELIGIBILITY_STATUS } from "@/modules/prerequisites/types";
 import type { StudentLevelProgress, StudentCourseProgress, SubjectEligibilityResult } from "@/modules/prerequisites/types";
-import type { SubjectAttendanceView, StudentAttendanceCounts } from "@/modules/attendance/types";
+import type { SubjectAttendanceView, StudentAttendanceSummary } from "@/modules/attendance/types";
 import type { StudentTimelineEvent } from "@/modules/student-timeline/types";
 import type { LevelSubject } from "@/modules/courses/types";
 import type { StudentWallet, WalletTransaction } from "@/modules/wallets/types";
@@ -85,7 +85,9 @@ export interface Student360Core {
   // of truth all surfaces consume (H2). Derived once here from the persisted rollups.
   academicSummary: StudentAcademicSummary;
   attendanceSubjects: SubjectAttendanceView[];
-  attendanceCounts: StudentAttendanceCounts;
+  // Canonical attendance read model (H5) — overall percentage + per-status counts,
+  // the single value/counts every surface displays. Never a mean of per-subject %.
+  attendanceSummary: StudentAttendanceSummary;
   lastActivityAt: Date | null;
   recentTimeline: StudentTimelineEvent[];
   documentCount: number;
@@ -181,14 +183,17 @@ export async function getStudent360Core(
   // Source of truth: persisted StudentSubjectAttendanceSummary (Phase 3), never
   // recomputed on-read. Missing summaries surface as NOT_STARTED / null. The
   // per-status counts come from the persisted period year-rollups (Phase 4).
-  const [attendanceSubjects, attendanceCounts] = await Promise.all([
+  const [attendanceSubjects, attendanceSummary] = await Promise.all([
     getStudentSubjectAttendanceViews(
       studentId,
       activeEnrollments.map((e) => ({ id: e.id, classGroupId: e.classGroupId ?? null })),
       organizationId
     ).catch(() => [] as SubjectAttendanceView[]),
-    getStudentAttendanceCounts(studentId, organizationId).catch(
-      () => ({ totalSessions: 0, presentCount: 0, absentCount: 0, lateCount: 0, excusedCount: 0, remoteCount: 0 })
+    getStudentAttendanceSummary(studentId, organizationId).catch(
+      (): StudentAttendanceSummary => ({
+        totalSessions: 0, presentCount: 0, absentCount: 0, lateCount: 0, excusedCount: 0, remoteCount: 0,
+        attendancePercentage: null, attendedSessions: 0,
+      })
     ),
   ]);
 
@@ -213,7 +218,7 @@ export async function getStudent360Core(
     courseProgress,
     academicSummary,
     attendanceSubjects,
-    attendanceCounts,
+    attendanceSummary,
     lastActivityAt,
     recentTimeline,
     documentCount,
@@ -233,9 +238,9 @@ export function buildHealthScoreInput(core: Student360Core): HealthScoreInput {
           hasOverdueInvoice: core.finance.billing.invoices.some((i) => i.status === "OVERDUE"),
         }
       : null,
-    attendancePercentages: core.attendanceSubjects
-      .map((s) => s.attendancePercentage)
-      .filter((p): p is number => p != null),
+    // Canonical attendance percentage (H5) — the same value shown everywhere; null when
+    // there are no scheduled sessions (the axis is then excluded, not treated as 0/100).
+    attendancePercentage: core.attendanceSummary.attendancePercentage,
     hasBelowRequiredAttendance: core.attendanceSubjects.some((s) => s.status === "BELOW_REQUIRED"),
     enrollmentStatuses: core.enrollments.map((e) => e.status),
     lastActivityAt: core.lastActivityAt,
@@ -267,20 +272,13 @@ export function buildAlertsInput(core: Student360Core): StudentAlertsInput {
 }
 
 export function buildSummaryCards(core: Student360Core, openAlertsCount: number): StudentSummaryCards {
-  const attendancePercentages = core.attendanceSubjects
-    .map((s) => s.attendancePercentage)
-    .filter((p): p is number => p != null);
-  const attendancePercentage =
-    attendancePercentages.length > 0
-      ? attendancePercentages.reduce((sum, p) => sum + p, 0) / attendancePercentages.length
-      : null;
-
   return {
     activeEnrollments: core.activeEnrollments.length,
     currentCourseName: core.currentEnrollment?.courseName ?? null,
     // Academic headline figures come from the canonical read model (H2), never recomputed here.
     academicStatusLabel: core.academicSummary.progressionStatus,
-    attendancePercentage,
+    // Canonical attendance percentage (H5) — single source, never a mean of subjects here.
+    attendancePercentage: core.attendanceSummary.attendancePercentage,
     subjectAverage: core.academicSummary.subjectAverage,
     // Each KPI only when its capability is authorized; otherwise the card is not produced.
     outstandingBalance: core.finance?.billing ? core.finance.billing.outstandingBalance : null,

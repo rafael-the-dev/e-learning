@@ -13,7 +13,7 @@ import {
 import { Activity, ChevronLeft, ChevronRight, ClipboardList } from "lucide-react";
 import type {
   SubjectAttendanceView,
-  StudentAttendanceCounts,
+  StudentAttendanceSummary,
   AttendanceJustification,
 } from "@/modules/attendance/types";
 import type { AttendanceRecordRow } from "@/modules/students/student-360/types";
@@ -30,8 +30,8 @@ interface StudentAttendanceTabProps {
   // Per-subject attendance read verbatim from the persisted summary read-model
   // (source of truth). Never recomputed from raw records.
   subjects: SubjectAttendanceView[];
-  // Per-status session counts from the persisted period year-rollups.
-  counts: StudentAttendanceCounts;
+  // Canonical attendance read model (H5) — overall percentage + per-status counts.
+  summary: StudentAttendanceSummary;
   records: PaginatedResult<AttendanceRecordRow>;
   justifications: PaginatedResult<AttendanceJustification>;
   pendingJustificationCount: number;
@@ -39,22 +39,17 @@ interface StudentAttendanceTabProps {
 
 export function StudentAttendanceTab({
   subjects,
-  counts,
+  summary,
   records,
   justifications,
   pendingJustificationCount,
 }: StudentAttendanceTabProps) {
-  const totalSessions = counts.totalSessions;
-  const present = counts.presentCount;
-  const absent = counts.absentCount;
-  const excused = counts.excusedCount;
-  // Average over subjects with a persisted percentage (NOT_STARTED subjects are
-  // null and excluded rather than counted as 0%).
-  const percentages = subjects
-    .map((s) => s.attendancePercentage)
-    .filter((p): p is number => p != null);
-  const avgAttendance =
-    percentages.length > 0 ? percentages.reduce((sum, p) => sum + p, 0) / percentages.length : null;
+  const totalSessions = summary.totalSessions;
+  const present = summary.presentCount;
+  const absent = summary.absentCount;
+  const excused = summary.excusedCount;
+  // Canonical overall attendance % (H5) — the same value shown across every surface.
+  const avgAttendance = summary.attendancePercentage;
 
   return (
     <div className="space-y-6">

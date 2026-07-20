@@ -69,6 +69,16 @@ function makeCore() {
       currentLevel: { id: "lvl1", name: "Nível 1" },
       progressionStatus: "Em Curso",
     },
+    attendanceSummary: {
+      totalSessions: 10,
+      presentCount: 9,
+      absentCount: 1,
+      lateCount: 0,
+      excusedCount: 0,
+      remoteCount: 0,
+      attendancePercentage: 90,
+      attendedSessions: 9,
+    },
     finance: {
       billing: {
         invoices: [

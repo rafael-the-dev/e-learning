@@ -28,10 +28,11 @@ export interface HealthScoreReason {
 
 export interface HealthScoreBreakdown {
   academic: number;
-  // null when the viewer lacks finance permission — the finance axis is excluded
-  // from the score and its weight redistributed across the remaining categories.
+  // null → axis excluded from the score and its weight redistributed:
+  //  - finance: viewer lacks finance permission
+  //  - attendance: the student has no scheduled sessions (no attendance data)
   finance: number | null;
-  attendance: number;
+  attendance: number | null;
   enrollment: number;
   activity: number;
 }
@@ -54,7 +55,8 @@ export interface HealthScoreInput {
   levelStatuses: string[];
   // null = finance not authorized → excluded from the score (weight redistributed).
   finance: HealthScoreFinanceInput | null;
-  attendancePercentages: number[];
+  // Canonical overall attendance % (H5); null when no scheduled sessions → axis excluded.
+  attendancePercentage: number | null;
   hasBelowRequiredAttendance: boolean;
   enrollmentStatuses: string[];
   lastActivityAt: Date | null;

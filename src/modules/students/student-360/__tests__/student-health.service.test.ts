@@ -7,7 +7,7 @@ function baseInput(overrides: Partial<HealthScoreInput> = {}): HealthScoreInput 
     subjectStatuses: [],
     levelStatuses: [],
     finance: { outstandingBalance: 0, hasOverdueInvoice: false },
-    attendancePercentages: [95, 98],
+    attendancePercentage: 96.5,
     hasBelowRequiredAttendance: false,
     enrollmentStatuses: ["ACTIVE"],
     lastActivityAt: new Date("2026-06-10"),
@@ -56,7 +56,7 @@ describe("calculateHealthScore", () => {
 
   it("excludes the finance axis entirely when finance is not authorized (finance: null)", () => {
     // Fully healthy in every AUTHORIZED category (attendance 100 too).
-    const result = calculateHealthScore(baseInput({ finance: null, attendancePercentages: [100] }));
+    const result = calculateHealthScore(baseInput({ finance: null, attendancePercentage: 100 }));
     // The finance breakdown is null (not 0) — nothing computed, nothing shown.
     expect(result.breakdown.finance).toBeNull();
     // Weight is redistributed, so a perfect authorized-subset still scores 100 (not 75).
@@ -84,14 +84,18 @@ describe("calculateHealthScore", () => {
 
   it("caps attendance score at 50 when any subject is below the minimum requirement", () => {
     const result = calculateHealthScore(
-      baseInput({ attendancePercentages: [95, 98], hasBelowRequiredAttendance: true })
+      baseInput({ attendancePercentage: 96.5, hasBelowRequiredAttendance: true })
     );
     expect(result.breakdown.attendance).toBe(50);
   });
 
-  it("does not penalize attendance when there is no attendance data at all", () => {
-    const result = calculateHealthScore(baseInput({ attendancePercentages: [] }));
-    expect(result.breakdown.attendance).toBe(100);
+  it("excludes the attendance axis (null, not 100) when there is no attendance data", () => {
+    const result = calculateHealthScore(baseInput({ attendancePercentage: null }));
+    // No sessions → axis excluded and its weight redistributed, never assumed perfect.
+    expect(result.breakdown.attendance).toBeNull();
+    // Healthy in every other authorized category → still 100 after renormalization.
+    expect(result.score).toBe(100);
+    expect(result.topReasons.some((r) => r.category === "attendance")).toBe(false);
   });
 
   it("scores enrollment status by tier: active > completed > suspended > none", () => {

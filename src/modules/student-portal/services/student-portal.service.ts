@@ -177,7 +177,14 @@ export async function getStudentPortalData(
     publishedAt: g.publishedAt,
   }));
 
-  const attendanceKpis = buildStudentAttendanceKpis(attendanceStatsRaw);
+  // Headline attendance % comes from the canonical summary (H5) so it matches Student 360
+  // and the Guardian portal exactly. The per-status count breakdown stays from the precise
+  // raw records (the year-rollup can't express a precise unjustified-absence count), and
+  // the monthly trend is per-month (a grain the year-rollups don't hold).
+  const attendanceKpis = {
+    ...buildStudentAttendanceKpis(attendanceStatsRaw),
+    attendancePercentage: core.attendanceSummary.attendancePercentage,
+  };
   const attendanceTrend = buildStudentAttendanceTrend(attendanceStatsRaw);
   const attendanceSessions = attendanceRecords.data.map((r) => ({
     id: r.id,

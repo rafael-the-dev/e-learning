@@ -12,7 +12,7 @@ const h = vi.hoisted(() => ({
   getStudentFinancialStatement: vi.fn(),
   findProgressByOrganization: vi.fn(),
   getStudentSubjectAttendanceViews: vi.fn(),
-  getStudentAttendanceCounts: vi.fn(),
+  getStudentAttendanceSummary: vi.fn(),
   findJustificationsByOrganization: vi.fn(),
   findStudentAssessmentResults: vi.fn(),
   getRecentTimelineEvents: vi.fn(),
@@ -41,7 +41,7 @@ vi.mock("@/modules/assessments/repositories/student-subject-progress.repository"
 }));
 vi.mock("@/modules/attendance/services/attendance-read-model.service", () => ({
   getStudentSubjectAttendanceViews: h.getStudentSubjectAttendanceViews,
-  getStudentAttendanceCounts: h.getStudentAttendanceCounts,
+  getStudentAttendanceSummary: h.getStudentAttendanceSummary,
 }));
 vi.mock("@/modules/attendance/repositories/attendance-justification.repository", () => ({
   findJustificationsByOrganization: h.findJustificationsByOrganization,
@@ -100,8 +100,9 @@ beforeEach(() => {
   h.getStudentDocumentCount.mockResolvedValue(0);
   h.findJustificationsByOrganization.mockResolvedValue({ total: 0, data: [] });
   h.getStudentSubjectAttendanceViews.mockResolvedValue([]);
-  h.getStudentAttendanceCounts.mockResolvedValue({
+  h.getStudentAttendanceSummary.mockResolvedValue({
     totalSessions: 0, presentCount: 0, absentCount: 0, lateCount: 0, excusedCount: 0, remoteCount: 0,
+    attendancePercentage: null, attendedSessions: 0,
   });
   // Finance mocks — should only ever be reached when authorized.
   h.getStudentFinancialStatement.mockResolvedValue(STATEMENT);

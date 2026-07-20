@@ -75,23 +75,24 @@ export function calculateHealthScore(input: HealthScoreInput): StudentHealthScor
     finance = clamp(financeScore);
   }
 
-  // Attendance — 20%
-  let attendance =
-    input.attendancePercentages.length > 0
-      ? input.attendancePercentages.reduce((sum, p) => sum + p, 0) / input.attendancePercentages.length
-      : 100;
-  if (input.hasBelowRequiredAttendance) {
-    const before = attendance;
-    attendance = Math.min(attendance, 50);
-    if (attendance < before) {
-      reasons.push({
-        category: "attendance",
-        message: "Assiduidade abaixo do mínimo exigido",
-        impact: (before - attendance) * WEIGHTS.attendance,
-      });
+  // Attendance — 20% (null when the student has no scheduled sessions: excluded from
+  // the score and its weight redistributed, rather than assumed a perfect 100).
+  let attendance: number | null = null;
+  if (input.attendancePercentage != null) {
+    let attendanceScore = input.attendancePercentage;
+    if (input.hasBelowRequiredAttendance) {
+      const before = attendanceScore;
+      attendanceScore = Math.min(attendanceScore, 50);
+      if (attendanceScore < before) {
+        reasons.push({
+          category: "attendance",
+          message: "Assiduidade abaixo do mínimo exigido",
+          impact: (before - attendanceScore) * WEIGHTS.attendance,
+        });
+      }
     }
+    attendance = clamp(attendanceScore);
   }
-  attendance = clamp(attendance);
 
   // Enrollment status — 15%
   let enrollment: number;
@@ -136,11 +137,11 @@ export function calculateHealthScore(input: HealthScoreInput): StudentHealthScor
   // a student healthy in all authorized categories still scores ~100.
   const activeCategories: Array<[number, number]> = [
     [academic, WEIGHTS.academic],
-    [attendance, WEIGHTS.attendance],
     [enrollment, WEIGHTS.enrollment],
     [activity, WEIGHTS.activity],
   ];
   if (finance != null) activeCategories.push([finance, WEIGHTS.finance]);
+  if (attendance != null) activeCategories.push([attendance, WEIGHTS.attendance]);
   const totalWeight = activeCategories.reduce((sum, [, weight]) => sum + weight, 0);
   const score = Math.round(
     activeCategories.reduce((sum, [value, weight]) => sum + value * weight, 0) / totalWeight

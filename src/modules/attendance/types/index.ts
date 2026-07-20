@@ -221,6 +221,19 @@ export interface StudentAttendanceCounts {
   remoteCount: number;
 }
 
+/** The single canonical student-level attendance read model (H5). Extends the
+ *  per-status counts with the OVERALL attendance percentage — the minute-weighted
+ *  pooled ratio (Σ totalPresentMinutes / Σ totalScheduledMinutes) from the persisted
+ *  year-rollups, i.e. the exact rule the calculation engine defines (COMPLETED-only
+ *  sessions, justified/excused neutral-and-monotonic, empty → null, never 0). Every
+ *  surface consumes THIS percentage so the same student always shows the same number. */
+export interface StudentAttendanceSummary extends StudentAttendanceCounts {
+  attendancePercentage: number | null;
+  /** Present-equivalent sessions (present + late + remote) — a count view, distinct
+   *  from the minute-weighted percentage. */
+  attendedSessions: number;
+}
+
 // ─── Summary engine types (Attendance Engine Phase 3) ─────────────────────────
 
 /** The interpretation knobs actually used by the calculation engine, after the

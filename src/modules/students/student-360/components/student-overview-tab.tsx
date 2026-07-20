@@ -39,7 +39,7 @@ export function StudentOverviewTab({
   guardianLinks?: StudentGuardianLinkDto[];
   canManageGuardians?: boolean;
 }) {
-  const { student, currentEnrollment, finance, academicSummary, levelProgress, attendanceSubjects, recentTimeline, documentCount } = core;
+  const { student, currentEnrollment, finance, academicSummary, attendanceSummary, levelProgress, attendanceSubjects, recentTimeline, documentCount } = core;
   const currentLevel = resolveCurrentEnrollmentLevel(currentEnrollment);
 
   // Academic tallies/averages come from the canonical read model (H2), not recomputed here.
@@ -47,15 +47,8 @@ export function StudentOverviewTab({
   const blocked = levelProgress.some((p) => p.status === "BLOCKED");
 
   const belowRequired = attendanceSubjects.filter((s) => s.status === "BELOW_REQUIRED");
-  // attendancePercentage is null for NOT_STARTED subjects (no persisted summary
-  // yet) — exclude those from the average rather than treating them as 0%.
-  const attendancePercentages = attendanceSubjects
-    .map((s) => s.attendancePercentage)
-    .filter((p): p is number => p != null);
-  const avgAttendance =
-    attendancePercentages.length > 0
-      ? attendancePercentages.reduce((sum, p) => sum + p, 0) / attendancePercentages.length
-      : null;
+  // Canonical overall attendance % (H5) — single source, not a mean of per-subject %.
+  const avgAttendance = attendanceSummary.attendancePercentage;
 
   const academicRisk = failed > 0 || blocked;
   // Debt risk is a BILLING signal — surfaced only when billing is authorized.

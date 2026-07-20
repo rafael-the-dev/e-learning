@@ -11,6 +11,7 @@ import type {
   SubjectAttendanceDisplayStatus,
   ClassGroupAttendanceReportEntry,
   StudentAttendanceCounts,
+  StudentAttendanceSummary,
 } from "@/modules/attendance/types";
 
 // =============================================================================
@@ -225,15 +226,24 @@ export async function getStudentSubjectAttendanceViews(
  * is the reporting source that persists per-status counts; the subject summary
  * does not. Returns zeros when no period rollups exist yet.
  */
-export async function getStudentAttendanceCounts(
+/**
+ * The single canonical student-level attendance summary (H5). Sums the persisted
+ * period year-rollups (`academicTermId = null`) — counts AND minutes — and derives
+ * the OVERALL attendance percentage as the pooled minute ratio
+ * `Σ totalPresentMinutes / Σ totalScheduledMinutes × 100` (the engine's rule), which
+ * is `null` (never 0) when no minutes are scheduled. This is the value every surface
+ * must display; it is NOT a mean of per-subject percentages and NOT a count-based
+ * ratio over raw records. Never recomputes attendance from raw records.
+ */
+export async function getStudentAttendanceSummary(
   studentId: string,
   organizationId: string,
   client?: PrismaClientOrTx
-): Promise<StudentAttendanceCounts> {
+): Promise<StudentAttendanceSummary> {
   const periods = await findPeriodAttendanceSummariesByStudent(studentId, organizationId, client);
   const yearRollups = periods.filter((p) => p.academicTermId === null);
 
-  return yearRollups.reduce<StudentAttendanceCounts>(
+  const agg = yearRollups.reduce(
     (acc, p) => ({
       totalSessions: acc.totalSessions + p.totalSessions,
       presentCount: acc.presentCount + p.presentCount,
@@ -241,7 +251,40 @@ export async function getStudentAttendanceCounts(
       lateCount: acc.lateCount + p.lateCount,
       excusedCount: acc.excusedCount + p.excusedCount,
       remoteCount: acc.remoteCount + p.remoteCount,
+      totalScheduledMinutes: acc.totalScheduledMinutes + p.totalScheduledMinutes,
+      totalPresentMinutes: acc.totalPresentMinutes + p.totalPresentMinutes,
     }),
-    { totalSessions: 0, presentCount: 0, absentCount: 0, lateCount: 0, excusedCount: 0, remoteCount: 0 }
+    {
+      totalSessions: 0, presentCount: 0, absentCount: 0, lateCount: 0, excusedCount: 0, remoteCount: 0,
+      totalScheduledMinutes: 0, totalPresentMinutes: 0,
+    }
   );
+
+  const attendancePercentage =
+    agg.totalScheduledMinutes > 0
+      ? Math.round((agg.totalPresentMinutes / agg.totalScheduledMinutes) * 1000) / 10
+      : null;
+
+  return {
+    totalSessions: agg.totalSessions,
+    presentCount: agg.presentCount,
+    absentCount: agg.absentCount,
+    lateCount: agg.lateCount,
+    excusedCount: agg.excusedCount,
+    remoteCount: agg.remoteCount,
+    attendancePercentage,
+    attendedSessions: agg.presentCount + agg.lateCount + agg.remoteCount,
+  };
+}
+
+/** Per-status session counts (subset of the canonical summary). Prefer
+ *  {@link getStudentAttendanceSummary} for surfaces that also show the percentage. */
+export async function getStudentAttendanceCounts(
+  studentId: string,
+  organizationId: string,
+  client?: PrismaClientOrTx
+): Promise<StudentAttendanceCounts> {
+  const { totalSessions, presentCount, absentCount, lateCount, excusedCount, remoteCount } =
+    await getStudentAttendanceSummary(studentId, organizationId, client);
+  return { totalSessions, presentCount, absentCount, lateCount, excusedCount, remoteCount };
 }

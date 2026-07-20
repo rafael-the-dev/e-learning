@@ -34,6 +34,12 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   Guardian Portal.
 - The displayed "Média das Disciplinas" is now derived from the canonical
   StudentSubjectProgress final grades rather than legacy assessment-result samples.
+- Standardized the displayed attendance percentage across Student 360, Student Portal
+  and Guardian Portal.
+- The displayed attendance percentage is now the canonical minute-weighted value from
+  the persisted attendance period rollups (COMPLETED sessions only, justified/excused
+  neutral), rather than a mean of per-subject percentages (Student 360) or a count-based
+  ratio over raw records (portals).
 - Introduced a single canonical read model (`student-academic-summary.service`) computed
   once per request and consumed by every surface; it exposes both `subjectAverage`
   ("Média das Disciplinas", simple mean) and `courseFinalGrade` (the weighted course
@@ -49,15 +55,30 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
 - The Student 360 "Média" KPI on the Notas tab was computed over only the current
   paginated slice of assessment results (10 rows), so the headline average changed as the
   user paged. It now shows the canonical `subjectAverage` over the student's whole record.
+- The attendance percentage diverged between surfaces for the same student (Student 360
+  averaged per-subject percentages; the Student and Guardian portals used a count-based
+  ratio over raw records in which justified absences diluted the denominator). All now
+  read one canonical value; the health score's attendance axis, previously assumed a
+  perfect 100 when a student had no attendance data, is now excluded (weight redistributed)
+  when there are no scheduled sessions.
 
 ### Notes
 - **Visible-number change (intentional):** because the Student Portal and Guardian Portal
   previously averaged the legacy `AssessmentResult` table (published-only, capped at 15
-  rows), their displayed average value will change to the canonical figure. No API,
+  rows) for grades and a count-based raw-record ratio for attendance, their displayed
+  average and attendance percentages will change to the canonical figures. No API,
   schema, or migration change. Secretary/Admin already hold both finance permissions →
   finance experience unchanged; Teacher holds neither → zero finance queries.
+- The canonical attendance percentage lives in the Attendance module
+  (`getStudentAttendanceSummary`), reading the persisted period year-rollups; the rule
+  itself is unchanged (it stays in the attendance calculation engine).
 
 ### Out of scope (flagged, not addressed here)
-- The **attendance** average is still recomputed in several places (review finding H5) —
-  the same single-source consolidation applied to grades has not yet been applied to
-  attendance.
+- The portals still read raw attendance records for two things the year-rollup cannot
+  express: the **monthly attendance trend** (per-month grain) and the precise
+  **unjustified-absence count** (the rollup's excused count overlaps absences/lateness).
+  The headline attendance **percentage** is canonical everywhere; a precise unjustified
+  count would need a dedicated persisted field.
+- The **Teacher portal** derives per-class-group attendance from a third field
+  (`StudentSubjectProgress.attendancePercentage`, populated only when attendance
+  enforcement is on) — not yet migrated to the canonical summary.
