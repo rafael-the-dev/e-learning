@@ -95,7 +95,8 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
 - The **SQL-aggregate dashboards/watchlists** (executive dashboard, secretary portal,
   teacher portal, finance debt) still classify at-risk students with their own SQL and
   flat thresholds (e.g. attendance 75/85 against the legacy field) rather than the
-  canonical per-student risk engine. They cannot call a per-student engine per row without
-  an N-query blowup; true convergence means sharing the threshold constants and aggregating
-  over the canonical persisted status column — a separate, performance-sensitive change.
-  The per-student surfaces (Student 360, alerts, health card) are fully consolidated.
+  canonical per-student risk engine. The per-student surfaces (Student 360, alerts, health
+  card) are fully consolidated; the dashboard convergence is tracked as a separate debt
+  item — **M11 — Dashboard Risk Aggregation Convergence** in
+  [the backlog](student-360-backlog.md) (preferred path: an event-updated persisted
+  `StudentRiskProjection`; do NOT call the per-student engine per row).
