@@ -62,18 +62,10 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function deriveAcademicStatusLabel(core: Student360Core): string {
-  if (core.levelProgress.some((p) => p.status === "BLOCKED")) return "Bloqueado";
-  if (core.levelProgress.some((p) => p.status === "RECOVERY_REQUIRED")) return "Em Recuperação";
-  if (core.subjectProgress.some((p) => p.status === "FAILED")) return "Risco Académico";
-  if (core.subjectProgress.some((p) => p.status === "IN_PROGRESS")) return "Em Curso";
-  return "Regular";
-}
-
 function buildAcademicOverview(core: Student360Core, studentName: string): StudentAcademicOverview {
   const level = resolveCurrentEnrollmentLevel(core.currentEnrollment);
   const totalSubjects = core.subjectProgress.length;
-  const passedSubjects = core.subjectProgress.filter((p) => p.status === "PASSED").length;
+  const passedSubjects = core.academicSummary.passedSubjects;
 
   return {
     studentName,
@@ -82,7 +74,8 @@ function buildAcademicOverview(core: Student360Core, studentName: string): Stude
     courseName: core.currentEnrollment?.courseName ?? null,
     currentLevelName: level.name,
     classGroupName: core.currentEnrollment?.classGroupName ?? null,
-    academicStatusLabel: deriveAcademicStatusLabel(core),
+    // Single canonical academic status label (H2) — same as Student 360 / Guardian.
+    academicStatusLabel: core.academicSummary.progressionStatus,
     courseProgressPercent: totalSubjects > 0 ? Math.round((passedSubjects / totalSubjects) * 100) : null,
     hasActiveEnrollment: core.activeEnrollments.length > 0,
     blockedLevelCount: core.levelProgress.filter((p) => p.status === "BLOCKED").length,
@@ -110,7 +103,12 @@ export async function getStudentPortalData(
 
   // Backbone: the same aggregator Student 360 uses — student, enrollments,
   // finance statement, wallet, subject/level/course progress, attendance.
-  const core = await getStudent360Core(studentId, organizationId);
+  // A student always sees their OWN finance — resolve the portal policy explicitly
+  // rather than a generic finance boolean (both billing and wallet are authorized).
+  const core = await getStudent360Core(studentId, organizationId, {
+    canViewInvoices: true,
+    canViewWallet: true,
+  });
 
   const activeClassGroupIds = unique(
     core.activeEnrollments
@@ -188,9 +186,10 @@ export async function getStudentPortalData(
     status: r.status,
   }));
 
-  // ── Finance (reused wholesale from the Student 360 financial statement) ──────
-  const statement = core.statement;
-  const invoices: StudentInvoiceRow[] = (statement?.invoices ?? [])
+  // ── Finance (reused from the Student 360 billing/wallet projections) ─────────
+  const billing = core.finance?.billing ?? null;
+  const wallet = core.finance?.wallet ?? null;
+  const invoices: StudentInvoiceRow[] = (billing?.invoices ?? [])
     .filter((inv) => UNPAID_INVOICE_STATUSES.includes(inv.status))
     .slice(0, INVOICE_ROWS_LIMIT)
     .map((inv) => ({
@@ -204,7 +203,7 @@ export async function getStudentPortalData(
       status: inv.status,
     }));
 
-  const payments: StudentPaymentRow[] = (statement?.payments ?? [])
+  const payments: StudentPaymentRow[] = (billing?.payments ?? [])
     .slice(0, PAYMENT_ROWS_LIMIT)
     .map((p) => ({
       paymentId: p.paymentId,
@@ -214,20 +213,20 @@ export async function getStudentPortalData(
       status: p.status,
     }));
 
-  const overdueAmount = (statement?.invoices ?? [])
+  const overdueAmount = (billing?.invoices ?? [])
     .filter((inv) => inv.status === "OVERDUE")
     .reduce((sum, inv) => sum + inv.balanceAmount, 0);
 
-  const nextDueDate = (statement?.invoices ?? [])
+  const nextDueDate = (billing?.invoices ?? [])
     .filter((inv) => UNPAID_INVOICE_STATUSES.includes(inv.status) && inv.dueDate != null)
     .map((inv) => inv.dueDate as Date)
     .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
 
   const paymentsSummary: StudentPaymentsSummary = {
-    totalDue: statement?.kpis.outstandingBalance ?? 0,
+    totalDue: billing?.outstandingBalance ?? 0,
     overdueAmount,
     nextDueDate,
-    walletBalance: statement?.kpis.walletBalance ?? 0,
+    walletBalance: wallet?.walletBalance ?? 0,
   };
 
   const documents: StudentDocumentRow[] = documentsRaw.slice(0, DOCUMENTS_LIMIT).map((d) => ({
@@ -240,7 +239,7 @@ export async function getStudentPortalData(
   }));
 
   const overview = buildAcademicOverview(core, studentName);
-  const kpis = buildKpis(core, attendanceKpis.attendancePercentage, grades, assessments, unreadNotificationCount);
+  const kpis = buildKpis(core, attendanceKpis.attendancePercentage, assessments, unreadNotificationCount);
 
   return {
     studentId,
@@ -265,20 +264,19 @@ export async function getStudentPortalData(
 function buildKpis(
   core: Student360Core,
   averageAttendance: number | null,
-  grades: StudentGradeRow[],
   assessments: StudentAssessmentRow[],
   unreadNotifications: number
 ): StudentPortalKpis {
-  const overallAverage =
-    grades.length > 0
-      ? Math.round((grades.reduce((sum, g) => sum + g.percentage, 0) / grades.length) * 10) / 10
-      : null;
+  // Canonical average — the same "Média das Disciplinas" Student 360 and the Guardian
+  // portal show (StudentSubjectProgress.finalGrade), NOT a mean of the legacy per-
+  // assessment percentages, and never a paginated slice (H2 single source of truth).
+  const overallAverage = core.academicSummary.subjectAverage;
 
-  const approvedSubjects = core.subjectProgress.filter((p) => p.status === "PASSED").length;
+  const approvedSubjects = core.academicSummary.passedSubjects;
   const pendingSubjects = core.subjectProgress.length - approvedSubjects;
   const today = startOfDay(new Date());
   const upcomingAssessments = assessments.filter((a) => a.assessmentDate >= today).length;
-  const pendingInvoices = (core.statement?.invoices ?? []).filter((inv) =>
+  const pendingInvoices = (core.finance?.billing?.invoices ?? []).filter((inv) =>
     UNPAID_INVOICE_STATUSES.includes(inv.status)
   ).length;
 
@@ -289,7 +287,7 @@ function buildKpis(
     pendingSubjects,
     upcomingAssessments,
     pendingInvoices,
-    outstandingBalance: core.statement?.kpis.outstandingBalance ?? 0,
+    outstandingBalance: core.finance?.billing?.outstandingBalance ?? 0,
     unreadNotifications,
   };
 }

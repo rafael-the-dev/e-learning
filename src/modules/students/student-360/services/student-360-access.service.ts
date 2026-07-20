@@ -15,7 +15,7 @@ export function getStudent360TabAccess(can: (permission: Permission) => boolean)
   return [
     { key: "overview", visible: true },
     { key: "enrollments", visible: can(PERMISSIONS.ENROLLMENTS_VIEW) },
-    { key: "finance", visible: can(PERMISSIONS.INVOICES_VIEW) },
+    { key: "finance", visible: can(PERMISSIONS.INVOICES_VIEW) || can(PERMISSIONS.WALLETS_VIEW) },
     { key: "attendance", visible: can(PERMISSIONS.ATTENDANCE_SESSIONS_VIEW) },
     { key: "grades", visible: can(PERMISSIONS.GRADES_VIEW) },
     {

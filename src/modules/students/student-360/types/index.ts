@@ -2,6 +2,20 @@
 // STUDENT 360 — TYPES
 // =============================================================================
 
+// Which source-module sections the viewer is authorized to see. When a capability
+// is false, the Student 360 aggregator MUST NOT query, compute, or return that
+// section — absence of the section represents absence of authorization, never a
+// masked/nulled value fetched anyway. Extend this as other sections are gated.
+//
+// Finance is split into two independent capabilities so the RBAC policy is explicit
+// rather than "whoever sees invoices also sees the wallet": billing (invoices /
+// payments / dívida) ← INVOICES_VIEW; wallet (saldo / movimentos / reembolsos) ←
+// WALLETS_VIEW. Each half is fetched/derived/returned only when its capability holds.
+export interface Student360Capabilities {
+  canViewInvoices: boolean;
+  canViewWallet: boolean;
+}
+
 export type HealthScoreLabel = "EXCELLENT" | "HEALTHY" | "NEEDS_ATTENTION" | "CRITICAL";
 
 export type HealthScoreCategory = "academic" | "finance" | "attendance" | "enrollment" | "activity";
@@ -14,7 +28,9 @@ export interface HealthScoreReason {
 
 export interface HealthScoreBreakdown {
   academic: number;
-  finance: number;
+  // null when the viewer lacks finance permission — the finance axis is excluded
+  // from the score and its weight redistributed across the remaining categories.
+  finance: number | null;
   attendance: number;
   enrollment: number;
   activity: number;
@@ -28,11 +44,16 @@ export interface StudentHealthScore {
   recommendedAction: string;
 }
 
+export interface HealthScoreFinanceInput {
+  outstandingBalance: number;
+  hasOverdueInvoice: boolean;
+}
+
 export interface HealthScoreInput {
   subjectStatuses: string[];
   levelStatuses: string[];
-  outstandingBalance: number;
-  hasOverdueInvoice: boolean;
+  // null = finance not authorized → excluded from the score (weight redistributed).
+  finance: HealthScoreFinanceInput | null;
   attendancePercentages: number[];
   hasBelowRequiredAttendance: boolean;
   enrollmentStatuses: string[];
@@ -67,10 +88,10 @@ export interface StudentAlertsInput {
   blockedLevelCount: number;
   recoveryRequiredCount: number;
   failedSubjectCount: number;
-  outstandingBalance: number;
-  overdueInvoiceCount: number;
+  // Each null = the corresponding capability is absent → that alert is never emitted.
+  overdueInvoiceCount: number | null; // billing (INVOICES_VIEW)
+  pendingRefundCount: number | null; // wallet (WALLETS_VIEW)
   belowRequiredAttendanceSubjects: { subjectName: string; attendancePercentage: number }[];
-  pendingRefundCount: number;
   pendingJustificationCount: number;
   documentCount: number;
   incompleteAssessmentCount: number;
@@ -83,9 +104,11 @@ export interface StudentSummaryCards {
   currentCourseName: string | null;
   academicStatusLabel: string;
   attendancePercentage: number | null;
-  finalAverage: number | null;
-  outstandingBalance: number;
-  walletBalance: number;
+  // Canonical "Média das Disciplinas" from the shared academic read model (H2).
+  subjectAverage: number | null;
+  // Each null = the corresponding capability is absent → that KPI card is not rendered.
+  outstandingBalance: number | null; // billing (INVOICES_VIEW)
+  walletBalance: number | null; // wallet (WALLETS_VIEW)
   openAlertsCount: number;
 }
 

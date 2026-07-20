@@ -13,7 +13,7 @@ export function computeStudentAlerts(input: StudentAlertsInput): StudentAlert[] 
       href: "?tab=progress",
     });
   }
-  if (input.overdueInvoiceCount > 0) {
+  if (input.overdueInvoiceCount != null && input.overdueInvoiceCount > 0) {
     alerts.push({
       id: "overdue-balance",
       severity: "CRITICAL",
@@ -51,7 +51,7 @@ export function computeStudentAlerts(input: StudentAlertsInput): StudentAlert[] 
       href: "?tab=progress",
     });
   }
-  if (input.pendingRefundCount > 0) {
+  if (input.pendingRefundCount != null && input.pendingRefundCount > 0) {
     alerts.push({
       id: "pending-refund",
       severity: "HIGH",

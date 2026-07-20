@@ -40,20 +40,24 @@ export function StudentSummaryCards({ summary }: { summary: StudentSummaryCardsD
         icon={<Activity className="size-4 text-cyan-500" />}
       />
       <StatCard
-        title="Média Final"
-        value={summary.finalAverage != null ? summary.finalAverage.toFixed(1) : "—"}
+        title="Média das Disciplinas"
+        value={summary.subjectAverage != null ? summary.subjectAverage.toFixed(1) : "—"}
         icon={<TrendingUp className="size-4 text-emerald-500" />}
       />
-      <StatCard
-        title="Saldo em Dívida"
-        value={formatCurrency(summary.outstandingBalance)}
-        icon={<CircleDollarSign className="size-4 text-red-500" />}
-      />
-      <StatCard
-        title="Saldo da Carteira"
-        value={formatCurrency(summary.walletBalance)}
-        icon={<Wallet className="size-4 text-amber-500" />}
-      />
+      {summary.outstandingBalance != null && (
+        <StatCard
+          title="Saldo em Dívida"
+          value={formatCurrency(summary.outstandingBalance)}
+          icon={<CircleDollarSign className="size-4 text-red-500" />}
+        />
+      )}
+      {summary.walletBalance != null && (
+        <StatCard
+          title="Saldo da Carteira"
+          value={formatCurrency(summary.walletBalance)}
+          icon={<Wallet className="size-4 text-amber-500" />}
+        />
+      )}
       <StatCard
         title="Alertas Abertos"
         value={summary.openAlertsCount}

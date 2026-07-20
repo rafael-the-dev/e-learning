@@ -10,6 +10,7 @@ import {
   GraduationCap,
   BookOpen,
   CircleDollarSign,
+  Wallet,
   Activity,
   ShieldAlert,
   History,
@@ -38,12 +39,11 @@ export function StudentOverviewTab({
   guardianLinks?: StudentGuardianLinkDto[];
   canManageGuardians?: boolean;
 }) {
-  const { student, currentEnrollment, statement, subjectProgress, levelProgress, attendanceSubjects, recentTimeline, documentCount } = core;
+  const { student, currentEnrollment, finance, academicSummary, levelProgress, attendanceSubjects, recentTimeline, documentCount } = core;
   const currentLevel = resolveCurrentEnrollmentLevel(currentEnrollment);
 
-  const passed = subjectProgress.filter((p) => p.status === "PASSED").length;
-  const failed = subjectProgress.filter((p) => p.status === "FAILED").length;
-  const inProgress = subjectProgress.filter((p) => p.status === "IN_PROGRESS").length;
+  // Academic tallies/averages come from the canonical read model (H2), not recomputed here.
+  const { passedSubjects: passed, failedSubjects: failed, inProgressSubjects: inProgress } = academicSummary;
   const blocked = levelProgress.some((p) => p.status === "BLOCKED");
 
   const belowRequired = attendanceSubjects.filter((s) => s.status === "BELOW_REQUIRED");
@@ -58,7 +58,8 @@ export function StudentOverviewTab({
       : null;
 
   const academicRisk = failed > 0 || blocked;
-  const financeRisk = (statement?.kpis.outstandingBalance ?? 0) > 0;
+  // Debt risk is a BILLING signal — surfaced only when billing is authorized.
+  const financeRisk = finance?.billing ? finance.billing.outstandingBalance > 0 : null;
   const attendanceRisk = belowRequired.length > 0;
   const documentRisk = documentCount === 0;
 
@@ -144,6 +145,14 @@ export function StudentOverviewTab({
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-2 gap-3 text-sm">
+            <Row
+              label="Média das Disciplinas"
+              value={academicSummary.subjectAverage != null ? academicSummary.subjectAverage.toFixed(1) : "—"}
+            />
+            <Row
+              label="Média Final do Curso"
+              value={academicSummary.courseFinalGrade != null ? academicSummary.courseFinalGrade.toFixed(1) : "—"}
+            />
             <Row label="Disciplinas Aprovadas" value={String(passed)} />
             <Row label="Disciplinas Reprovadas" value={String(failed)} />
             <Row label="Disciplinas em Curso" value={String(inProgress)} />
@@ -152,23 +161,41 @@ export function StudentOverviewTab({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <CircleDollarSign className="size-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-medium">Resumo Financeiro</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <Row label="Total Faturado" value={formatCurrency(statement?.kpis.totalInvoiced ?? 0)} />
-            <Row label="Total Pago" value={formatCurrency(statement?.kpis.totalPaid ?? 0)} />
-            <Row label="Saldo em Dívida" value={formatCurrency(statement?.kpis.outstandingBalance ?? 0)} />
-            <Row label="Saldo da Carteira" value={formatCurrency(statement?.kpis.walletBalance ?? 0)} />
-            <Row label="Reembolsos Pendentes" value={formatCurrency(statement?.kpis.totalRefunded ?? 0)} />
-          </dl>
-        </CardContent>
-      </Card>
+      {finance?.billing && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <CircleDollarSign className="size-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Faturação</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <Row label="Total Faturado" value={formatCurrency(finance.billing.totalInvoiced)} />
+              <Row label="Total Pago" value={formatCurrency(finance.billing.totalPaid)} />
+              <Row label="Saldo em Dívida" value={formatCurrency(finance.billing.outstandingBalance)} />
+            </dl>
+          </CardContent>
+        </Card>
+      )}
+
+      {finance?.wallet && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Wallet className="size-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Carteira</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <Row label="Saldo da Carteira" value={formatCurrency(finance.wallet.walletBalance)} />
+              <Row label="Crédito Aplicado" value={formatCurrency(finance.wallet.creditApplied)} />
+              <Row label="Total Reembolsado" value={formatCurrency(finance.wallet.totalRefunded)} />
+            </dl>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-3">
@@ -195,7 +222,7 @@ export function StudentOverviewTab({
         <CardContent>
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <RiskRow label="Risco Académico" risk={academicRisk} />
-            <RiskRow label="Risco Financeiro" risk={financeRisk} />
+            {financeRisk != null && <RiskRow label="Risco Financeiro" risk={financeRisk} />}
             <RiskRow label="Risco de Assiduidade" risk={attendanceRisk} />
             <RiskRow label="Risco Documental" risk={documentRisk} />
           </dl>

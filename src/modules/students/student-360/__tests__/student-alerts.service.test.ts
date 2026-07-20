@@ -7,10 +7,9 @@ function baseInput(overrides: Partial<StudentAlertsInput> = {}): StudentAlertsIn
     blockedLevelCount: 0,
     recoveryRequiredCount: 0,
     failedSubjectCount: 0,
-    outstandingBalance: 0,
-    overdueInvoiceCount: 0,
+    overdueInvoiceCount: 0, // billing authorized, none overdue
+    pendingRefundCount: 0, // wallet authorized, none pending
     belowRequiredAttendanceSubjects: [],
-    pendingRefundCount: 0,
     pendingJustificationCount: 0,
     documentCount: 1,
     incompleteAssessmentCount: 0,
@@ -58,6 +57,36 @@ describe("computeStudentAlerts", () => {
   it("raises a HIGH alert for pending refunds", () => {
     const alerts = computeStudentAlerts(baseInput({ pendingRefundCount: 1 }));
     expect(alerts[0]).toMatchObject({ id: "pending-refund", severity: "HIGH" });
+  });
+
+  it("does NOT emit finance alerts when neither finance capability is authorized (both null)", () => {
+    // Even if the underlying student would have overdue invoices and pending refunds,
+    // an unauthorized viewer never receives a finance-derived alert.
+    const alerts = computeStudentAlerts(baseInput({ overdueInvoiceCount: null, pendingRefundCount: null }));
+    expect(alerts.find((a) => a.id === "overdue-balance")).toBeUndefined();
+    expect(alerts.find((a) => a.id === "pending-refund")).toBeUndefined();
+    expect(alerts).toHaveLength(0);
+  });
+
+  it("emits overdue-balance (billing) but NOT pending-refund when only invoices are authorized", () => {
+    const alerts = computeStudentAlerts(baseInput({ overdueInvoiceCount: 1, pendingRefundCount: null }));
+    expect(alerts.find((a) => a.id === "overdue-balance")).toBeDefined();
+    expect(alerts.find((a) => a.id === "pending-refund")).toBeUndefined();
+  });
+
+  it("emits pending-refund (wallet) but NOT overdue-balance when only the wallet is authorized", () => {
+    const alerts = computeStudentAlerts(baseInput({ overdueInvoiceCount: null, pendingRefundCount: 1 }));
+    expect(alerts.find((a) => a.id === "pending-refund")).toBeDefined();
+    expect(alerts.find((a) => a.id === "overdue-balance")).toBeUndefined();
+  });
+
+  it("still emits non-finance alerts when finance is not authorized", () => {
+    const alerts = computeStudentAlerts(
+      baseInput({ overdueInvoiceCount: null, pendingRefundCount: null, blockedLevelCount: 1 })
+    );
+    expect(alerts).toEqual([
+      expect.objectContaining({ id: "blocked-progress", severity: "CRITICAL" }),
+    ]);
   });
 
   it("raises a HIGH alert for pending attendance justifications", () => {

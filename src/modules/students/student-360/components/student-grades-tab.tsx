@@ -13,6 +13,7 @@ import { STUDENT_SUBJECT_PROGRESS_STATUS_LABELS } from "@/modules/assessments/ty
 import { BookOpen, CheckCircle2, XCircle, AlertTriangle, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import type { StudentAssessmentResult } from "@/modules/grades/types";
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
+import type { StudentAcademicSummary } from "@/modules/students/services/student-academic-summary.service";
 import type { PaginatedResult } from "@/shared/types/common";
 
 const PROGRESS_VARIANT: Record<string, "secondary" | "outline" | "destructive"> = {
@@ -27,24 +28,25 @@ const PROGRESS_VARIANT: Record<string, "secondary" | "outline" | "destructive"> 
 interface StudentGradesTabProps {
   assessments: PaginatedResult<StudentAssessmentResult>;
   subjectProgress: StudentSubjectProgress[];
+  // Canonical academic figures — the headline KPIs come from here, NEVER recomputed
+  // over the paginated assessment slice (which previously made "Média" change per page).
+  academicSummary: StudentAcademicSummary;
 }
 
-export function StudentGradesTab({ assessments, subjectProgress }: StudentGradesTabProps) {
-  const graded = assessments.data.filter((a) => a.status === "GRADED");
-  const averageScore =
-    graded.length > 0 ? graded.reduce((sum, a) => sum + a.normalizedGrade, 0) / graded.length : null;
-  const passedSubjects = subjectProgress.filter((p) => p.status === "PASSED").length;
-  const failedSubjects = subjectProgress.filter((p) => p.status === "FAILED").length;
-  const incompleteSubjects = subjectProgress.filter((p) => p.status === "INCOMPLETE").length;
+export function StudentGradesTab({ assessments, subjectProgress, academicSummary }: StudentGradesTabProps) {
   const pendingAssessments = assessments.data.filter((a) => a.status === "SUBMITTED").length;
 
   return (
     <div className="space-y-6">
       <ExecutiveKpiGrid>
-        <StatCard title="Média" value={averageScore != null ? averageScore.toFixed(1) : "—"} icon={<BookOpen className="size-4 text-violet-500" />} />
-        <StatCard title="Aprovadas" value={passedSubjects} icon={<CheckCircle2 className="size-4 text-emerald-500" />} />
-        <StatCard title="Reprovadas" value={failedSubjects} icon={<XCircle className="size-4 text-red-500" />} />
-        <StatCard title="Incompletas" value={incompleteSubjects} icon={<AlertTriangle className="size-4 text-amber-500" />} />
+        <StatCard
+          title="Média das Disciplinas"
+          value={academicSummary.subjectAverage != null ? academicSummary.subjectAverage.toFixed(1) : "—"}
+          icon={<BookOpen className="size-4 text-violet-500" />}
+        />
+        <StatCard title="Aprovadas" value={academicSummary.passedSubjects} icon={<CheckCircle2 className="size-4 text-emerald-500" />} />
+        <StatCard title="Reprovadas" value={academicSummary.failedSubjects} icon={<XCircle className="size-4 text-red-500" />} />
+        <StatCard title="Incompletas" value={academicSummary.incompleteSubjects} icon={<AlertTriangle className="size-4 text-amber-500" />} />
         <StatCard title="Avaliações Pendentes" value={pendingAssessments} icon={<Clock className="size-4 text-blue-500" />} />
       </ExecutiveKpiGrid>
 

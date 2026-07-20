@@ -6,8 +6,7 @@ function baseInput(overrides: Partial<HealthScoreInput> = {}): HealthScoreInput 
   return {
     subjectStatuses: [],
     levelStatuses: [],
-    outstandingBalance: 0,
-    hasOverdueInvoice: false,
+    finance: { outstandingBalance: 0, hasOverdueInvoice: false },
     attendancePercentages: [95, 98],
     hasBelowRequiredAttendance: false,
     enrollmentStatuses: ["ACTIVE"],
@@ -41,12 +40,46 @@ describe("calculateHealthScore", () => {
   });
 
   it("penalizes finance score for outstanding balance and overdue invoices independently", () => {
-    const outstandingOnly = calculateHealthScore(baseInput({ outstandingBalance: 500 }));
-    const overdueOnly = calculateHealthScore(baseInput({ hasOverdueInvoice: true }));
-    const both = calculateHealthScore(baseInput({ outstandingBalance: 500, hasOverdueInvoice: true }));
+    const outstandingOnly = calculateHealthScore(
+      baseInput({ finance: { outstandingBalance: 500, hasOverdueInvoice: false } })
+    );
+    const overdueOnly = calculateHealthScore(
+      baseInput({ finance: { outstandingBalance: 0, hasOverdueInvoice: true } })
+    );
+    const both = calculateHealthScore(
+      baseInput({ finance: { outstandingBalance: 500, hasOverdueInvoice: true } })
+    );
     expect(outstandingOnly.breakdown.finance).toBe(75);
     expect(overdueOnly.breakdown.finance).toBe(65);
     expect(both.breakdown.finance).toBe(40);
+  });
+
+  it("excludes the finance axis entirely when finance is not authorized (finance: null)", () => {
+    // Fully healthy in every AUTHORIZED category (attendance 100 too).
+    const result = calculateHealthScore(baseInput({ finance: null, attendancePercentages: [100] }));
+    // The finance breakdown is null (not 0) — nothing computed, nothing shown.
+    expect(result.breakdown.finance).toBeNull();
+    // Weight is redistributed, so a perfect authorized-subset still scores 100 (not 75).
+    expect(result.score).toBe(100);
+    // No finance reason is ever produced.
+    expect(result.topReasons.some((r) => r.category === "finance")).toBe(false);
+  });
+
+  it("does not let an unauthorized viewer infer finance state via the score", () => {
+    // Same non-finance signals, but one student has overdue invoices. With finance
+    // excluded, both must yield the SAME score — the debt is not inferable.
+    const withFinanceHidden = calculateHealthScore(baseInput({ finance: null }));
+    const wouldHaveDebtButHidden = calculateHealthScore(baseInput({ finance: null }));
+    expect(withFinanceHidden.score).toBe(wouldHaveDebtButHidden.score);
+    expect(withFinanceHidden.breakdown.finance).toBeNull();
+  });
+
+  it("recommends a non-finance action as worst category when finance is excluded", () => {
+    const result = calculateHealthScore(
+      baseInput({ finance: null, levelStatuses: ["BLOCKED"] })
+    );
+    expect(result.recommendedAction).toMatch(/académico/i);
+    expect(result.recommendedAction).not.toMatch(/financeira/i);
   });
 
   it("caps attendance score at 50 when any subject is below the minimum requirement", () => {
@@ -89,14 +122,15 @@ describe("calculateHealthScore", () => {
   it("applies the correct label thresholds", () => {
     expect(calculateHealthScore(baseInput()).label).toBe("EXCELLENT");
     expect(
-      calculateHealthScore(baseInput({ outstandingBalance: 1, enrollmentStatuses: ["COMPLETED"] })).label
+      calculateHealthScore(
+        baseInput({ finance: { outstandingBalance: 1, hasOverdueInvoice: false }, enrollmentStatuses: ["COMPLETED"] })
+      ).label
     ).toBe("HEALTHY");
     expect(
       calculateHealthScore(
         baseInput({
           subjectStatuses: Array(5).fill("FAILED"),
-          hasOverdueInvoice: true,
-          outstandingBalance: 100,
+          finance: { outstandingBalance: 100, hasOverdueInvoice: true },
           hasBelowRequiredAttendance: true,
         })
       ).label
@@ -105,8 +139,7 @@ describe("calculateHealthScore", () => {
       calculateHealthScore(
         baseInput({
           levelStatuses: ["BLOCKED"],
-          hasOverdueInvoice: true,
-          outstandingBalance: 100,
+          finance: { outstandingBalance: 100, hasOverdueInvoice: true },
           enrollmentStatuses: [],
           lastActivityAt: null,
         })
@@ -119,8 +152,7 @@ describe("calculateHealthScore", () => {
       baseInput({
         subjectStatuses: ["FAILED", "FAILED", "FAILED", "FAILED"],
         levelStatuses: ["BLOCKED", "RECOVERY_REQUIRED"],
-        outstandingBalance: 100,
-        hasOverdueInvoice: true,
+        finance: { outstandingBalance: 100, hasOverdueInvoice: true },
         enrollmentStatuses: [],
       })
     );
@@ -131,7 +163,9 @@ describe("calculateHealthScore", () => {
   });
 
   it("recommends an action tied to the worst-scoring category", () => {
-    const financeWorst = calculateHealthScore(baseInput({ outstandingBalance: 100, hasOverdueInvoice: true }));
+    const financeWorst = calculateHealthScore(
+      baseInput({ finance: { outstandingBalance: 100, hasOverdueInvoice: true } })
+    );
     expect(financeWorst.recommendedAction).toMatch(/financeira/i);
 
     const academicWorst = calculateHealthScore(baseInput({ levelStatuses: ["BLOCKED"] }));

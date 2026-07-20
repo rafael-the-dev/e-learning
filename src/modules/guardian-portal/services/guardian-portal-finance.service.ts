@@ -1,4 +1,7 @@
-import type { StudentFinancialStatement } from "@/modules/reports/finance/types";
+import type {
+  Student360BillingSummary,
+  Student360WalletSummary,
+} from "@/modules/students/student-360/services/student-360.service";
 import type {
   StudentInvoiceRow,
   StudentPaymentRow,
@@ -23,12 +26,13 @@ export interface GuardianFinanceSection {
 }
 
 export function buildGuardianFinanceSection(
-  statement: StudentFinancialStatement | null,
+  billing: Student360BillingSummary | null,
+  wallet: Student360WalletSummary | null,
   invoiceLimit: number,
   paymentLimit: number
 ): GuardianFinanceSection {
-  const allInvoices = statement?.invoices ?? [];
-  const allPayments = statement?.payments ?? [];
+  const allInvoices = billing?.invoices ?? [];
+  const allPayments = billing?.payments ?? [];
 
   const invoices: StudentInvoiceRow[] = allInvoices
     .filter((inv) => UNPAID_INVOICE_STATUSES.includes(inv.status))
@@ -68,10 +72,10 @@ export function buildGuardianFinanceSection(
 
   return {
     summary: {
-      totalDue: statement?.kpis.outstandingBalance ?? 0,
+      totalDue: billing?.outstandingBalance ?? 0,
       overdueAmount,
       nextDueDate,
-      walletBalance: statement?.kpis.walletBalance ?? 0,
+      walletBalance: wallet?.walletBalance ?? 0,
     },
     invoices,
     payments,

@@ -57,12 +57,37 @@ function makeCore() {
     activeEnrollments: [{ classGroupId: "cg1" }],
     subjectProgress: [{ status: "PASSED" }, { status: "IN_PROGRESS" }],
     levelProgress: [],
-    statement: {
-      invoices: [
-        { invoiceId: "i1", invoiceNumber: "F1", issueDate: new Date(), dueDate: new Date("2026-12-01"), totalAmount: 100, paidAmount: 0, balanceAmount: 100, status: "PENDING" },
-      ],
-      payments: [],
-      kpis: { outstandingBalance: 100, walletBalance: 0 },
+    academicSummary: {
+      subjectAverage: 85.4,
+      courseFinalGrade: 84,
+      scale: 100,
+      gradedSubjects: 1,
+      passedSubjects: 1,
+      failedSubjects: 0,
+      inProgressSubjects: 1,
+      incompleteSubjects: 0,
+      currentLevel: { id: "lvl1", name: "Nível 1" },
+      progressionStatus: "Em Curso",
+    },
+    finance: {
+      billing: {
+        invoices: [
+          { invoiceId: "i1", invoiceNumber: "F1", issueDate: new Date(), dueDate: new Date("2026-12-01"), totalAmount: 100, paidAmount: 0, balanceAmount: 100, status: "PENDING" },
+        ],
+        payments: [],
+        receipts: [],
+        totalInvoiced: 100,
+        totalPaid: 0,
+        outstandingBalance: 100,
+      },
+      wallet: {
+        wallet: null,
+        recentTransactions: [],
+        walletBalance: 0,
+        creditApplied: 0,
+        totalRefunded: 0,
+        refunds: [],
+      },
     },
   };
 }
@@ -148,7 +173,7 @@ describe("getGuardianPortalData — blocked state", () => {
 describe("getGuardianPortalData — all visibility granted", () => {
   it("fetches the selected student's data scoped to that studentId", async () => {
     const data = await getGuardianPortalData(ctx);
-    expect(h.getStudent360Core).toHaveBeenCalledWith("s1", "org-1");
+    expect(h.getStudent360Core).toHaveBeenCalledWith("s1", "org-1", { canViewInvoices: true, canViewWallet: true });
     expect(data.selectedStudentId).toBe("s1");
     expect(data.selected?.grades).not.toBeNull();
     expect(data.selected?.attendanceKpis).not.toBeNull();
@@ -272,8 +297,8 @@ describe("getGuardianPortalData — selected student validation", () => {
     h.findGuardianLink.mockResolvedValue(null); // forged id is not a real link
     const data = await getGuardianPortalData(ctx, "forged-student-x");
     expect(data.selectedStudentId).toBe("s1");
-    expect(h.getStudent360Core).toHaveBeenCalledWith("s1", "org-1");
-    expect(h.getStudent360Core).not.toHaveBeenCalledWith("forged-student-x", "org-1");
+    expect(h.getStudent360Core).toHaveBeenCalledWith("s1", "org-1", { canViewInvoices: true, canViewWallet: true });
+    expect(h.getStudent360Core).not.toHaveBeenCalledWith("forged-student-x", "org-1", { canViewInvoices: true, canViewWallet: true });
   });
 
   it("selects a validly-requested linked student among several", async () => {
@@ -281,6 +306,6 @@ describe("getGuardianPortalData — selected student validation", () => {
     h.findGuardianStudentEnrollmentSummaries.mockResolvedValue(new Map());
     const data = await getGuardianPortalData(ctx, "s2");
     expect(data.selectedStudentId).toBe("s2");
-    expect(h.getStudent360Core).toHaveBeenCalledWith("s2", "org-1");
+    expect(h.getStudent360Core).toHaveBeenCalledWith("s2", "org-1", { canViewInvoices: true, canViewWallet: true });
   });
 });

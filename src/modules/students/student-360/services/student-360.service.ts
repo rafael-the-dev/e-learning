@@ -19,8 +19,13 @@ import {
   findCourseProgressByStudent,
   findLastActivityAt,
 } from "@/modules/students/student-360/repositories/student-360.repository";
+import {
+  buildStudentAcademicSummary,
+  type StudentAcademicSummary,
+} from "@/modules/students/services/student-academic-summary.service";
 import type {
   HealthScoreInput,
+  Student360Capabilities,
   StudentAlertsInput,
   StudentSummaryCards,
 } from "@/modules/students/student-360/types";
@@ -35,17 +40,50 @@ import type { StudentTimelineEvent } from "@/modules/student-timeline/types";
 import type { LevelSubject } from "@/modules/courses/types";
 import type { StudentWallet, WalletTransaction } from "@/modules/wallets/types";
 
+// Finance is split into two independently-authorized halves. Each is a PROJECTION of
+// the source data carrying only its own fields — a billing-only viewer never receives
+// wallet figures in the payload, and vice-versa (no masking, no over-serialization).
+
+// Billing (INVOICES_VIEW): invoices / payments / receipts + billing KPIs.
+export interface Student360BillingSummary {
+  invoices: StudentFinancialStatement["invoices"];
+  payments: StudentFinancialStatement["payments"];
+  receipts: StudentFinancialStatement["receipts"];
+  totalInvoiced: number;
+  totalPaid: number;
+  outstandingBalance: number;
+}
+
+// Wallet (WALLETS_VIEW): saldo / crédito / movimentos / reembolsos.
+export interface Student360WalletSummary {
+  wallet: StudentWallet | null;
+  recentTransactions: WalletTransaction[];
+  walletBalance: number;
+  creditApplied: number;
+  totalRefunded: number;
+  refunds: StudentFinancialStatement["refunds"];
+}
+
+// Finance section — `billing`/`wallet` are each null unless their capability holds; the
+// whole section is null only when NEITHER is authorized (then no finance query ran).
+export interface Student360FinanceSection {
+  billing: Student360BillingSummary | null;
+  wallet: Student360WalletSummary | null;
+}
+
 export interface Student360Core {
   student: Student;
   enrollments: Enrollment[];
   activeEnrollments: Enrollment[];
   currentEnrollment: Enrollment | null;
-  statement: StudentFinancialStatement | null;
-  wallet: StudentWallet | null;
-  recentWalletTransactions: WalletTransaction[];
+  // null = finance not authorized (never fetched). See Student360FinanceSection.
+  finance: Student360FinanceSection | null;
   subjectProgress: StudentSubjectProgress[];
   levelProgress: StudentLevelProgress[];
   courseProgress: StudentCourseProgress[];
+  // Canonical academic headline figures (average/tallies/status) — the single source
+  // of truth all surfaces consume (H2). Derived once here from the persisted rollups.
+  academicSummary: StudentAcademicSummary;
   attendanceSubjects: SubjectAttendanceView[];
   attendanceCounts: StudentAttendanceCounts;
   lastActivityAt: Date | null;
@@ -54,15 +92,69 @@ export interface Student360Core {
   pendingJustificationCount: number;
 }
 
+// Fetch the finance section, honouring the two independent capabilities:
+//  - the statement is read only if AT LEAST ONE half is authorized (it is the shared
+//    source of both billing and wallet KPIs);
+//  - the wallet entity + movements are read only if the wallet half is authorized.
+// Each returned half is a projection carrying only its own fields; an unauthorized half
+// is null (never fetched/serialized). Returns null only when NEITHER half is authorized.
+async function loadFinanceSection(
+  studentId: string,
+  organizationId: string,
+  capabilities: Student360Capabilities
+): Promise<Student360FinanceSection | null> {
+  const { canViewInvoices, canViewWallet } = capabilities;
+  if (!canViewInvoices && !canViewWallet) return null;
+
+  const [statement, walletData] = await Promise.all([
+    getStudentFinancialStatement({ organizationId, studentId }),
+    canViewWallet
+      ? getWalletByStudentId(studentId, organizationId).then(async (wallet) => ({
+          wallet,
+          recentTransactions: wallet ? await getRecentTransactions(wallet.id, organizationId, 3) : [],
+        }))
+      : Promise.resolve(null),
+  ]);
+
+  const billing: Student360BillingSummary | null = canViewInvoices
+    ? {
+        invoices: statement?.invoices ?? [],
+        payments: statement?.payments ?? [],
+        receipts: statement?.receipts ?? [],
+        totalInvoiced: statement?.kpis.totalInvoiced ?? 0,
+        totalPaid: statement?.kpis.totalPaid ?? 0,
+        outstandingBalance: statement?.kpis.outstandingBalance ?? 0,
+      }
+    : null;
+
+  const wallet: Student360WalletSummary | null =
+    canViewWallet && walletData
+      ? {
+          wallet: walletData.wallet,
+          recentTransactions: walletData.recentTransactions,
+          walletBalance: statement?.kpis.walletBalance ?? 0,
+          creditApplied: statement?.kpis.creditApplied ?? 0,
+          totalRefunded: statement?.kpis.totalRefunded ?? 0,
+          refunds: statement?.refunds ?? [],
+        }
+      : null;
+
+  return { billing, wallet };
+}
+
 export async function getStudent360Core(
   studentId: string,
-  organizationId: string
+  organizationId: string,
+  capabilities: Student360Capabilities
 ): Promise<Student360Core> {
   const student = await getStudentById(studentId, organizationId);
 
+  // Finance is fetched in parallel with the rest, honouring the two capabilities.
+  // With neither authorized, no finance query is issued (security + performance).
+  const financePromise = loadFinanceSection(studentId, organizationId, capabilities);
+
   const [
     enrollmentsResult,
-    statement,
     subjectProgressResult,
     levelProgress,
     courseProgress,
@@ -70,10 +162,9 @@ export async function getStudent360Core(
     recentTimeline,
     documentCount,
     justificationsResult,
-    wallet,
+    finance,
   ] = await Promise.all([
     getEnrollmentsByOrganization(organizationId, { studentId, page: 1, pageSize: 50 }),
-    getStudentFinancialStatement({ organizationId, studentId }),
     findProgressByOrganization(organizationId, { studentId, page: 1, pageSize: 200 }),
     findLevelProgressByStudent(studentId, organizationId),
     findCourseProgressByStudent(studentId, organizationId),
@@ -81,12 +172,8 @@ export async function getStudent360Core(
     getRecentTimelineEvents(studentId, organizationId, 5),
     getStudentDocumentCount(studentId, organizationId),
     findJustificationsByOrganization(organizationId, { studentId, status: "PENDING", page: 1, pageSize: 1 }),
-    getWalletByStudentId(studentId, organizationId),
+    financePromise,
   ]);
-
-  const recentWalletTransactions = wallet
-    ? await getRecentTransactions(wallet.id, organizationId, 3)
-    : [];
 
   const enrollments = enrollmentsResult.data;
   const activeEnrollments = enrollments.filter((e) => e.status === "ACTIVE");
@@ -107,17 +194,24 @@ export async function getStudent360Core(
 
   const currentEnrollment = activeEnrollments[0] ?? enrollments[0] ?? null;
 
+  // Single canonical academic read model — every surface reads these figures (H2).
+  const academicSummary = buildStudentAcademicSummary({
+    subjectProgress: subjectProgressResult.data,
+    levelProgress,
+    courseProgress,
+    currentEnrollment,
+  });
+
   return {
     student,
     enrollments,
     activeEnrollments,
     currentEnrollment,
-    statement,
-    wallet,
-    recentWalletTransactions,
+    finance,
     subjectProgress: subjectProgressResult.data,
     levelProgress,
     courseProgress,
+    academicSummary,
     attendanceSubjects,
     attendanceCounts,
     lastActivityAt,
@@ -131,8 +225,14 @@ export function buildHealthScoreInput(core: Student360Core): HealthScoreInput {
   return {
     subjectStatuses: core.subjectProgress.map((p) => p.status),
     levelStatuses: core.levelProgress.map((p) => p.status),
-    outstandingBalance: core.statement?.kpis.outstandingBalance ?? 0,
-    hasOverdueInvoice: core.statement?.invoices.some((i) => i.status === "OVERDUE") ?? false,
+    // The health finance axis is composed of BILLING signals; it is included only when
+    // billing is authorized (wallet carries no health signal in v1), otherwise excluded.
+    finance: core.finance?.billing
+      ? {
+          outstandingBalance: core.finance.billing.outstandingBalance,
+          hasOverdueInvoice: core.finance.billing.invoices.some((i) => i.status === "OVERDUE"),
+        }
+      : null,
     attendancePercentages: core.attendanceSubjects
       .map((s) => s.attendancePercentage)
       .filter((p): p is number => p != null),
@@ -143,19 +243,21 @@ export function buildHealthScoreInput(core: Student360Core): HealthScoreInput {
 }
 
 export function buildAlertsInput(core: Student360Core): StudentAlertsInput {
-  const pendingRefundCount =
-    core.statement?.refunds.filter((r) => r.status === "REQUESTED" || r.status === "APPROVED").length ?? 0;
-
   return {
     blockedLevelCount: core.levelProgress.filter((p) => p.status === "BLOCKED").length,
     recoveryRequiredCount: core.levelProgress.filter((p) => p.status === "RECOVERY_REQUIRED").length,
     failedSubjectCount: core.subjectProgress.filter((p) => p.status === "FAILED").length,
-    outstandingBalance: core.statement?.kpis.outstandingBalance ?? 0,
-    overdueInvoiceCount: core.statement?.invoices.filter((i) => i.status === "OVERDUE").length ?? 0,
+    // overdue-balance ← billing (INVOICES_VIEW); pending-refund ← wallet (WALLETS_VIEW).
+    // Each is null (→ no alert) when its capability is absent.
+    overdueInvoiceCount: core.finance?.billing
+      ? core.finance.billing.invoices.filter((i) => i.status === "OVERDUE").length
+      : null,
+    pendingRefundCount: core.finance?.wallet
+      ? core.finance.wallet.refunds.filter((r) => r.status === "REQUESTED" || r.status === "APPROVED").length
+      : null,
     belowRequiredAttendanceSubjects: core.attendanceSubjects
       .filter((s) => s.status === "BELOW_REQUIRED")
       .map((s) => ({ subjectName: s.subjectName, attendancePercentage: s.attendancePercentage ?? 0 })),
-    pendingRefundCount,
     pendingJustificationCount: core.pendingJustificationCount,
     documentCount: core.documentCount,
     incompleteAssessmentCount: core.subjectProgress.filter((p) => p.status === "INCOMPLETE").length,
@@ -164,20 +266,7 @@ export function buildAlertsInput(core: Student360Core): StudentAlertsInput {
   };
 }
 
-function deriveAcademicStatusLabel(core: Student360Core): string {
-  if (core.levelProgress.some((p) => p.status === "BLOCKED")) return "Bloqueado";
-  if (core.levelProgress.some((p) => p.status === "RECOVERY_REQUIRED")) return "Em Recuperação";
-  if (core.subjectProgress.some((p) => p.status === "FAILED")) return "Risco Académico";
-  if (core.subjectProgress.some((p) => p.status === "IN_PROGRESS")) return "Em Curso";
-  return "Regular";
-}
-
 export function buildSummaryCards(core: Student360Core, openAlertsCount: number): StudentSummaryCards {
-  const gradedSubjects = core.subjectProgress.filter((p) => p.finalGrade != null);
-  const finalAverage =
-    gradedSubjects.length > 0
-      ? gradedSubjects.reduce((sum, p) => sum + (p.finalGrade ?? 0), 0) / gradedSubjects.length
-      : null;
   const attendancePercentages = core.attendanceSubjects
     .map((s) => s.attendancePercentage)
     .filter((p): p is number => p != null);
@@ -189,11 +278,13 @@ export function buildSummaryCards(core: Student360Core, openAlertsCount: number)
   return {
     activeEnrollments: core.activeEnrollments.length,
     currentCourseName: core.currentEnrollment?.courseName ?? null,
-    academicStatusLabel: deriveAcademicStatusLabel(core),
+    // Academic headline figures come from the canonical read model (H2), never recomputed here.
+    academicStatusLabel: core.academicSummary.progressionStatus,
     attendancePercentage,
-    finalAverage,
-    outstandingBalance: core.statement?.kpis.outstandingBalance ?? 0,
-    walletBalance: core.statement?.kpis.walletBalance ?? 0,
+    subjectAverage: core.academicSummary.subjectAverage,
+    // Each KPI only when its capability is authorized; otherwise the card is not produced.
+    outstandingBalance: core.finance?.billing ? core.finance.billing.outstandingBalance : null,
+    walletBalance: core.finance?.wallet ? core.finance.wallet.walletBalance : null,
     openAlertsCount,
   };
 }

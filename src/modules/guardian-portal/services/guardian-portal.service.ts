@@ -29,13 +29,7 @@ import {
   findGuardianStudentEnrollmentSummaries,
 } from "@/modules/guardian-portal/repositories/guardian-portal.repository";
 import type { GuardianLinkRow } from "@/modules/guardian-portal/repositories/guardian-portal.repository";
-import {
-  deriveGuardianAcademicStatusLabel,
-  computeGuardianOverallAverage,
-  countApprovedSubjects,
-  countPendingSubjects,
-  countUpcomingAssessments,
-} from "@/modules/guardian-portal/services/guardian-portal-academic.service";
+import { countUpcomingAssessments } from "@/modules/guardian-portal/services/guardian-portal-academic.service";
 import { buildGuardianFinanceSection } from "@/modules/guardian-portal/services/guardian-portal-finance.service";
 import { getGuardianNotifications } from "@/modules/guardian-portal/services/guardian-portal-notifications.service";
 import type {
@@ -114,7 +108,12 @@ async function buildSelectedStudentData(
 
   // Backbone aggregator — student, enrollments, finance statement, wallet,
   // subject/level/course progress. Shared with Student 360 / Student Portal.
-  const core = await getStudent360Core(studentId, organizationId);
+  // The guardian's single per-link canViewFinance flag authorizes both finance halves
+  // (billing + wallet) together; an unauthorized guardian triggers no finance query.
+  const core = await getStudent360Core(studentId, organizationId, {
+    canViewInvoices: permissions.canViewFinance,
+    canViewWallet: permissions.canViewFinance,
+  });
   const level = resolveCurrentEnrollmentLevel(core.currentEnrollment);
 
   const activeClassGroupIds = unique(
@@ -211,7 +210,12 @@ async function buildSelectedStudentData(
 
   // ── Finance ─────────────────────────────────────────────────────────────────
   const finance = permissions.canViewFinance
-    ? buildGuardianFinanceSection(core.statement, INVOICE_ROWS_LIMIT, PAYMENT_ROWS_LIMIT)
+    ? buildGuardianFinanceSection(
+        core.finance?.billing ?? null,
+        core.finance?.wallet ?? null,
+        INVOICE_ROWS_LIMIT,
+        PAYMENT_ROWS_LIMIT
+      )
     : null;
 
   // ── Documents ───────────────────────────────────────────────────────────────
@@ -226,7 +230,9 @@ async function buildSelectedStudentData(
       }))
     : null;
 
-  const overallAverage = grades ? computeGuardianOverallAverage(grades) : null;
+  // Canonical average — the same "Média das Disciplinas" the student and Student 360 see
+  // (StudentSubjectProgress.finalGrade), gated by academic visibility (H2 single source).
+  const overallAverage = permissions.canViewAcademic ? core.academicSummary.subjectAverage : null;
 
   return {
     studentId,
@@ -246,14 +252,16 @@ async function buildSelectedStudentData(
       courseName: permissions.canViewAcademic ? core.currentEnrollment?.courseName ?? null : null,
       currentLevelName: permissions.canViewAcademic ? level.name : null,
       classGroupName: permissions.canViewAcademic ? core.currentEnrollment?.classGroupName ?? null : null,
-      academicStatusLabel: permissions.canViewAcademic ? deriveGuardianAcademicStatusLabel(core) : null,
+      academicStatusLabel: permissions.canViewAcademic ? core.academicSummary.progressionStatus : null,
       overallAverage,
       attendancePercentage: attendanceKpis?.attendancePercentage ?? null,
     },
     kpis: {
-      overallAverage: permissions.canViewAcademic ? overallAverage : null,
-      approvedSubjects: permissions.canViewAcademic ? countApprovedSubjects(core) : null,
-      pendingSubjects: permissions.canViewAcademic ? countPendingSubjects(core) : null,
+      overallAverage,
+      approvedSubjects: permissions.canViewAcademic ? core.academicSummary.passedSubjects : null,
+      pendingSubjects: permissions.canViewAcademic
+        ? core.subjectProgress.length - core.academicSummary.passedSubjects
+        : null,
       upcomingAssessments:
         permissions.canViewAcademic && assessments ? countUpcomingAssessments(assessments, windowStart) : null,
       averageAttendance: attendanceKpis?.attendancePercentage ?? null,

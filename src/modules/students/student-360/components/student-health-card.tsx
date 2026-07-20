@@ -50,22 +50,29 @@ export function StudentHealthCard({ health }: { health: StudentHealthScore }) {
               ["enrollment", "Matrícula", 15],
               ["activity", "Atividade", 10],
             ] as const
-          ).map(([key, label, weight]) => (
-            <div key={key} className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">
-                  {label} <span className="text-muted-foreground/70">({weight}%)</span>
-                </span>
-                <span className="font-medium tabular-nums">{Math.round(health.breakdown[key])}</span>
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div
-                  className={cn("h-full rounded-full", styles.bar)}
-                  style={{ width: `${Math.round(health.breakdown[key])}%` }}
-                />
-              </div>
-            </div>
-          ))}
+          )
+            // A null breakdown value = category excluded (e.g. finance not authorized):
+            // omit the bar entirely rather than rendering a misleading 0%.
+            .filter(([key]) => health.breakdown[key] != null)
+            .map(([key, label, weight]) => {
+              const value = Math.round(health.breakdown[key] as number);
+              return (
+                <div key={key} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      {label} <span className="text-muted-foreground/70">({weight}%)</span>
+                    </span>
+                    <span className="font-medium tabular-nums">{value}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={cn("h-full rounded-full", styles.bar)}
+                      style={{ width: `${value}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
 
           {health.topReasons.length > 0 && (
             <ul className="pt-2 space-y-1">

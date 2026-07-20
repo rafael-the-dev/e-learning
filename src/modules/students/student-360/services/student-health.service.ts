@@ -51,25 +51,29 @@ export function calculateHealthScore(input: HealthScoreInput): StudentHealthScor
   }
   academic = clamp(academic);
 
-  // Finance — 25%
-  let finance = 100;
-  if (input.outstandingBalance > 0) {
-    finance -= 25;
-    reasons.push({
-      category: "finance",
-      message: "Saldo em dívida",
-      impact: 25 * WEIGHTS.finance,
-    });
+  // Finance — 25% (null when the viewer lacks finance permission: the axis is
+  // excluded from the score and its weight redistributed across the rest).
+  let finance: number | null = null;
+  if (input.finance) {
+    let financeScore = 100;
+    if (input.finance.outstandingBalance > 0) {
+      financeScore -= 25;
+      reasons.push({
+        category: "finance",
+        message: "Saldo em dívida",
+        impact: 25 * WEIGHTS.finance,
+      });
+    }
+    if (input.finance.hasOverdueInvoice) {
+      financeScore -= 35;
+      reasons.push({
+        category: "finance",
+        message: "Fatura(s) vencida(s)",
+        impact: 35 * WEIGHTS.finance,
+      });
+    }
+    finance = clamp(financeScore);
   }
-  if (input.hasOverdueInvoice) {
-    finance -= 35;
-    reasons.push({
-      category: "finance",
-      message: "Fatura(s) vencida(s)",
-      impact: 35 * WEIGHTS.finance,
-    });
-  }
-  finance = clamp(finance);
 
   // Attendance — 20%
   let attendance =
@@ -127,12 +131,19 @@ export function calculateHealthScore(input: HealthScoreInput): StudentHealthScor
 
   const breakdown: HealthScoreBreakdown = { academic, finance, attendance, enrollment, activity };
 
+  // Weighted composite over the categories actually present. When finance is excluded,
+  // its weight is redistributed (renormalized) so the score stays on a 0–100 scale —
+  // a student healthy in all authorized categories still scores ~100.
+  const activeCategories: Array<[number, number]> = [
+    [academic, WEIGHTS.academic],
+    [attendance, WEIGHTS.attendance],
+    [enrollment, WEIGHTS.enrollment],
+    [activity, WEIGHTS.activity],
+  ];
+  if (finance != null) activeCategories.push([finance, WEIGHTS.finance]);
+  const totalWeight = activeCategories.reduce((sum, [, weight]) => sum + weight, 0);
   const score = Math.round(
-    academic * WEIGHTS.academic +
-      finance * WEIGHTS.finance +
-      attendance * WEIGHTS.attendance +
-      enrollment * WEIGHTS.enrollment +
-      activity * WEIGHTS.activity
+    activeCategories.reduce((sum, [value, weight]) => sum + value * weight, 0) / totalWeight
   );
 
   const label: HealthScoreLabel =
@@ -140,9 +151,9 @@ export function calculateHealthScore(input: HealthScoreInput): StudentHealthScor
 
   const topReasons = [...reasons].sort((a, b) => b.impact - a.impact).slice(0, 3);
 
-  const worstCategory = (Object.entries(breakdown) as [keyof HealthScoreBreakdown, number][]).sort(
-    (a, b) => a[1] - b[1]
-  )[0]?.[0];
+  const worstCategory = (Object.entries(breakdown) as Array<[keyof HealthScoreBreakdown, number | null]>)
+    .filter((entry): entry is [keyof HealthScoreBreakdown, number] => entry[1] != null)
+    .sort((a, b) => a[1] - b[1])[0]?.[0];
 
   const recommendedAction =
     score >= 90

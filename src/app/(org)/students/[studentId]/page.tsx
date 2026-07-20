@@ -70,13 +70,21 @@ export default async function StudentDetailPage({
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
 
+  // Finance is split into two independent capabilities so the RBAC policy is explicit:
+  // billing (invoices/dívida) ← INVOICES_VIEW, wallet (saldo/movimentos/reembolsos) ←
+  // WALLETS_VIEW. Each half is fetched/derived/returned ONLY when its capability holds;
+  // a viewer without a half receives no query, no figure, no payload for it anywhere
+  // (cards, health, alerts, overview, finance tab).
+  const canViewInvoices = context.ability.can(PERMISSIONS.INVOICES_VIEW);
+  const canViewWallet = context.ability.can(PERMISSIONS.WALLETS_VIEW);
+
   let core;
   try {
     // Teacher-scoped users may only open a student enrolled in a class group they
     // teach — never any org student by id (IDOR). 404 (not 403) so we don't
     // disclose that the record exists. See docs/teacher-access-scope.md.
     await assertTeacherCanAccessStudent(context, studentId);
-    core = await getStudent360Core(studentId, context.organizationId);
+    core = await getStudent360Core(studentId, context.organizationId, { canViewInvoices, canViewWallet });
   } catch (e) {
     if (e instanceof NotFoundError || e instanceof AuthorizationError) notFound();
     throw e;
@@ -204,9 +212,8 @@ async function ActiveTabPanel({
     case "finance":
       return (
         <StudentFinanceTab
-          statement={core.statement}
-          wallet={core.wallet}
-          recentWalletTransactions={core.recentWalletTransactions}
+          billing={core.finance?.billing ?? null}
+          wallet={core.finance?.wallet ?? null}
           canDeposit={canDeposit}
           studentId={studentId}
         />
@@ -227,7 +234,13 @@ async function ActiveTabPanel({
 
     case "grades": {
       const { assessments } = await getGradesTabData(studentId, organizationId, page, 10);
-      return <StudentGradesTab assessments={assessments} subjectProgress={core.subjectProgress} />;
+      return (
+        <StudentGradesTab
+          assessments={assessments}
+          subjectProgress={core.subjectProgress}
+          academicSummary={core.academicSummary}
+        />
+      );
     }
 
     case "progress": {
