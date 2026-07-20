@@ -18,14 +18,6 @@ export interface Student360Capabilities {
 
 export type HealthScoreLabel = "EXCELLENT" | "HEALTHY" | "NEEDS_ATTENTION" | "CRITICAL";
 
-export type HealthScoreCategory = "academic" | "finance" | "attendance" | "enrollment" | "activity";
-
-export interface HealthScoreReason {
-  category: HealthScoreCategory;
-  message: string;
-  impact: number;
-}
-
 export interface HealthScoreBreakdown {
   academic: number;
   // null → axis excluded from the score and its weight redistributed:
@@ -41,8 +33,6 @@ export interface StudentHealthScore {
   score: number;
   label: HealthScoreLabel;
   breakdown: HealthScoreBreakdown;
-  topReasons: HealthScoreReason[];
-  recommendedAction: string;
 }
 
 export interface HealthScoreFinanceInput {
@@ -86,20 +76,8 @@ export const ALERT_SEVERITY_LABELS: Record<AlertSeverity, string> = {
   MEDIUM: "Médio",
 };
 
-export interface StudentAlertsInput {
-  blockedLevelCount: number;
-  recoveryRequiredCount: number;
-  failedSubjectCount: number;
-  // Each null = the corresponding capability is absent → that alert is never emitted.
-  overdueInvoiceCount: number | null; // billing (INVOICES_VIEW)
-  pendingRefundCount: number | null; // wallet (WALLETS_VIEW)
-  belowRequiredAttendanceSubjects: { subjectName: string; attendancePercentage: number }[];
-  pendingJustificationCount: number;
-  documentCount: number;
-  incompleteAssessmentCount: number;
-  hasActiveEnrollment: boolean;
-  hasAnyEnrollment: boolean;
-}
+// (StudentAlertsInput removed — alerts are now a projection of the canonical risk
+//  reasons; the risk engine input lives in student-risk.service.ts, H6.)
 
 export interface StudentSummaryCards {
   activeEnrollments: number;

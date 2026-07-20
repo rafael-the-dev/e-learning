@@ -39,7 +39,7 @@ export function StudentOverviewTab({
   guardianLinks?: StudentGuardianLinkDto[];
   canManageGuardians?: boolean;
 }) {
-  const { student, currentEnrollment, finance, academicSummary, attendanceSummary, levelProgress, attendanceSubjects, recentTimeline, documentCount } = core;
+  const { student, currentEnrollment, finance, academicSummary, attendanceSummary, riskSummary, levelProgress, attendanceSubjects, recentTimeline } = core;
   const currentLevel = resolveCurrentEnrollmentLevel(currentEnrollment);
 
   // Academic tallies/averages come from the canonical read model (H2), not recomputed here.
@@ -50,11 +50,10 @@ export function StudentOverviewTab({
   // Canonical overall attendance % (H5) — single source, not a mean of per-subject %.
   const avgAttendance = attendanceSummary.attendancePercentage;
 
-  const academicRisk = failed > 0 || blocked;
-  // Debt risk is a BILLING signal — surfaced only when billing is authorized.
-  const financeRisk = finance?.billing ? finance.billing.outstandingBalance > 0 : null;
-  const attendanceRisk = belowRequired.length > 0;
-  const documentRisk = documentCount === 0;
+  // Risk chips come from the canonical risk classification (H6) — never re-derived here.
+  // financeRisk is null when finance isn't authorized (row hidden, no inference).
+  const dimAtRisk = (d: { level: string } | null) =>
+    d != null && d.level !== "NONE" && d.level !== "UNKNOWN";
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -214,10 +213,13 @@ export function StudentOverviewTab({
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-2 gap-3 text-sm">
-            <RiskRow label="Risco Académico" risk={academicRisk} />
-            {financeRisk != null && <RiskRow label="Risco Financeiro" risk={financeRisk} />}
-            <RiskRow label="Risco de Assiduidade" risk={attendanceRisk} />
-            <RiskRow label="Risco Documental" risk={documentRisk} />
+            <RiskRow label="Risco Académico" risk={dimAtRisk(riskSummary.academic)} />
+            <RiskRow label="Risco de Progressão" risk={dimAtRisk(riskSummary.progression)} />
+            <RiskRow label="Risco de Assiduidade" risk={dimAtRisk(riskSummary.attendance)} />
+            {riskSummary.financial != null && (
+              <RiskRow label="Risco Financeiro" risk={dimAtRisk(riskSummary.financial)} />
+            )}
+            <RiskRow label="Risco Documental" risk={dimAtRisk(riskSummary.documents)} />
           </dl>
         </CardContent>
       </Card>

@@ -6,7 +6,7 @@ import { AuthorizationError, NotFoundError } from "@/shared/lib/command";
 import {
   getStudent360Core,
   buildHealthScoreInput,
-  buildAlertsInput,
+  toStudentAlerts,
   buildSummaryCards,
   getAttendanceTabData,
   getGradesTabData,
@@ -18,7 +18,6 @@ import {
 import { getStudentPortalAccountStatus } from "@/modules/students/services/student-user-provisioning.service";
 import { getStudentGuardianLinks } from "@/modules/guardian-portal/services/guardian-provisioning.service";
 import { calculateHealthScore } from "@/modules/students/student-360/services/student-health.service";
-import { computeStudentAlerts } from "@/modules/students/student-360/services/student-alerts.service";
 import {
   getStudent360TabAccess,
   resolveActiveStudent360Tab,
@@ -95,7 +94,8 @@ export default async function StudentDetailPage({
   const visible = new Set(tabAccess.filter((t) => t.visible).map((t) => t.key));
 
   const health = calculateHealthScore(buildHealthScoreInput(core));
-  const alerts = computeStudentAlerts(buildAlertsInput(core));
+  // Alerts are a projection of the canonical risk reasons (H6) — never re-derived.
+  const alerts = toStudentAlerts(core.riskSummary);
   const summary = buildSummaryCards(core, alerts.length);
 
   const tabs: Student360TabDef[] = [
@@ -147,7 +147,7 @@ export default async function StudentDetailPage({
       <div className="p-4 sm:p-8 space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
-            <StudentHealthCard health={health} />
+            <StudentHealthCard health={health} risk={core.riskSummary} />
           </div>
           <StudentAlertsPanel alerts={alerts} />
         </div>

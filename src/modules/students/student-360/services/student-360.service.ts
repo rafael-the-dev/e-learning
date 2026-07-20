@@ -23,10 +23,15 @@ import {
   buildStudentAcademicSummary,
   type StudentAcademicSummary,
 } from "@/modules/students/services/student-academic-summary.service";
+import {
+  buildStudentRiskSummary,
+  type StudentRiskSummary,
+  type StudentRiskInput,
+} from "@/modules/students/services/student-risk.service";
 import type {
   HealthScoreInput,
   Student360Capabilities,
-  StudentAlertsInput,
+  StudentAlert,
   StudentSummaryCards,
 } from "@/modules/students/student-360/types";
 import type { Student } from "@/modules/students/types";
@@ -84,6 +89,9 @@ export interface Student360Core {
   // Canonical academic headline figures (average/tallies/status) — the single source
   // of truth all surfaces consume (H2). Derived once here from the persisted rollups.
   academicSummary: StudentAcademicSummary;
+  // Canonical risk classification (H6) — the single answer to "at risk? why? severity?
+  // action?". Alerts, overview risk chips and the health card all read this; none re-derive.
+  riskSummary: StudentRiskSummary;
   attendanceSubjects: SubjectAttendanceView[];
   // Canonical attendance read model (H5) — overall percentage + per-status counts,
   // the single value/counts every surface displays. Never a mean of per-subject %.
@@ -207,6 +215,31 @@ export async function getStudent360Core(
     currentEnrollment,
   });
 
+  // Single canonical risk classification (H6), derived from the consolidated read models.
+  // financial is null unless the viewer is authorized for finance → no hidden-risk inference.
+  const financeAuthorized = finance != null && (finance.billing != null || finance.wallet != null);
+  const riskInput: StudentRiskInput = {
+    blockedLevelCount: levelProgress.filter((p) => p.status === "BLOCKED").length,
+    recoveryRequiredCount: levelProgress.filter((p) => p.status === "RECOVERY_REQUIRED").length,
+    hasActiveEnrollment: activeEnrollments.length > 0,
+    hasAnyEnrollment: enrollments.length > 0,
+    failedSubjectCount: academicSummary.failedSubjects,
+    incompleteAssessmentCount: academicSummary.incompleteSubjects,
+    belowRequiredAttendanceCount: attendanceSubjects.filter((s) => s.status === "BELOW_REQUIRED").length,
+    pendingJustificationCount: justificationsResult.total,
+    documentCount,
+    financial: financeAuthorized
+      ? {
+          overdueInvoiceCount: finance?.billing?.invoices.filter((i) => i.status === "OVERDUE").length ?? 0,
+          pendingRefundCount:
+            finance?.wallet?.refunds.filter((r) => r.status === "REQUESTED" || r.status === "APPROVED").length ?? 0,
+        }
+      : null,
+    hasAcademicData: subjectProgressResult.data.length > 0 || academicSummary.gradedSubjects > 0,
+    hasAttendanceData: attendanceSummary.attendancePercentage != null,
+  };
+  const riskSummary = buildStudentRiskSummary(riskInput);
+
   return {
     student,
     enrollments,
@@ -217,6 +250,7 @@ export async function getStudent360Core(
     levelProgress,
     courseProgress,
     academicSummary,
+    riskSummary,
     attendanceSubjects,
     attendanceSummary,
     lastActivityAt,
@@ -224,6 +258,25 @@ export async function getStudent360Core(
     documentCount,
     pendingJustificationCount: justificationsResult.total,
   };
+}
+
+// Projects the canonical risk reasons (H6) into the StudentAlert shape the alerts panel
+// consumes — the alerts are NOT recomputed; they are the risk reasons, formatted.
+const RISK_LEVEL_TO_ALERT_SEVERITY: Record<string, StudentAlert["severity"]> = {
+  CRITICAL: "CRITICAL",
+  HIGH: "HIGH",
+  MODERATE: "MEDIUM",
+  LOW: "MEDIUM",
+};
+
+export function toStudentAlerts(risk: StudentRiskSummary): StudentAlert[] {
+  return risk.reasons.map((r) => ({
+    id: r.id,
+    severity: RISK_LEVEL_TO_ALERT_SEVERITY[r.level] ?? "MEDIUM",
+    message: r.message,
+    recommendedAction: r.recommendedAction,
+    href: r.href,
+  }));
 }
 
 export function buildHealthScoreInput(core: Student360Core): HealthScoreInput {
@@ -244,30 +297,6 @@ export function buildHealthScoreInput(core: Student360Core): HealthScoreInput {
     hasBelowRequiredAttendance: core.attendanceSubjects.some((s) => s.status === "BELOW_REQUIRED"),
     enrollmentStatuses: core.enrollments.map((e) => e.status),
     lastActivityAt: core.lastActivityAt,
-  };
-}
-
-export function buildAlertsInput(core: Student360Core): StudentAlertsInput {
-  return {
-    blockedLevelCount: core.levelProgress.filter((p) => p.status === "BLOCKED").length,
-    recoveryRequiredCount: core.levelProgress.filter((p) => p.status === "RECOVERY_REQUIRED").length,
-    failedSubjectCount: core.subjectProgress.filter((p) => p.status === "FAILED").length,
-    // overdue-balance ← billing (INVOICES_VIEW); pending-refund ← wallet (WALLETS_VIEW).
-    // Each is null (→ no alert) when its capability is absent.
-    overdueInvoiceCount: core.finance?.billing
-      ? core.finance.billing.invoices.filter((i) => i.status === "OVERDUE").length
-      : null,
-    pendingRefundCount: core.finance?.wallet
-      ? core.finance.wallet.refunds.filter((r) => r.status === "REQUESTED" || r.status === "APPROVED").length
-      : null,
-    belowRequiredAttendanceSubjects: core.attendanceSubjects
-      .filter((s) => s.status === "BELOW_REQUIRED")
-      .map((s) => ({ subjectName: s.subjectName, attendancePercentage: s.attendancePercentage ?? 0 })),
-    pendingJustificationCount: core.pendingJustificationCount,
-    documentCount: core.documentCount,
-    incompleteAssessmentCount: core.subjectProgress.filter((p) => p.status === "INCOMPLETE").length,
-    hasActiveEnrollment: core.activeEnrollments.length > 0,
-    hasAnyEnrollment: core.enrollments.length > 0,
   };
 }
 

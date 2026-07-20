@@ -40,6 +40,16 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   the persisted attendance period rollups (COMPLETED sessions only, justified/excused
   neutral), rather than a mean of per-subject percentages (Student 360) or a count-based
   ratio over raw records (portals).
+- Consolidated student "at risk" classification into a single canonical risk engine
+  (`buildStudentRiskSummary` → `StudentRiskSummary`). The Student 360 alerts panel, the
+  overview risk chips and the health card's reasons/recommended action all now read this
+  one classification instead of each re-inferring risk with its own conditions.
+- The risk classification is permission-aware: the financial dimension is `null` when the
+  viewer lacks finance permission, and the overall risk level is computed WITHOUT it — a
+  viewer can never infer a hidden financial reason from the global level.
+- The Health Score is now purely a 0–100 composite (score + per-axis breakdown); it no
+  longer derives its own "reasons"/recommended action — those come from the canonical risk
+  engine, keeping the two concepts distinct.
 - Introduced a single canonical read model (`student-academic-summary.service`) computed
   once per request and consumed by every surface; it exposes both `subjectAverage`
   ("Média das Disciplinas", simple mean) and `courseFinalGrade` (the weighted course
@@ -82,3 +92,10 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
 - The **Teacher portal** derives per-class-group attendance from a third field
   (`StudentSubjectProgress.attendancePercentage`, populated only when attendance
   enforcement is on) — not yet migrated to the canonical summary.
+- The **SQL-aggregate dashboards/watchlists** (executive dashboard, secretary portal,
+  teacher portal, finance debt) still classify at-risk students with their own SQL and
+  flat thresholds (e.g. attendance 75/85 against the legacy field) rather than the
+  canonical per-student risk engine. They cannot call a per-student engine per row without
+  an N-query blowup; true convergence means sharing the threshold constants and aggregating
+  over the canonical persisted status column — a separate, performance-sensitive change.
+  The per-student surfaces (Student 360, alerts, health card) are fully consolidated.

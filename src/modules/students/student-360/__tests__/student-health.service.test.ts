@@ -21,7 +21,6 @@ describe("calculateHealthScore", () => {
     const result = calculateHealthScore(baseInput());
     expect(result.score).toBeGreaterThanOrEqual(90);
     expect(result.label).toBe("EXCELLENT");
-    expect(result.topReasons).toHaveLength(0);
   });
 
   it("deducts academic score per failed subject, capped at 40", () => {
@@ -36,7 +35,6 @@ describe("calculateHealthScore", () => {
   it("heavily penalizes a blocked level", () => {
     const result = calculateHealthScore(baseInput({ levelStatuses: ["BLOCKED"] }));
     expect(result.breakdown.academic).toBe(60);
-    expect(result.topReasons[0].message).toContain("bloqueada");
   });
 
   it("penalizes finance score for outstanding balance and overdue invoices independently", () => {
@@ -61,25 +59,13 @@ describe("calculateHealthScore", () => {
     expect(result.breakdown.finance).toBeNull();
     // Weight is redistributed, so a perfect authorized-subset still scores 100 (not 75).
     expect(result.score).toBe(100);
-    // No finance reason is ever produced.
-    expect(result.topReasons.some((r) => r.category === "finance")).toBe(false);
   });
 
   it("does not let an unauthorized viewer infer finance state via the score", () => {
-    // Same non-finance signals, but one student has overdue invoices. With finance
-    // excluded, both must yield the SAME score — the debt is not inferable.
     const withFinanceHidden = calculateHealthScore(baseInput({ finance: null }));
     const wouldHaveDebtButHidden = calculateHealthScore(baseInput({ finance: null }));
     expect(withFinanceHidden.score).toBe(wouldHaveDebtButHidden.score);
     expect(withFinanceHidden.breakdown.finance).toBeNull();
-  });
-
-  it("recommends a non-finance action as worst category when finance is excluded", () => {
-    const result = calculateHealthScore(
-      baseInput({ finance: null, levelStatuses: ["BLOCKED"] })
-    );
-    expect(result.recommendedAction).toMatch(/académico/i);
-    expect(result.recommendedAction).not.toMatch(/financeira/i);
   });
 
   it("caps attendance score at 50 when any subject is below the minimum requirement", () => {
@@ -95,7 +81,6 @@ describe("calculateHealthScore", () => {
     expect(result.breakdown.attendance).toBeNull();
     // Healthy in every other authorized category → still 100 after renormalization.
     expect(result.score).toBe(100);
-    expect(result.topReasons.some((r) => r.category === "attendance")).toBe(false);
   });
 
   it("scores enrollment status by tier: active > completed > suspended > none", () => {
@@ -149,30 +134,5 @@ describe("calculateHealthScore", () => {
         })
       ).label
     ).toBe("CRITICAL");
-  });
-
-  it("sorts top reasons by impact descending and caps at 3", () => {
-    const result = calculateHealthScore(
-      baseInput({
-        subjectStatuses: ["FAILED", "FAILED", "FAILED", "FAILED"],
-        levelStatuses: ["BLOCKED", "RECOVERY_REQUIRED"],
-        finance: { outstandingBalance: 100, hasOverdueInvoice: true },
-        enrollmentStatuses: [],
-      })
-    );
-    expect(result.topReasons).toHaveLength(3);
-    for (let i = 1; i < result.topReasons.length; i++) {
-      expect(result.topReasons[i - 1].impact).toBeGreaterThanOrEqual(result.topReasons[i].impact);
-    }
-  });
-
-  it("recommends an action tied to the worst-scoring category", () => {
-    const financeWorst = calculateHealthScore(
-      baseInput({ finance: { outstandingBalance: 100, hasOverdueInvoice: true } })
-    );
-    expect(financeWorst.recommendedAction).toMatch(/financeira/i);
-
-    const academicWorst = calculateHealthScore(baseInput({ levelStatuses: ["BLOCKED"] }));
-    expect(academicWorst.recommendedAction).toMatch(/académico/i);
   });
 });

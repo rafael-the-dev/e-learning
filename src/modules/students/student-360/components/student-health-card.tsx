@@ -1,8 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Badge } from "@/shared/components/ui/badge";
 import { cn } from "@/shared/lib/utils";
 import { HeartPulse } from "lucide-react";
 import { HEALTH_SCORE_LABELS } from "@/modules/students/student-360/types";
 import type { StudentHealthScore } from "@/modules/students/student-360/types";
+import type { StudentRiskSummary, StudentRiskLevel } from "@/modules/students/services/student-risk.service";
 
 const LABEL_STYLES: Record<string, { ring: string; text: string; bar: string }> = {
   EXCELLENT: { ring: "border-emerald-500", text: "text-emerald-600", bar: "bg-emerald-500" },
@@ -11,7 +13,32 @@ const LABEL_STYLES: Record<string, { ring: string; text: string; bar: string }> 
   CRITICAL: { ring: "border-red-500", text: "text-red-600", bar: "bg-red-500" },
 };
 
-export function StudentHealthCard({ health }: { health: StudentHealthScore }) {
+// Risk is the canonical classification (H6); the score is the composite (separate concept).
+const RISK_LEVEL_LABELS: Record<StudentRiskLevel, string> = {
+  UNKNOWN: "Sem dados",
+  NONE: "Sem risco",
+  LOW: "Baixo",
+  MODERATE: "Moderado",
+  HIGH: "Alto",
+  CRITICAL: "Crítico",
+};
+
+const RISK_LEVEL_VARIANT: Record<StudentRiskLevel, "secondary" | "outline" | "destructive"> = {
+  UNKNOWN: "outline",
+  NONE: "secondary",
+  LOW: "outline",
+  MODERATE: "outline",
+  HIGH: "destructive",
+  CRITICAL: "destructive",
+};
+
+export function StudentHealthCard({
+  health,
+  risk,
+}: {
+  health: StudentHealthScore;
+  risk: StudentRiskSummary;
+}) {
   const styles = LABEL_STYLES[health.label] ?? LABEL_STYLES.NEEDS_ATTENTION;
 
   return (
@@ -33,11 +60,20 @@ export function StudentHealthCard({ health }: { health: StudentHealthScore }) {
           >
             {health.score}
           </div>
-          <div>
+          <div className="space-y-1">
             <p className={cn("text-sm font-semibold", styles.text)}>
               {HEALTH_SCORE_LABELS[health.label]}
             </p>
-            <p className="text-xs text-muted-foreground max-w-[220px]">{health.recommendedAction}</p>
+            {/* Risk level is the canonical classification, not derived from the score. */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Risco:</span>
+              <Badge variant={RISK_LEVEL_VARIANT[risk.level]} className="text-xs">
+                {RISK_LEVEL_LABELS[risk.level]}
+              </Badge>
+            </div>
+            {risk.recommendedAction && (
+              <p className="text-xs text-muted-foreground max-w-[220px]">{risk.recommendedAction}</p>
+            )}
           </div>
         </div>
 
@@ -51,8 +87,8 @@ export function StudentHealthCard({ health }: { health: StudentHealthScore }) {
               ["activity", "Atividade", 10],
             ] as const
           )
-            // A null breakdown value = category excluded (e.g. finance not authorized):
-            // omit the bar entirely rather than rendering a misleading 0%.
+            // A null breakdown value = category excluded (e.g. finance not authorized, or
+            // no attendance data): omit the bar rather than rendering a misleading 0%.
             .filter(([key]) => health.breakdown[key] != null)
             .map(([key, label, weight]) => {
               const value = Math.round(health.breakdown[key] as number);
@@ -74,10 +110,11 @@ export function StudentHealthCard({ health }: { health: StudentHealthScore }) {
               );
             })}
 
-          {health.topReasons.length > 0 && (
+          {/* Canonical risk reasons (H6) — the same reasons the alerts panel shows. */}
+          {risk.reasons.length > 0 && (
             <ul className="pt-2 space-y-1">
-              {health.topReasons.map((reason, i) => (
-                <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+              {risk.reasons.slice(0, 3).map((reason) => (
+                <li key={reason.id} className="text-xs text-muted-foreground flex items-start gap-1.5">
                   <span className="mt-1 size-1 rounded-full bg-muted-foreground shrink-0" />
                   {reason.message}
                 </li>
