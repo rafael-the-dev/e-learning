@@ -76,21 +76,9 @@ export const ALERT_SEVERITY_LABELS: Record<AlertSeverity, string> = {
   MEDIUM: "Médio",
 };
 
-// (StudentAlertsInput removed — alerts are now a projection of the canonical risk
-//  reasons; the risk engine input lives in student-risk.service.ts, H6.)
-
-export interface StudentSummaryCards {
-  activeEnrollments: number;
-  currentCourseName: string | null;
-  academicStatusLabel: string;
-  attendancePercentage: number | null;
-  // Canonical "Média das Disciplinas" from the shared academic read model (H2).
-  subjectAverage: number | null;
-  // Each null = the corresponding capability is absent → that KPI card is not rendered.
-  outstandingBalance: number | null; // billing (INVOICES_VIEW)
-  walletBalance: number | null; // wallet (WALLETS_VIEW)
-  openAlertsCount: number;
-}
+// (StudentAlertsInput + StudentSummaryCards removed — H6/H7: alerts are a projection of
+//  the canonical risk reasons; the at-a-glance metrics live in the status band +
+//  operational cards, sourced directly from the canonical read models.)
 
 export interface AttendanceRecordRow {
   id: string;

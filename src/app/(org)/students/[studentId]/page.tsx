@@ -7,7 +7,6 @@ import {
   getStudent360Core,
   buildHealthScoreInput,
   toStudentAlerts,
-  buildSummaryCards,
   getAttendanceTabData,
   getGradesTabData,
   getProgressTabData,
@@ -23,9 +22,10 @@ import {
   resolveActiveStudent360Tab,
 } from "@/modules/students/student-360/services/student-360-access.service";
 import { StudentProfileHeader } from "@/modules/students/student-360/components/student-profile-header";
-import { StudentHealthCard } from "@/modules/students/student-360/components/student-health-card";
+import { StudentStatusBand } from "@/modules/students/student-360/components/student-status-band";
 import { StudentAlertsPanel } from "@/modules/students/student-360/components/student-alerts-panel";
-import { StudentSummaryCards } from "@/modules/students/student-360/components/student-summary-cards";
+import { StudentOperationalCards } from "@/modules/students/student-360/components/student-operational-cards";
+import { StudentRecentActivity } from "@/modules/students/student-360/components/student-recent-activity";
 import { Student360TabsNav } from "@/modules/students/student-360/components/student-360-tabs-nav";
 import { StudentOverviewTab } from "@/modules/students/student-360/components/student-overview-tab";
 import { StudentEnrollmentsTab } from "@/modules/students/student-360/components/student-enrollments-tab";
@@ -96,7 +96,6 @@ export default async function StudentDetailPage({
   const health = calculateHealthScore(buildHealthScoreInput(core));
   // Alerts are a projection of the canonical risk reasons (H6) — never re-derived.
   const alerts = toStudentAlerts(core.riskSummary);
-  const summary = buildSummaryCards(core, alerts.length);
 
   const tabs: Student360TabDef[] = [
     { key: "overview", label: "Visão Geral", icon: <LayoutDashboard className="size-3.5" /> },
@@ -144,15 +143,25 @@ export default async function StudentDetailPage({
         canUploadDocument={context.ability.can(PERMISSIONS.STUDENT_DOCUMENTS_UPLOAD)}
       />
 
+      {/* Executive hierarchy (H7): estado atual → o que exige atenção → resumo operacional
+          → atividade recente → detalhe nos separadores. Each metric appears once. */}
       <div className="p-4 sm:p-8 space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <StudentHealthCard health={health} risk={core.riskSummary} />
-          </div>
-          <StudentAlertsPanel alerts={alerts} />
-        </div>
+        <StudentStatusBand
+          health={health}
+          risk={core.riskSummary}
+          academicStatusLabel={core.academicSummary.progressionStatus}
+        />
 
-        <StudentSummaryCards summary={summary} />
+        <StudentAlertsPanel alerts={alerts} />
+
+        <StudentOperationalCards
+          academicSummary={core.academicSummary}
+          attendanceSummary={core.attendanceSummary}
+          riskSummary={core.riskSummary}
+          finance={core.finance}
+        />
+
+        <StudentRecentActivity studentId={studentId} events={core.recentTimeline} />
 
         <Student360TabsNav active={activeTab} tabs={tabs} />
 

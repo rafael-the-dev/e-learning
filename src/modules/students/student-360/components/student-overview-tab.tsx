@@ -1,20 +1,7 @@
-import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/components/ui/card";
 import { StatusBadge } from "@/shared/components/data/status-badge";
-import { Badge } from "@/shared/components/ui/badge";
-import { TimelineEventIcon } from "@/modules/student-timeline/components/timeline-event-icon";
 import { GENDER_LABELS, ID_TYPE_LABELS } from "@/modules/students/types";
-import { TIMELINE_EVENT_TYPE_LABELS } from "@/modules/student-timeline/types";
-import {
-  User,
-  GraduationCap,
-  BookOpen,
-  CircleDollarSign,
-  Wallet,
-  Activity,
-  ShieldAlert,
-  History,
-} from "lucide-react";
+import { User, GraduationCap } from "lucide-react";
 import { resolveCurrentEnrollmentLevel } from "@/modules/students/student-360/services/student-360.service";
 import type { Student360Core } from "@/modules/students/student-360/services/student-360.service";
 import { StudentPortalAccountCard } from "@/modules/students/student-360/components/student-portal-account-card";
@@ -22,10 +9,9 @@ import type { StudentPortalAccountDto } from "@/modules/students/services/studen
 import { StudentGuardiansCard } from "@/modules/guardian-portal/components/student-guardians-card";
 import type { StudentGuardianLinkDto } from "@/modules/guardian-portal/services/guardian-provisioning.service";
 
-function formatCurrency(value: number): string {
-  return value.toLocaleString("pt-PT", { style: "currency", currency: "MZN" });
-}
-
+// Visão Geral (H7): IDENTITY + enrolment + portal account + guardians only. The at-a-glance
+// metrics live once in the page-level status band + operational cards, and the full tables
+// live in the domain tabs — this tab no longer duplicates any of them.
 export function StudentOverviewTab({
   core,
   portalAccount,
@@ -39,21 +25,8 @@ export function StudentOverviewTab({
   guardianLinks?: StudentGuardianLinkDto[];
   canManageGuardians?: boolean;
 }) {
-  const { student, currentEnrollment, finance, academicSummary, attendanceSummary, riskSummary, levelProgress, attendanceSubjects, recentTimeline } = core;
+  const { student, currentEnrollment } = core;
   const currentLevel = resolveCurrentEnrollmentLevel(currentEnrollment);
-
-  // Academic tallies/averages come from the canonical read model (H2), not recomputed here.
-  const { passedSubjects: passed, failedSubjects: failed, inProgressSubjects: inProgress } = academicSummary;
-  const blocked = levelProgress.some((p) => p.status === "BLOCKED");
-
-  const belowRequired = attendanceSubjects.filter((s) => s.status === "BELOW_REQUIRED");
-  // Canonical overall attendance % (H5) — single source, not a mean of per-subject %.
-  const avgAttendance = attendanceSummary.attendancePercentage;
-
-  // Risk chips come from the canonical risk classification (H6) — never re-derived here.
-  // financeRisk is null when finance isn't authorized (row hidden, no inference).
-  const dimAtRisk = (d: { level: string } | null) =>
-    d != null && d.level !== "NONE" && d.level !== "UNKNOWN";
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -61,11 +34,7 @@ export function StudentOverviewTab({
         <StudentPortalAccountCard account={portalAccount} canManage={canManagePortalAccount} />
       )}
 
-      <StudentGuardiansCard
-        studentId={student.id}
-        links={guardianLinks}
-        canManage={canManageGuardians}
-      />
+      <StudentGuardiansCard studentId={student.id} links={guardianLinks} canManage={canManageGuardians} />
 
       <Card>
         <CardHeader className="pb-3">
@@ -127,137 +96,6 @@ export function StudentOverviewTab({
           )}
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <BookOpen className="size-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-medium">Resumo Académico</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <Row
-              label="Média das Disciplinas"
-              value={academicSummary.subjectAverage != null ? academicSummary.subjectAverage.toFixed(1) : "—"}
-            />
-            <Row
-              label="Média Final do Curso"
-              value={academicSummary.courseFinalGrade != null ? academicSummary.courseFinalGrade.toFixed(1) : "—"}
-            />
-            <Row label="Disciplinas Aprovadas" value={String(passed)} />
-            <Row label="Disciplinas Reprovadas" value={String(failed)} />
-            <Row label="Disciplinas em Curso" value={String(inProgress)} />
-            <Row label="Progressão Bloqueada" value={blocked ? "Sim" : "Não"} />
-          </dl>
-        </CardContent>
-      </Card>
-
-      {finance?.billing && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <CircleDollarSign className="size-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-medium">Faturação</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-2 gap-3 text-sm">
-              <Row label="Total Faturado" value={formatCurrency(finance.billing.totalInvoiced)} />
-              <Row label="Total Pago" value={formatCurrency(finance.billing.totalPaid)} />
-              <Row label="Saldo em Dívida" value={formatCurrency(finance.billing.outstandingBalance)} />
-            </dl>
-          </CardContent>
-        </Card>
-      )}
-
-      {finance?.wallet && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Wallet className="size-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-medium">Carteira</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-2 gap-3 text-sm">
-              <Row label="Saldo da Carteira" value={formatCurrency(finance.wallet.walletBalance)} />
-              <Row label="Crédito Aplicado" value={formatCurrency(finance.wallet.creditApplied)} />
-              <Row label="Total Reembolsado" value={formatCurrency(finance.wallet.totalRefunded)} />
-            </dl>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <Activity className="size-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-medium">Resumo de Assiduidade</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <Row label="Assiduidade Média" value={avgAttendance != null ? `${avgAttendance.toFixed(1)}%` : "—"} />
-            <Row label="Disciplinas Abaixo do Mínimo" value={String(belowRequired.length)} />
-          </dl>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="size-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-medium">Resumo de Risco</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <RiskRow label="Risco Académico" risk={dimAtRisk(riskSummary.academic)} />
-            <RiskRow label="Risco de Progressão" risk={dimAtRisk(riskSummary.progression)} />
-            <RiskRow label="Risco de Assiduidade" risk={dimAtRisk(riskSummary.attendance)} />
-            {riskSummary.financial != null && (
-              <RiskRow label="Risco Financeiro" risk={dimAtRisk(riskSummary.financial)} />
-            )}
-            <RiskRow label="Risco Documental" risk={dimAtRisk(riskSummary.documents)} />
-          </dl>
-        </CardContent>
-      </Card>
-
-      <Card className="lg:col-span-2">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <History className="size-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-medium">Atividade Recente</CardTitle>
-            </div>
-            <Link href={`/students/${student.id}/timeline`} className="text-xs text-primary hover:underline">
-              Ver timeline completa
-            </Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {recentTimeline.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum evento registado ainda.</p>
-          ) : (
-            <ul className="space-y-2">
-              {recentTimeline.map((event) => (
-                <li key={event.id} className="flex items-start gap-2.5">
-                  <TimelineEventIcon eventType={event.eventType} size="sm" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium leading-snug truncate">{event.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(event.occurredAt).toLocaleDateString("pt-PT")}
-                      {" · "}
-                      {TIMELINE_EVENT_TYPE_LABELS[event.eventType] ?? event.eventType}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -267,19 +105,6 @@ function Row({ label, value }: { label: string; value: string }) {
     <div>
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="font-medium break-words">{value}</dd>
-    </div>
-  );
-}
-
-function RiskRow({ label, risk }: { label: string; risk: boolean }) {
-  return (
-    <div>
-      <dt className="text-xs text-muted-foreground mb-1">{label}</dt>
-      <dd>
-        <Badge variant={risk ? "destructive" : "secondary"} className="text-xs">
-          {risk ? "Em Risco" : "OK"}
-        </Badge>
-      </dd>
     </div>
   );
 }

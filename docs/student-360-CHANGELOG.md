@@ -50,6 +50,17 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
 - The Health Score is now purely a 0–100 composite (score + per-axis breakdown); it no
   longer derives its own "reasons"/recommended action — those come from the canonical risk
   engine, keeping the two concepts distinct.
+- Restructured the page into an executive hierarchy (H7): header → compact status band
+  (Saúde · Risco · Estado Académico) → priority alerts (capped at 5) → operational cards
+  (Académico · Assiduidade · Financeiro-if-authorized, each with metric + main problem +
+  link) → recent activity → tabs. Each key metric now appears exactly once in the overview,
+  and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
+  identity, enrolment, portal account and guardians only).
+
+### Removed
+- The 8-KPI summary-cards band and the large health card (`StudentSummaryCards`,
+  `StudentHealthCard`) and the `buildSummaryCards` builder — superseded by the H7 status
+  band + operational cards, which read the canonical summaries directly.
 - Introduced a single canonical read model (`student-academic-summary.service`) computed
   once per request and consumed by every surface; it exposes both `subjectAverage`
   ("Média das Disciplinas", simple mean) and `courseFinalGrade` (the weighted course

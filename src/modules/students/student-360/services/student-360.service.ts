@@ -32,7 +32,6 @@ import type {
   HealthScoreInput,
   Student360Capabilities,
   StudentAlert,
-  StudentSummaryCards,
 } from "@/modules/students/student-360/types";
 import type { Student } from "@/modules/students/types";
 import type { Enrollment } from "@/modules/enrollments/types";
@@ -297,22 +296,6 @@ export function buildHealthScoreInput(core: Student360Core): HealthScoreInput {
     hasBelowRequiredAttendance: core.attendanceSubjects.some((s) => s.status === "BELOW_REQUIRED"),
     enrollmentStatuses: core.enrollments.map((e) => e.status),
     lastActivityAt: core.lastActivityAt,
-  };
-}
-
-export function buildSummaryCards(core: Student360Core, openAlertsCount: number): StudentSummaryCards {
-  return {
-    activeEnrollments: core.activeEnrollments.length,
-    currentCourseName: core.currentEnrollment?.courseName ?? null,
-    // Academic headline figures come from the canonical read model (H2), never recomputed here.
-    academicStatusLabel: core.academicSummary.progressionStatus,
-    // Canonical attendance percentage (H5) — single source, never a mean of subjects here.
-    attendancePercentage: core.attendanceSummary.attendancePercentage,
-    subjectAverage: core.academicSummary.subjectAverage,
-    // Each KPI only when its capability is authorized; otherwise the card is not produced.
-    outstandingBalance: core.finance?.billing ? core.finance.billing.outstandingBalance : null,
-    walletBalance: core.finance?.wallet ? core.finance.wallet.walletBalance : null,
-    openAlertsCount,
   };
 }
 
