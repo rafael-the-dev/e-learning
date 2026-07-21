@@ -9,8 +9,9 @@ deliberately deferred, so the review's conclusions don't live only in chat.
 
 ## M11 — Dashboard Risk Aggregation Convergence
 
-**Status:** IN PROGRESS — M11.1 + M11.2 DONE; M11.3 (dashboard migration) + M11.4 (backfill /
-command hooks / reconciliation / legacy removal / arch tests) pending · **Severity:** Medium.
+**Status:** MOSTLY DONE — M11.1/M11.2/M11.3/M11.4 landed; only the post-backfill legacy
+removal + anti-threshold architecture tests remain (gated on a real deploy backfill) ·
+**Severity:** Medium.
 
 **Progress:**
 - **M11.1 — projection contract (DONE).** `StudentRiskProjection` model + SQL Server
@@ -22,12 +23,23 @@ command hooks / reconciliation / legacy removal / arch tests) pending · **Sever
 - **M11.2 — recalculation service (DONE).** `recalculateStudentRiskProjection()` uses the
   SAME H6 engine + shared `assembleStudentRiskInput` (extracted; `getStudent360Core`
   repointed to it), runs the engine twice (with/without finance), idempotent, tenant-guarded.
-- **M11.3 — dashboard migration (PENDING).** Point the executive dashboard, secretary
-  watchlist, teacher dashboard and debt/risk watchlists at the projection reads.
-- **M11.4 — backfill + hooks + reconciliation + legacy removal + arch tests (PENDING).**
-  `prisma/backfill-student-risk-projection.ts` (idempotent, batched, per-org), post-command
-  recalc hooks, periodic reconciliation, remove the legacy SQL classifications, add
-  architecture tests forbidding duplicated 75/85 thresholds.
+- **M11.3 — dashboard migration (DONE).** Executive dashboard (`studentsAtRisk` +
+  `studentsLowAttendance`), students-module counts, grades `atRiskStudentCount` and the
+  teacher-portal attendance risk all read the projection (coverage-gated, legacy fallback).
+  Secretary + finance-debt reviewed and left as operational (no divergent 75/85 threshold).
+- **M11.4 — backfill + wiring + reconciliation (DONE, except the deferred cleanup).**
+  `prisma/backfill-student-risk-projection.ts` + `db:backfill-student-risk-projection`
+  (idempotent, batched, per-org, `--stale`); `reconcileStudentRiskProjectionsForOrg`
+  (all-active or stale-version); `StudentRiskProjectionHandler` on the event bus
+  (attendance.summary_recalculated + payment.confirmed → synchronous post-commit recalc;
+  academic/progression/document changes are covered by reconciliation until their events
+  carry a studentId).
+- **M11.4 remainder — DEFERRED to the deploy (still open).** Removing the legacy SQL
+  classifications (and the flat-75/85 fallbacks) and adding the architecture tests that
+  forbid duplicated thresholds must wait until a **real backfill + parity comparison** has
+  run against production data (per the plan: "executar backfill; comparar resultados;
+  remover classificações SQL antigas"). Removing the read-through fallback before that would
+  reintroduce the false-zero risk, so it is intentionally NOT done in code yet.
 
 **Sequencing note:** the projection table is EMPTY until the backfill (M11.4) runs, so
 flipping the dashboards (M11.3) to read it before backfill+hooks land would show 0 at-risk

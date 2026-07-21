@@ -94,9 +94,18 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   **Visible-number change (intentional, once an org is backfilled):** the executive
   dashboard's "at risk" count becomes the canonical (broader) classification rather than
   blocked∪recovery; "low attendance" and the teacher attendance risk use the per-subject
-  minimum instead of a flat percentage. Backfill, post-command recalculation hooks,
-  reconciliation, removal of the now-unused legacy SQL and the anti-duplication architecture
-  tests are M11.4.
+  minimum instead of a flat percentage.
+- Wired the projection's upkeep (M11.4): a `db:backfill-student-risk-projection` runner
+  (idempotent, batched, per-org, `--stale` for a rules-version bump) plus
+  `reconcileStudentRiskProjectionsForOrg` recompute every student via the same engine, and a
+  `StudentRiskProjectionHandler` on the domain-event bus recomputes a student's projection
+  synchronously after the facts that carry a studentId commit (attendance summary
+  recalculated, payment confirmed). Academic/progression/document changes are covered by the
+  reconciliation pass until their events carry a studentId. Run the backfill once per org
+  after the migration and BEFORE releasing the dashboard flip so no dashboard shows a false
+  zero. **Deferred to the deploy:** removing the legacy SQL classifications (and the flat
+  75/85 fallbacks) and adding the anti-duplication architecture tests — gated on a real
+  backfill + parity comparison, so the read-through fallback stays until then.
 - Removed the eligibility N+1 in the Progress tab (H4). Evaluating a whole level used to
   run one full query set **per subject** (`evaluateEligibilityForAllSubjects` looped
   `evaluateSubjectEligibility`, which re-loaded the enrollment and the student's entire

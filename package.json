@@ -18,6 +18,7 @@
     "db:backfill-role-codes": "tsx prisma/backfill-role-codes.ts",
     "db:backfill-notification-deliveries": "tsx prisma/backfill-notification-deliveries.ts",
     "db:backfill-attendance-enrollment-id": "tsx prisma/backfill-attendance-enrollment-id.ts",
+    "db:backfill-student-risk-projection": "tsx prisma/backfill-student-risk-projection.ts",
     "db:studio": "prisma studio"
   },
   "prisma": {

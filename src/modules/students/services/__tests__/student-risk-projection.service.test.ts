@@ -119,6 +119,9 @@ const h = vi.hoisted(() => ({
   findCourseProgressByStudent: vi.fn(),
   upsertStudentRiskProjection: vi.fn(),
   findStudentRiskProjection: vi.fn(),
+  findStudentIdsWithStaleRiskProjection: vi.fn(),
+  studentFindMany: vi.fn(),
+  studentCount: vi.fn(),
 }));
 
 vi.mock("@/modules/students/services/student.service", () => ({ getStudentById: h.getStudentById }));
@@ -136,9 +139,16 @@ vi.mock("@/modules/prerequisites/repositories/student-course-progress.repository
 vi.mock("@/modules/students/repositories/student-risk-projection.repository", () => ({
   upsertStudentRiskProjection: h.upsertStudentRiskProjection,
   findStudentRiskProjection: h.findStudentRiskProjection,
+  findStudentIdsWithStaleRiskProjection: h.findStudentIdsWithStaleRiskProjection,
+}));
+vi.mock("@/server/db", () => ({
+  getDb: async () => ({ student: { findMany: h.studentFindMany, count: h.studentCount } }),
 }));
 
-import { recalculateStudentRiskProjection } from "@/modules/students/services/student-risk-projection.service";
+import {
+  recalculateStudentRiskProjection,
+  reconcileStudentRiskProjectionsForOrg,
+} from "@/modules/students/services/student-risk-projection.service";
 
 const ORG = "org-1";
 
@@ -213,5 +223,52 @@ describe("recalculateStudentRiskProjection (orchestration)", () => {
 
     expect(result.changed).toBe(true);
     expect(h.upsertStudentRiskProjection.mock.calls[0][0]).toMatchObject({ level: "CRITICAL", academicLevel: "CRITICAL" });
+  });
+});
+
+describe("reconcileStudentRiskProjectionsForOrg (M11.4 backfill / reconciliation)", () => {
+  beforeEach(() => {
+    Object.values(h).forEach((m) => m.mockReset());
+    primeEmptyLoaders();
+    h.findStudentRiskProjection.mockResolvedValue(null); // always "changed" on write
+    h.upsertStudentRiskProjection.mockImplementation(async (d) => ({ ...d, id: "p", levelRank: 0, levelWithoutFinanceRank: 0, createdAt: NOW, updatedAt: NOW }));
+  });
+
+  it("recomputes every (non-deleted) student of the org", async () => {
+    h.studentFindMany.mockResolvedValue([{ id: "s1" }, { id: "s2" }, { id: "s3" }]);
+
+    const result = await reconcileStudentRiskProjectionsForOrg(ORG, { now: NOW });
+
+    expect(h.studentFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: ORG, deletedAt: null } })
+    );
+    expect(result.processed).toBe(3);
+    expect(result.changed).toBe(3);
+    expect(result.failed).toBe(0);
+  });
+
+  it("staleOnly recomputes only the rows written by an older rules version", async () => {
+    h.findStudentIdsWithStaleRiskProjection.mockResolvedValue(["s9"]);
+
+    const result = await reconcileStudentRiskProjectionsForOrg(ORG, { staleOnly: true, now: NOW });
+
+    expect(h.findStudentIdsWithStaleRiskProjection).toHaveBeenCalledWith(ORG, STUDENT_RISK_SOURCE_VERSION, 500);
+    expect(h.studentFindMany).not.toHaveBeenCalled();
+    expect(result.processed).toBe(1);
+  });
+
+  it("one student failing never aborts the sweep (records the failure, continues)", async () => {
+    h.studentFindMany.mockResolvedValue([{ id: "s1" }, { id: "bad" }, { id: "s3" }]);
+    h.getStudentById.mockImplementation(async (studentId: string) => {
+      if (studentId === "bad") throw new Error("NotFound");
+      return { id: studentId, organizationId: ORG };
+    });
+
+    const result = await reconcileStudentRiskProjectionsForOrg(ORG, { now: NOW });
+
+    expect(result.processed).toBe(3);
+    expect(result.changed).toBe(2);
+    expect(result.failed).toBe(1);
+    expect(result.failures[0].studentId).toBe("bad");
   });
 });

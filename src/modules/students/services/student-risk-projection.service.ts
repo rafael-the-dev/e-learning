@@ -36,9 +36,11 @@ import {
   type StudentRiskReason,
   type StudentRiskSignals,
 } from "@/modules/students/services/student-risk.service";
+import { getDb } from "@/server/db";
 import {
   upsertStudentRiskProjection,
   findStudentRiskProjection,
+  findStudentIdsWithStaleRiskProjection,
 } from "@/modules/students/repositories/student-risk-projection.repository";
 import type {
   StudentRiskProjection,
@@ -207,4 +209,58 @@ export async function recalculateStudentRiskProjection(params: {
 
   const projection = await upsertStudentRiskProjection(data);
   return { changed: true, projection };
+}
+
+export interface ReconcileStudentRiskProjectionsResult {
+  processed: number;
+  changed: number;
+  failed: number;
+  failures: Array<{ studentId: string; error: string }>;
+}
+
+/**
+ * Recompute the risk projection for every (non-deleted) student of an org — the backfill
+ * and the periodic reconciliation both use this. `staleOnly` limits the pass to rows written
+ * by an OLDER rules version (after a `STUDENT_RISK_SOURCE_VERSION` bump). One student failing
+ * never aborts the sweep (its error is recorded and the sweep continues). Idempotent: a
+ * student whose classification is unchanged is a no-op (counted in `processed`, not `changed`).
+ */
+export async function reconcileStudentRiskProjectionsForOrg(
+  organizationId: string,
+  options: { staleOnly?: boolean; batchSize?: number; now?: Date } = {}
+): Promise<ReconcileStudentRiskProjectionsResult> {
+  const batchSize = options.batchSize ?? 500;
+  const now = options.now ?? new Date();
+
+  const studentIds = options.staleOnly
+    ? await findStudentIdsWithStaleRiskProjection(organizationId, STUDENT_RISK_SOURCE_VERSION, batchSize)
+    : await listStudentIdsForOrg(organizationId);
+
+  const result: ReconcileStudentRiskProjectionsResult = { processed: 0, changed: 0, failed: 0, failures: [] };
+  for (const studentId of studentIds) {
+    result.processed++;
+    try {
+      const r = await recalculateStudentRiskProjection({ organizationId, studentId, now });
+      if (r.changed) result.changed++;
+    } catch (e) {
+      result.failed++;
+      result.failures.push({ studentId, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return result;
+}
+
+/** Count how many students an org has (for the backfill dry-run report). */
+export async function countStudentsForOrg(organizationId: string): Promise<number> {
+  const db = await getDb();
+  return db.student.count({ where: { organizationId, deletedAt: null } });
+}
+
+async function listStudentIdsForOrg(organizationId: string): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.student.findMany({
+    where: { organizationId, deletedAt: null },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
 }

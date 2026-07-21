@@ -5,6 +5,7 @@ import { StudentUserProvisioningHandler } from "./handlers/student-user-provisio
 import { AssessmentEventHandler } from "./handlers/assessment.handler";
 import { NotificationEventHandler } from "./handlers/notification.handler";
 import { CertificateTranscriptStalenessHandler } from "./handlers/certificate-transcript-staleness.handler";
+import { StudentRiskProjectionHandler } from "./handlers/student-risk-projection.handler";
 import type { DomainEventHandler } from "./event-handlers";
 
 // =============================================================================
@@ -21,4 +22,5 @@ export const registeredHandlers: DomainEventHandler[] = [
   new AssessmentEventHandler(),
   new NotificationEventHandler(),
   new CertificateTranscriptStalenessHandler(),
+  new StudentRiskProjectionHandler(),
 ];
