@@ -1,5 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
+import {
+  hasStudentRiskProjectionCoverage,
+  getStudentRiskLevelCounts,
+  getStudentRiskDimensionAtRiskCounts,
+} from "@/modules/students/repositories/student-risk-projection.repository";
 
 // =============================================================================
 // DASHBOARD ACADEMIC REPOSITORY
@@ -30,14 +35,23 @@ export async function getAcademicRiskCounts(organizationId: string): Promise<Aca
   const db = await getDb();
   const now = new Date();
 
+  // M11.3: the RISK CLASSIFICATION fields (studentsAtRisk, studentsLowAttendance) come from
+  // the canonical projection once the org is backfilled — the SAME classification Student
+  // 360 shows, not a flat-75 re-derivation. Until coverage exists, fall back to the legacy
+  // queries below. The purely-operational counts (blocked / recovery / eligible / overdue /
+  // class-group attendance) are direct status counts, consistent by origin, and stay as-is.
+  const covered = await hasStudentRiskProjectionCoverage(organizationId);
+
   const [
     blockedStudents,
     levelRecovery,
     courseRecovery,
     eligibleNoAction,
     overdueAssessments,
-    studentsLowAttendance,
+    legacyLowAttendance,
     classGroupRows,
+    projectionCounts,
+    projectionDimensions,
   ] = await Promise.all([
     db.studentLevelProgress.findMany({
       where: { organizationId, status: "BLOCKED" },
@@ -64,11 +78,14 @@ export async function getAcademicRiskCounts(organizationId: string): Promise<Aca
     db.assessment.count({
       where: { organizationId, deletedAt: null, status: "OPEN", assessmentDate: { lt: now } },
     }),
-    db.studentSubjectProgress.findMany({
-      where: { organizationId, attendancePercentage: { lt: LOW_ATTENDANCE_THRESHOLD, not: null } },
-      select: { studentId: true },
-      distinct: ["studentId"],
-    }),
+    // Legacy low-attendance count — only needed as the fallback when the projection is empty.
+    covered
+      ? Promise.resolve<Array<{ studentId: string }>>([])
+      : db.studentSubjectProgress.findMany({
+          where: { organizationId, attendancePercentage: { lt: LOW_ATTENDANCE_THRESHOLD, not: null } },
+          select: { studentId: true },
+          distinct: ["studentId"],
+        }),
     db.$queryRaw<Array<{ classGroupId: string }>>(Prisma.sql`
       SELECT cg.id AS classGroupId
       FROM student_subject_progress ssp
@@ -80,21 +97,27 @@ export async function getAcademicRiskCounts(organizationId: string): Promise<Aca
       GROUP BY cg.id
       HAVING AVG(CAST(ssp.attendancePercentage AS FLOAT)) < ${LOW_ATTENDANCE_THRESHOLD}
     `),
+    // The executive dashboard is finance-authorized (admin) → count with finance included.
+    covered ? getStudentRiskLevelCounts(organizationId, { financeAuthorized: true }) : Promise.resolve(null),
+    covered
+      ? getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true })
+      : Promise.resolve(null),
   ]);
 
   const recoverySet = new Set([
     ...levelRecovery.map((r) => r.studentId),
     ...courseRecovery.map((r) => r.studentId),
   ]);
-  const atRiskSet = new Set([...blockedStudents.map((r) => r.studentId), ...recoverySet]);
+  const legacyAtRisk = new Set([...blockedStudents.map((r) => r.studentId), ...recoverySet]);
 
   return {
     blockedStudents: blockedStudents.length,
     recoveryRequired: recoverySet.size,
-    studentsAtRisk: atRiskSet.size,
+    // Canonical at-risk classification when backfilled; legacy blocked∪recovery otherwise.
+    studentsAtRisk: projectionCounts ? projectionCounts.atRisk : legacyAtRisk.size,
     eligibleNoAction,
     overdueAssessments,
-    studentsLowAttendance: studentsLowAttendance.length,
+    studentsLowAttendance: projectionDimensions ? projectionDimensions.attendance : legacyLowAttendance.length,
     classGroupsLowAttendance: classGroupRows.length,
   };
 }

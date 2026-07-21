@@ -1,4 +1,8 @@
 import { getDb } from "@/server/db";
+import {
+  hasStudentRiskProjectionCoverage,
+  getStudentRiskDimensionAtRiskCounts,
+} from "@/modules/students/repositories/student-risk-projection.repository";
 
 export interface AcademicRiskStats {
   atRiskStudentCount: number;
@@ -14,13 +18,20 @@ export async function getAcademicRiskStats(organizationId: string): Promise<Acad
   firstOfMonth.setDate(1);
   firstOfMonth.setHours(0, 0, 0, 0);
 
-  const [atRisk, pending, submitted, failedThisMonth] = await Promise.all([
-    // distinct students with at least one FAILED subject
-    db.studentSubjectProgress.groupBy({
-      by: ["studentId"],
-      where: { organizationId, status: "FAILED" },
-      _count: { _all: true },
-    }),
+  // M11.3: the at-risk classification comes from the canonical projection once backfilled
+  // (academic dimension = the SAME decision Student 360 shows); legacy FAILED-subject
+  // distinct count as the fallback. The operational assessment counts stay as-is.
+  const covered = await hasStudentRiskProjectionCoverage(organizationId);
+
+  const [atRisk, pending, submitted, failedThisMonth, projectionDimensions] = await Promise.all([
+    // distinct students with at least one FAILED subject (fallback only)
+    covered
+      ? Promise.resolve<Array<{ studentId: string }>>([])
+      : db.studentSubjectProgress.groupBy({
+          by: ["studentId"],
+          where: { organizationId, status: "FAILED" },
+          _count: { _all: true },
+        }),
     db.studentAssessmentResult.count({ where: { organizationId, status: "DRAFT" } }),
     db.studentAssessmentResult.count({ where: { organizationId, status: "SUBMITTED" } }),
     db.studentSubjectProgress.count({
@@ -30,10 +41,13 @@ export async function getAcademicRiskStats(organizationId: string): Promise<Acad
         updatedAt: { gte: firstOfMonth },
       },
     }),
+    covered
+      ? getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true })
+      : Promise.resolve(null),
   ]);
 
   return {
-    atRiskStudentCount: atRisk.length,
+    atRiskStudentCount: projectionDimensions ? projectionDimensions.academic : atRisk.length,
     pendingGradingCount: pending,
     pendingSubmissionCount: submitted,
     failedThisMonth,

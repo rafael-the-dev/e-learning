@@ -69,6 +69,34 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Began converging the dashboards/watchlists onto the canonical risk classification (M11).
+  A persisted `StudentRiskProjection` (M11.1) now holds the H6 engine's per-student output
+  (`level` + finance-excluded `levelWithoutFinance`, per-dimension levels, ordered reasons,
+  `sourceVersion`), written by `recalculateStudentRiskProjection` (M11.2) — the SAME engine
+  Student 360 uses, run twice (with/without finance), never re-implemented in SQL. In M11.3
+  the SQL-aggregate consumers read the projection instead of their own flat thresholds, with
+  a **read-through fallback**: while an org has no projection rows yet (pre-backfill) they
+  fall back to the legacy classification, so no dashboard shows a false "zero at risk":
+  - Executive dashboard: `studentsAtRisk` and `studentsLowAttendance` now come from the
+    projection (the canonical decision, not a flat 75%); the operational drill-down counts
+    (blocked / recovery / eligible / overdue / class-group attendance) are unchanged.
+  - Students module dashboard counts (`countStudentsAtAcademicRisk`,
+    `countStudentsWithLowAttendance`) and the grades `atRiskStudentCount` now read the
+    projection's academic/attendance dimensions.
+  - Teacher portal risk list: the attendance risk decision now uses the canonical per-subject
+    minimum (the SAME answer as Student 360), collapsing the old flat `LOW=75`/`TREND=85`
+    split into one at-risk determination; the other teacher-scoped signals (blocked /
+    recovery / failed / missing-assessments) are unchanged.
+  - Secretary and finance-debt watchlists were reviewed and left as-is: they are operational
+    queues (overdue / balance by date), consistent by origin after H3 — they carry no
+    divergent 75/85 risk threshold to converge.
+
+  **Visible-number change (intentional, once an org is backfilled):** the executive
+  dashboard's "at risk" count becomes the canonical (broader) classification rather than
+  blocked∪recovery; "low attendance" and the teacher attendance risk use the per-subject
+  minimum instead of a flat percentage. Backfill, post-command recalculation hooks,
+  reconciliation, removal of the now-unused legacy SQL and the anti-duplication architecture
+  tests are M11.4.
 - Removed the eligibility N+1 in the Progress tab (H4). Evaluating a whole level used to
   run one full query set **per subject** (`evaluateEligibilityForAllSubjects` looped
   `evaluateSubjectEligibility`, which re-loaded the enrollment and the student's entire

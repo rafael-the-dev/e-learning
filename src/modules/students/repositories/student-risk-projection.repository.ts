@@ -142,17 +142,36 @@ export async function findStudentRiskProjection(
 }
 
 /**
+ * Whether this org has ANY persisted projection (i.e. the backfill has run). Consumers
+ * use this as the read-through fallback gate during M11.3: with coverage they read the
+ * projection, without it they fall back to the legacy SQL classification, so an
+ * un-backfilled org never shows a false "zero at risk". Removed in M11.4 with the legacy.
+ */
+export async function hasStudentRiskProjectionCoverage(organizationId: string): Promise<boolean> {
+  const db = await getDb();
+  const count = await db.studentRiskProjection.count({ where: { organizationId } });
+  return count > 0;
+}
+
+/**
  * Org-wide risk KPI counts. Finance-blind consumers pass `financeAuthorized: false` so the
  * buckets aggregate over the finance-excluded level.
  */
 export async function getStudentRiskLevelCounts(
   organizationId: string,
-  options: { financeAuthorized: boolean; sourceVersion?: string } = { financeAuthorized: true }
+  options: { financeAuthorized: boolean; sourceVersion?: string; studentIds?: string[] } = {
+    financeAuthorized: true,
+  }
 ): Promise<StudentRiskLevelCounts> {
   const db = await getDb();
+  // Empty studentIds means "no students in scope" → all-zero counts (not "no filter").
+  if (options.studentIds && options.studentIds.length === 0) {
+    return { atRisk: 0, noRisk: 0, insufficientData: 0, byLevel: { UNKNOWN: 0, NONE: 0, LOW: 0, MODERATE: 0, HIGH: 0, CRITICAL: 0 } };
+  }
   const where = {
     organizationId,
     ...(options.sourceVersion ? { sourceVersion: options.sourceVersion } : {}),
+    ...(options.studentIds ? { studentId: { in: options.studentIds } } : {}),
   };
 
   const byLevel: Record<StudentRiskLevel, number> = {
@@ -179,6 +198,63 @@ export async function getStudentRiskLevelCounts(
   };
 }
 
+const AT_RISK_LEVELS: StudentRiskLevel[] = ["LOW", "MODERATE", "HIGH", "CRITICAL"];
+
+/**
+ * Per-dimension "students at risk" counts (dimension level ≥ LOW), for dashboards that
+ * report a specific axis (e.g. "students with low attendance") without re-deriving it from
+ * a flat 75/85 threshold on the legacy field. Finance is only counted when authorized.
+ */
+export async function getStudentRiskDimensionAtRiskCounts(
+  organizationId: string,
+  options: { financeAuthorized: boolean; sourceVersion?: string; studentIds?: string[] }
+): Promise<{ academic: number; attendance: number; financial: number; progression: number; documents: number }> {
+  const db = await getDb();
+  if (options.studentIds && options.studentIds.length === 0) {
+    return { academic: 0, attendance: 0, financial: 0, progression: 0, documents: 0 };
+  }
+  const base = {
+    organizationId,
+    ...(options.sourceVersion ? { sourceVersion: options.sourceVersion } : {}),
+    ...(options.studentIds ? { studentId: { in: options.studentIds } } : {}),
+  };
+  const atRisk = { in: AT_RISK_LEVELS };
+  const [academic, attendance, financial, progression, documents] = await Promise.all([
+    db.studentRiskProjection.count({ where: { ...base, academicLevel: atRisk } }),
+    db.studentRiskProjection.count({ where: { ...base, attendanceLevel: atRisk } }),
+    options.financeAuthorized
+      ? db.studentRiskProjection.count({ where: { ...base, financialLevel: atRisk } })
+      : Promise.resolve(0),
+    db.studentRiskProjection.count({ where: { ...base, progressionLevel: atRisk } }),
+    db.studentRiskProjection.count({ where: { ...base, documentsLevel: atRisk } }),
+  ]);
+  return { academic, attendance, financial, progression, documents };
+}
+
+/**
+ * The set of the given students whose risk on a specific dimension is at-risk (level ≥ LOW),
+ * from the canonical projection. Lets a scoped consumer (e.g. the teacher portal) decide
+ * "attendance risk" with the SAME per-subject decision Student 360 uses, instead of a flat
+ * 75/85 threshold on the legacy field. Bounded to the passed studentIds (their own scope).
+ */
+export async function getStudentIdsWithDimensionRisk(
+  organizationId: string,
+  dimension: "academic" | "attendance" | "financial" | "progression" | "documents",
+  studentIds: string[]
+): Promise<Set<string>> {
+  if (studentIds.length === 0) return new Set();
+  const db = await getDb();
+  const rows = await db.studentRiskProjection.findMany({
+    where: {
+      organizationId,
+      studentId: { in: studentIds },
+      [`${dimension}Level`]: { in: AT_RISK_LEVELS },
+    },
+    select: { studentId: true },
+  });
+  return new Set(rows.map((r) => r.studentId));
+}
+
 /**
  * The at-risk watchlist (level ≥ LOW), ordered by severity then recency, read straight
  * from the projection — no re-derivation, no per-student engine call. Finance-blind
@@ -186,13 +262,16 @@ export async function getStudentRiskLevelCounts(
  */
 export async function findStudentRiskWatchlist(
   organizationId: string,
-  options: { financeAuthorized: boolean; limit?: number; sourceVersion?: string }
+  options: { financeAuthorized: boolean; limit?: number; sourceVersion?: string; studentIds?: string[] }
 ): Promise<StudentRiskWatchlistRow[]> {
   const db = await getDb();
   const limit = options.limit ?? 20;
+  // Empty studentIds means "no students in scope" → empty watchlist (not "no filter").
+  if (options.studentIds && options.studentIds.length === 0) return [];
   const base = {
     organizationId,
     ...(options.sourceVersion ? { sourceVersion: options.sourceVersion } : {}),
+    ...(options.studentIds ? { studentId: { in: options.studentIds } } : {}),
   };
 
   const rows = options.financeAuthorized

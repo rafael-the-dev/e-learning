@@ -1,6 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import { findUpcomingEventsByOrganization } from "@/modules/academic-calendar/repositories/academic-event.repository";
+import {
+  hasStudentRiskProjectionCoverage,
+  getStudentIdsWithDimensionRisk,
+} from "@/modules/students/repositories/student-risk-projection.repository";
 import type {
   TeacherTodaySession,
   AttendancePendingRow,
@@ -287,7 +291,14 @@ export async function findTeacherRiskRows(
   if (activeClassGroupIds.length === 0) return [];
   const db = await getDb();
 
-  const [blocked, levelRecovery, courseRecovery, failedSubjects, lowAttendance, missingAssessments] =
+  // M11.3: the attendance risk decision comes from the canonical projection once the org is
+  // backfilled (per-subject minimum — the SAME decision Student 360 uses), collapsing the
+  // flat LOW=75 / TREND=85 split into one at-risk answer. Until coverage exists, fall back to
+  // the legacy percentage thresholds. The other sources are teacher-scoped status/assessment
+  // signals not represented in the projection, so they stay.
+  const covered = await hasStudentRiskProjectionCoverage(organizationId);
+
+  const [blocked, levelRecovery, courseRecovery, failedSubjects, legacyLowAttendance, missingAssessments] =
     await Promise.all([
       db.studentLevelProgress.findMany({
         where: { organizationId, status: "BLOCKED", enrollment: { classGroupId: { in: activeClassGroupIds } } },
@@ -334,20 +345,30 @@ export async function findTeacherRiskRows(
         },
         take: RISK_SOURCE_QUERY_LIMIT,
       }),
-      db.studentSubjectProgress.findMany({
-        where: {
-          organizationId,
-          attendancePercentage: { not: null, lt: ATTENDANCE_TREND_THRESHOLD },
-          enrollment: { classGroupId: { in: activeClassGroupIds } },
-        },
-        select: {
-          studentId: true,
-          attendancePercentage: true,
-          student: { select: { firstName: true, lastName: true } },
-          enrollment: { select: { classGroup: { select: { name: true } } } },
-        },
-        take: RISK_SOURCE_QUERY_LIMIT,
-      }),
+      // Legacy attendance source — only used as the fallback when the projection is empty.
+      covered
+        ? Promise.resolve<
+            Array<{
+              studentId: string;
+              attendancePercentage: unknown;
+              student: { firstName: string; lastName: string };
+              enrollment: { classGroup: { name: string } | null };
+            }>
+          >([])
+        : db.studentSubjectProgress.findMany({
+            where: {
+              organizationId,
+              attendancePercentage: { not: null, lt: ATTENDANCE_TREND_THRESHOLD },
+              enrollment: { classGroupId: { in: activeClassGroupIds } },
+            },
+            select: {
+              studentId: true,
+              attendancePercentage: true,
+              student: { select: { firstName: true, lastName: true } },
+              enrollment: { select: { classGroup: { select: { name: true } } } },
+            },
+            take: RISK_SOURCE_QUERY_LIMIT,
+          }),
       db.assessmentResult.findMany({
         where: { organizationId, status: "MISSING", deletedAt: null, assessment: { teacherId, deletedAt: null } },
         select: {
@@ -392,18 +413,51 @@ export async function findTeacherRiskRows(
       detail: "Disciplina reprovada",
     });
   }
-  for (const r of lowAttendance) {
-    const pct = Number(r.attendancePercentage);
-    const isHigh = pct < LOW_ATTENDANCE_THRESHOLD;
-    rows.push({
-      studentId: r.studentId,
-      studentName: `${r.student.firstName} ${r.student.lastName}`,
-      classGroupName: r.enrollment.classGroup?.name ?? "—",
-      riskType: isHigh ? "LOW_ATTENDANCE" : "ATTENDANCE_TREND",
-      severity: isHigh ? "HIGH" : "MEDIUM",
-      detail: `Presença em ${pct.toFixed(0)}%`,
+
+  // Attendance rows — canonical projection decision when covered, else legacy thresholds.
+  if (covered) {
+    const candidates = await db.enrollment.findMany({
+      where: { organizationId, status: "ACTIVE", deletedAt: null, classGroupId: { in: activeClassGroupIds } },
+      select: {
+        studentId: true,
+        student: { select: { firstName: true, lastName: true } },
+        classGroup: { select: { name: true } },
+      },
+      take: RISK_SOURCE_QUERY_LIMIT,
     });
+    const atRisk = await getStudentIdsWithDimensionRisk(
+      organizationId,
+      "attendance",
+      [...new Set(candidates.map((c) => c.studentId))]
+    );
+    const seen = new Set<string>();
+    for (const c of candidates) {
+      if (!atRisk.has(c.studentId) || seen.has(c.studentId)) continue;
+      seen.add(c.studentId);
+      rows.push({
+        studentId: c.studentId,
+        studentName: `${c.student.firstName} ${c.student.lastName}`,
+        classGroupName: c.classGroup?.name ?? "—",
+        riskType: "LOW_ATTENDANCE",
+        severity: "HIGH",
+        detail: "Assiduidade abaixo do mínimo",
+      });
+    }
+  } else {
+    for (const r of legacyLowAttendance) {
+      const pct = Number(r.attendancePercentage);
+      const isHigh = pct < LOW_ATTENDANCE_THRESHOLD;
+      rows.push({
+        studentId: r.studentId,
+        studentName: `${r.student.firstName} ${r.student.lastName}`,
+        classGroupName: r.enrollment.classGroup?.name ?? "—",
+        riskType: isHigh ? "LOW_ATTENDANCE" : "ATTENDANCE_TREND",
+        severity: isHigh ? "HIGH" : "MEDIUM",
+        detail: `Presença em ${pct.toFixed(0)}%`,
+      });
+    }
   }
+
   for (const r of missingAssessments) {
     rows.push({
       studentId: r.studentId,

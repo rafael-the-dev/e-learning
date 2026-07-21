@@ -12,6 +12,9 @@ const mockQueryRaw = vi.fn();
 const mockStudentLevelProgressFindMany = vi.fn();
 const mockStudentCourseProgressFindMany = vi.fn();
 const mockStudentSubjectProgressFindMany = vi.fn();
+const mockRiskProjectionCount = vi.fn();
+const mockRiskProjectionFindMany = vi.fn();
+const mockEnrollmentFindMany = vi.fn();
 
 vi.mock("@/server/db", () => ({
   getDb: async () => ({
@@ -30,6 +33,10 @@ vi.mock("@/server/db", () => ({
     studentLevelProgress: { findMany: mockStudentLevelProgressFindMany },
     studentCourseProgress: { findMany: mockStudentCourseProgressFindMany },
     studentSubjectProgress: { findMany: mockStudentSubjectProgressFindMany },
+    // M11.3: coverage gate + projection reads. Default (set in beforeEach) is count 0 =
+    // not backfilled → the flat-threshold attendance fallback is exercised.
+    studentRiskProjection: { count: mockRiskProjectionCount, findMany: mockRiskProjectionFindMany },
+    enrollment: { findMany: mockEnrollmentFindMany },
     $queryRaw: mockQueryRaw,
   }),
 }));
@@ -56,7 +63,14 @@ import {
 const ORG = "org-1";
 const TEACHER = "teacher-1";
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Default: no projection coverage → legacy paths (clearAllMocks keeps implementations,
+  // so these must be re-defaulted or a covered test's value would leak into the next).
+  mockRiskProjectionCount.mockResolvedValue(0);
+  mockRiskProjectionFindMany.mockResolvedValue([]);
+  mockEnrollmentFindMany.mockResolvedValue([]);
+});
 
 describe("findTeacherTodaySessions", () => {
   it("scopes the query by teacherId + organizationId and orders by startTime", async () => {
@@ -338,6 +352,29 @@ describe("findTeacherRiskRows", () => {
     const rows = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
     expect(rows.find((r) => r.studentId === "s1")).toMatchObject({ riskType: "LOW_ATTENDANCE", severity: "HIGH" });
     expect(rows.find((r) => r.studentId === "s2")).toMatchObject({ riskType: "ATTENDANCE_TREND", severity: "MEDIUM" });
+  });
+
+  it("M11.3: when the projection is backfilled, attendance risk uses the canonical decision (no flat 75/85 split)", async () => {
+    mockRiskProjectionCount.mockResolvedValue(1); // org is backfilled → coverage
+    mockStudentLevelProgressFindMany.mockResolvedValue([]);
+    mockStudentCourseProgressFindMany.mockResolvedValue([]);
+    mockStudentSubjectProgressFindMany.mockResolvedValue([]); // FAILED query only (legacy attendance skipped)
+    mockAssessmentResultFindMany.mockResolvedValue([]);
+    // Candidate students of the teacher's active class groups.
+    mockEnrollmentFindMany.mockResolvedValue([
+      { studentId: "s1", student: { firstName: "Ana", lastName: "Silva" }, classGroup: { name: "Turma A" } },
+      { studentId: "s2", student: { firstName: "Bruno", lastName: "Costa" }, classGroup: { name: "Turma A" } },
+    ]);
+    // Canonical decision: only s1 is attendance at-risk (per-subject minimum), s2 is not.
+    mockRiskProjectionFindMany.mockResolvedValue([{ studentId: "s1" }]);
+
+    const rows = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
+    // The legacy flat-threshold attendance query is not run when covered.
+    expect(mockStudentSubjectProgressFindMany).toHaveBeenCalledTimes(1);
+    expect(rows.find((r) => r.studentId === "s1")).toMatchObject({ riskType: "LOW_ATTENDANCE", severity: "HIGH" });
+    expect(rows.find((r) => r.studentId === "s2")).toBeUndefined(); // not at-risk → not listed
+    // No MEDIUM "trend" bucket exists in the canonical decision.
+    expect(rows.some((r) => r.riskType === "ATTENDANCE_TREND")).toBe(false);
   });
 
   it("scopes missing-assessment risk via assessment.teacherId, not the active class group list", async () => {

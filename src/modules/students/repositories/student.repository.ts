@@ -2,6 +2,10 @@ import { getDb } from "@/server/db";
 import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult, PaginationParams } from "@/shared/types/common";
 import type { Student, StudentBranch, RiskStudent, TopCourseEnrollment, TopClassGroup } from "@/modules/students/types";
+import {
+  hasStudentRiskProjectionCoverage,
+  getStudentRiskDimensionAtRiskCounts,
+} from "@/modules/students/repositories/student-risk-projection.repository";
 
 // =============================================================================
 // STUDENTS REPOSITORY
@@ -319,6 +323,12 @@ export async function countStudentsWithPendingInvoices(organizationId: string): 
 }
 
 export async function countStudentsAtAcademicRisk(organizationId: string): Promise<number> {
+  // M11.3: canonical academic-dimension at-risk count from the projection once backfilled
+  // (same classification as Student 360); legacy FAILED-subject count as the fallback.
+  if (await hasStudentRiskProjectionCoverage(organizationId)) {
+    const dims = await getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true });
+    return dims.academic;
+  }
   const db = await getDb();
   const rows = await db.studentSubjectProgress.findMany({
     where: { organizationId, status: "FAILED" },
@@ -332,6 +342,13 @@ export async function countStudentsWithLowAttendance(
   organizationId: string,
   threshold = 75
 ): Promise<number> {
+  // M11.3: canonical attendance-dimension at-risk count from the projection once backfilled
+  // (per-subject minimum, not a flat threshold); the `threshold` arg applies only to the
+  // legacy fallback below.
+  if (await hasStudentRiskProjectionCoverage(organizationId)) {
+    const dims = await getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true });
+    return dims.attendance;
+  }
   const db = await getDb();
   const rows = await db.studentSubjectProgress.findMany({
     where: {

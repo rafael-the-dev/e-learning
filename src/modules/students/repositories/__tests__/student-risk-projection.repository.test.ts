@@ -7,16 +7,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // buckets, and the finance-blind read variant (no hidden financial-risk inference).
 // =============================================================================
 
-const { upsert, findUnique, groupBy, findMany } = vi.hoisted(() => ({
+const { upsert, findUnique, groupBy, findMany, count } = vi.hoisted(() => ({
   upsert: vi.fn(),
   findUnique: vi.fn(),
   groupBy: vi.fn(),
   findMany: vi.fn(),
+  count: vi.fn(),
 }));
 
 vi.mock("@/server/db", () => ({
   getDb: vi.fn(async () => ({
-    studentRiskProjection: { upsert, findUnique, groupBy, findMany },
+    studentRiskProjection: { upsert, findUnique, groupBy, findMany, count },
   })),
 }));
 
@@ -25,6 +26,9 @@ import {
   findStudentRiskProjection,
   getStudentRiskLevelCounts,
   findStudentRiskWatchlist,
+  hasStudentRiskProjectionCoverage,
+  getStudentRiskDimensionAtRiskCounts,
+  getStudentIdsWithDimensionRisk,
 } from "@/modules/students/repositories/student-risk-projection.repository";
 import type { UpsertStudentRiskProjectionData } from "@/modules/students/services/student-risk-projection.types";
 import type { StudentRiskReason } from "@/modules/students/services/student-risk.service";
@@ -94,6 +98,7 @@ beforeEach(() => {
   findUnique.mockReset();
   groupBy.mockReset();
   findMany.mockReset();
+  count.mockReset();
 });
 
 describe("upsertStudentRiskProjection", () => {
@@ -219,5 +224,53 @@ describe("findStudentRiskWatchlist", () => {
     expect(rows[0].recommendedAction).toBe("Concluir avaliações.");
     expect(rows[0].level).toBe("MODERATE"); // levelWithoutFinance
     expect(rows[0].financialLevel).toBe("NONE"); // hidden
+  });
+
+  it("scopes counts and watchlist to studentIds; empty scope short-circuits with no query", async () => {
+    // Empty scope → no query, empty/zero result (not "no filter").
+    const counts = await getStudentRiskLevelCounts(ORG, { financeAuthorized: true, studentIds: [] });
+    expect(counts.atRisk).toBe(0);
+    const wl = await findStudentRiskWatchlist(ORG, { financeAuthorized: true, studentIds: [] });
+    expect(wl).toEqual([]);
+    expect(groupBy).not.toHaveBeenCalled();
+    expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("M11.3 read-through fallback + dimension reads", () => {
+  it("hasStudentRiskProjectionCoverage is true only when the org has rows", async () => {
+    count.mockResolvedValueOnce(0);
+    expect(await hasStudentRiskProjectionCoverage(ORG)).toBe(false);
+    count.mockResolvedValueOnce(7);
+    expect(await hasStudentRiskProjectionCoverage(ORG)).toBe(true);
+    expect(count.mock.calls[0][0].where).toEqual({ organizationId: ORG });
+  });
+
+  it("getStudentRiskDimensionAtRiskCounts counts each dimension at level ≥ LOW; finance 0 when unauthorized", async () => {
+    count.mockResolvedValue(4);
+    const dims = await getStudentRiskDimensionAtRiskCounts(ORG, { financeAuthorized: false });
+    expect(dims.academic).toBe(4);
+    expect(dims.attendance).toBe(4);
+    expect(dims.financial).toBe(0); // not authorized → not counted
+    // The academic count filters on academicLevel in the at-risk set.
+    const academicCall = count.mock.calls.find((c) => c[0].where.academicLevel);
+    expect(academicCall?.[0].where.academicLevel).toEqual({ in: ["LOW", "MODERATE", "HIGH", "CRITICAL"] });
+  });
+
+  it("getStudentIdsWithDimensionRisk returns the scoped student set for a dimension", async () => {
+    findMany.mockResolvedValue([{ studentId: "s1" }, { studentId: "s3" }]);
+    const ids = await getStudentIdsWithDimensionRisk(ORG, "attendance", ["s1", "s2", "s3"]);
+    expect(ids).toEqual(new Set(["s1", "s3"]));
+    expect(findMany.mock.calls[0][0].where).toMatchObject({
+      organizationId: ORG,
+      studentId: { in: ["s1", "s2", "s3"] },
+      attendanceLevel: { in: ["LOW", "MODERATE", "HIGH", "CRITICAL"] },
+    });
+  });
+
+  it("getStudentIdsWithDimensionRisk short-circuits on an empty student list", async () => {
+    const ids = await getStudentIdsWithDimensionRisk(ORG, "academic", []);
+    expect(ids.size).toBe(0);
+    expect(findMany).not.toHaveBeenCalled();
   });
 });
