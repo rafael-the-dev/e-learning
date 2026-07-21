@@ -69,6 +69,45 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Made the backfill/reconcile **resumable and cursor-based** (review finding **F-H4**) — safe
+  for very large tenants. The blocking "load every eligible student → process → lose progress
+  on interrupt" sweep is replaced by a run pipeline: **cursor page → recompute batch →
+  checkpoint → next page → final coverage verification**.
+  - **`StudentRiskProjectionReconcileRun`** model (+ additive migration) — one row per logical
+    run, holding `mode` / `sourceVersion` / `status`
+    (`PENDING|RUNNING|PAUSED|COMPLETED|COMPLETED_WITH_ERRORS|FAILED|CANCELLED`), a
+    `cursorStudentId`, per-run counters, and a time-boxed lease (`leaseOwner`/`leaseExpiresAt`).
+  - **Cursor pagination** (`id ASC`, `id > cursor` — never `skip`, which degrades with offset);
+    a page never crosses organizations. The sweep walks everything ordered after the cursor
+    (so students created mid-run with a later id are included), and the **final completeness
+    verification** catches anything left (→ coverage INCOMPLETE, healed by a later `missing`
+    run).
+  - **Checkpoint after each batch** (advance cursor + increment counters + renew lease). The
+    cursor moves only at checkpoint, so a process that dies mid-batch simply **repeats that
+    batch on resume** (recalc is idempotent) with no double-counting.
+  - **Lease / concurrency:** advancing a run requires an atomic conditional acquire (a
+    `PENDING/PAUSED/FAILED` run, or a `RUNNING` run whose lease has expired). If it matches
+    nothing, another instance holds it — the caller does not process it. This closes the
+    multi-instance gap noted in F-H3 without a separate lock table; an abandoned `RUNNING` run
+    is recovered once its lease expires.
+  - **Per-invocation budget** (`maxBatches` / `maxDurationMs`) → the run **PAUSES** with its
+    checkpoint saved and resumes next time; the cron/CLI report `completed` / `paused` /
+    `failed` distinctly. Batch size is configurable (`STUDENT_RISK_RECONCILE_BATCH_SIZE`),
+    clamped to `[10, 500]` (default 100).
+  - **Coverage unchanged (F-H1):** only a **completed FULL ("all")** run whose verification
+    confirms 0 uncovered + 0 failures marks READY; a partial completion marks INCOMPLETE; the
+    `missing` / `version-stale` modes never touch coverage. A run's per-student failure never
+    aborts the sweep (recorded as `failedCount`; details go to logs, never PII on the run).
+  - **Cron** now advances the pipeline within a budget (`advanceReconcileRunsWithinBudget`):
+    it **resumes incomplete runs first** (recovering expired leases), then starts new `all`
+    runs for active orgs without a recent run — so the same pipeline serves the initial
+    backfill, the daily reconcile, interruption recovery and version upgrades.
+  - **CLI**: `--all` / `--missing` / `--version-stale`, `--organization <id>`, `--batch-size`,
+    `--max-batches`, `--resume <runId>` (continue a run), `--status --resume <id>` (report
+    without processing); exit 0 on completed/paused, 1 on failed / completed-with-errors /
+    invalid args.
+  - Purely operational: the risk engine, thresholds, `StudentRiskProjection`, the F-H1
+    coverage semantics, the F-H2 event handler and the dashboard consumers are **unchanged**.
 - Added the periodic reconciliation + temporal-risk coverage (review finding **F-H3**) — the
   safety net for what direct events (F-H2) can't guarantee: time-driven drift, lost/FAILED
   events (the bus has no outbox/retry), rules-version drift, policy fan-out and partially-

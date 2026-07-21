@@ -120,6 +120,7 @@ model Organization {
   periodAttendanceSummaries  StudentPeriodAttendanceSummary[]
   studentRiskProjections     StudentRiskProjection[]
   studentRiskProjectionCoverage StudentRiskProjectionCoverage?
+  studentRiskProjectionReconcileRuns StudentRiskProjectionReconcileRun[]
   transcriptNumberCounters   TranscriptNumberCounter[]
   academicTranscripts        AcademicTranscript[]
   academicTranscriptVersions AcademicTranscriptVersion[]
@@ -1433,6 +1434,55 @@ model StudentRiskProjectionCoverage {
   @@index([status])
   @@index([sourceVersion])
   @@map("student_risk_projection_coverage")
+}
+
+// Resumable, cursor-based reconcile execution (M11 / F-H4). One row per logical backfill /
+// reconcile run. Progress (cursor + counters) is checkpointed after each batch so a run
+// survives timeout / restart and resumes after `cursorStudentId` instead of restarting.
+// A time-boxed lease (leaseOwner/leaseExpiresAt) lets exactly one instance advance a run
+// and lets another instance recover a run abandoned mid-flight. This is pure operational
+// infrastructure — it does not change the risk engine, the coverage semantics (only a
+// completed FULL run's verification may set READY), or any consumer.
+model StudentRiskProjectionReconcileRun {
+  id             String @id @default(cuid())
+  organizationId String
+  // ReconcileMode: all | missing | version-stale
+  mode          String
+  sourceVersion String
+  // StudentRiskProjectionReconcileRunStatus:
+  //   PENDING | RUNNING | PAUSED | COMPLETED | COMPLETED_WITH_ERRORS | FAILED | CANCELLED
+  status String @default("PENDING")
+
+  // Cursor is always a studentId (stable id ASC pagination), never a projection id.
+  cursorStudentId String?
+  batchSize       Int
+  processedCount  Int @default(0)
+  succeededCount  Int @default(0)
+  skippedCount    Int @default(0)
+  failedCount     Int @default(0)
+
+  startedAt        DateTime
+  lastCheckpointAt DateTime?
+  completedAt      DateTime?
+  failedAt         DateTime?
+
+  // Short operational code only — never a stack trace or PII.
+  errorCode String? @db.NVarChar(200)
+
+  // Time-boxed lease for multi-instance safety.
+  leaseOwner     String?
+  leaseExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, status])
+  @@index([status, updatedAt])
+  @@index([status, leaseExpiresAt])
+  @@index([organizationId, mode, sourceVersion])
+  @@map("student_risk_projection_reconcile_runs")
 }
 
 // =============================================================================

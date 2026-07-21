@@ -32,16 +32,18 @@ export async function POST(
 
   try {
     let organizationId: string | undefined;
-    let batchSize: number | undefined;
+    let maxBatches: number | undefined;
+    let maxDurationMs: number | undefined;
     try {
       const body = await req.json();
       if (body && typeof body.organizationId === "string") organizationId = body.organizationId;
-      if (body && typeof body.batchSize === "number") batchSize = body.batchSize;
+      if (body && typeof body.maxBatches === "number") maxBatches = body.maxBatches;
+      if (body && typeof body.maxDurationMs === "number") maxDurationMs = body.maxDurationMs;
     } catch {
-      // No / non-JSON body — full run.
+      // No / non-JSON body — unbounded run.
     }
 
-    const result = await runReconcileRiskProjectionsJob({ organizationId, batchSize });
+    const result = await runReconcileRiskProjectionsJob({ organizationId, maxBatches, maxDurationMs });
     return NextResponse.json(result);
   } catch {
     return NextResponse.json({ error: "Erro interno no servidor" }, { status: 500 });

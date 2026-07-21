@@ -71,8 +71,13 @@ M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip 
   non-zero exit on partial failure). Daily billing job emits `INVOICE_OVERDUE` per newly-
   overdue student; handler subscribes. Document-expiry / policy-fan-out / lost-event recovery
   documented as reconcile-covered (batch, never synchronous). See CHANGELOG.
-- **Still open from the review (not this change):** F-H4 (backfill not
-  cursor-batched/resumable for very large tenants),
+- **F-H4 — resumable cursor-based backfill → DONE.** `StudentRiskProjectionReconcileRun`
+  model + migration; cursor pagination (id ASC, no skip); checkpoint per batch; time-boxed
+  lease (multi-instance safe, recovers abandoned runs); per-invocation budget → PAUSE/resume;
+  cron switched to `advanceReconcileRunsWithinBudget` (resume-first, then start new); CLI
+  `--resume`/`--status`/`--batch-size`/`--max-batches`. Coverage/engine/handler unchanged.
+  See CHANGELOG. **The F-H review-High cluster (F-H1..F-H4) is now fully resolved.**
+- **Still open from the review (Mediums/Lows, do NOT block the F-H cluster):**
   F-M1 (overdue status-only vs `dueDate < now`), F-M2 (soft-deleted rows still counted on
   reads / name leak), F-M4 (synchronous recompute burst), F-M6 (non-finance card/alert
   permission gating), F-M7 (pager aria-labels), plus the Lows. F-L4 (unused var) fixed here.

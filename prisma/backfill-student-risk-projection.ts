@@ -1,38 +1,37 @@
 import "dotenv/config";
-import { getDb } from "../src/server/db";
+import type { ReconcileMode } from "../src/modules/students/services/student-risk-projection.service";
 import {
-  reconcileStudentRiskProjectionsForOrg,
-  countStudentsForOrg,
-  type ReconcileMode,
-} from "../src/modules/students/services/student-risk-projection.service";
+  startReconcileRun,
+  resumeReconcileRun,
+  advanceReconcileRunsWithinBudget,
+  resolveReconcileBatchSize,
+} from "../src/modules/students/services/student-risk-projection-reconcile.service";
+import { findReconcileRunById } from "../src/modules/students/repositories/student-risk-projection-reconcile.repository";
 
 // =============================================================================
-// M11.4 / F-H3 — STUDENT RISK PROJECTION BACKFILL / RECONCILIATION RUNNER
+// M11 / F-H4 — STUDENT RISK PROJECTION RECONCILE RUNNER (resumable, cursor-based)
 //
-// Operator-trusted CLI. Shares the exact recompute path used everywhere else
-// (reconcileStudentRiskProjectionsForOrg → recalculateStudentRiskProjection → the
-// H6 engine), so there is a single source of truth for the classification.
+// Uses the run pipeline: a run pages by cursor, checkpoints per batch, and can pause
+// on a batch budget and resume. Coverage READY is set only by a completed FULL ("all")
+// run's verification. Safe to interrupt (Ctrl-C / timeout) and re-run.
 //
-// Idempotent and safe to run repeatedly. Run with --all once per org after the
-// migration and BEFORE releasing the dashboard flip, so no dashboard shows a false
-// "zero at risk". The scheduled daily job (reconcile-risk-projections) does the same
-// --all sweep automatically; this CLI is for the initial backfill and targeted repairs.
+// Modes (default --all): --all | --missing | --version-stale
+// Args:
+//   --organization <id>   start/advance a run for ONE organization
+//   --batch-size <n>       clamped to [10, 500] (default 100)
+//   --max-batches <n>      pause after N batches (budget); resume with --resume
+//   --resume <runId>       continue an existing run instead of starting a new one
+//   --status --resume <id> print a run's status/progress and exit (no processing)
+//   (no --organization, no --resume) advance ALL orgs within budget (like the cron)
 //
-// Modes (mutually exclusive; --all is the default):
-//   --all            recompute EVERY eligible student; the ONLY mode that updates the
-//                    coverage rollout state (READY/INCOMPLETE).
-//   --missing        recompute only eligible students with NO projection row (targeted).
-//   --version-stale  recompute only students whose row is on an OLDER rules version
-//                    (after a STUDENT_RISK_SOURCE_VERSION bump). NOT factual-drift detection.
-//                    (kept as `--stale` alias for back-compat.)
-//
-// Usage:
-//   pnpm db:backfill-student-risk-projection                       # dry run, all orgs (report only)
-//   pnpm db:backfill-student-risk-projection -- --apply            # --all recompute + persist
-//   pnpm db:backfill-student-risk-projection -- --apply --missing  # only students lacking a row
-//   pnpm db:backfill-student-risk-projection -- --apply --version-stale
-//   pnpm db:backfill-student-risk-projection -- --apply --org=<id> --batch=1000
+// Exit code: 0 = completed or intentionally paused · 1 = failed / invalid args /
+// completed-with-errors.
 // =============================================================================
+
+function argValue(argv: string[], flag: string): string | null {
+  const i = argv.indexOf(flag);
+  return i >= 0 && i + 1 < argv.length ? argv[i + 1] : null;
+}
 
 function parseMode(argv: string[]): ReconcileMode {
   if (argv.includes("--missing")) return "missing";
@@ -40,82 +39,82 @@ function parseMode(argv: string[]): ReconcileMode {
   return "all";
 }
 
-function parseArgs(argv: string[]) {
-  return {
-    apply: argv.includes("--apply"),
-    mode: parseMode(argv),
-    organizationId: argv.find((a) => a.startsWith("--org="))?.slice("--org=".length) ?? null,
-    batchSize: argv.find((a) => a.startsWith("--batch="))
-      ? Number(argv.find((a) => a.startsWith("--batch="))!.slice("--batch=".length))
-      : undefined,
-  };
-}
+async function main(): Promise<number> {
+  const argv = process.argv.slice(2);
+  const mode = parseMode(argv);
+  const organizationId = argValue(argv, "--organization") ?? argValue(argv, "--org");
+  const resumeRunId = argValue(argv, "--resume");
+  const statusOnly = argv.includes("--status");
+  const batchSizeRaw = argValue(argv, "--batch-size") ?? argValue(argv, "--batch");
+  const batchSize = batchSizeRaw != null ? resolveReconcileBatchSize(Number(batchSizeRaw)) : undefined;
+  const maxBatchesRaw = argValue(argv, "--max-batches");
+  const maxBatches = maxBatchesRaw != null ? Number(maxBatchesRaw) : undefined;
 
-async function main() {
-  const { apply, mode, organizationId, batchSize } = parseArgs(process.argv.slice(2));
-  const db = await getDb();
+  if (maxBatches != null && (!Number.isFinite(maxBatches) || maxBatches <= 0)) {
+    console.error("Invalid --max-batches (must be a positive number).");
+    return 1;
+  }
 
-  const orgs = organizationId
-    ? [{ id: organizationId, name: organizationId }]
-    : await db.organization.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } });
+  // --status: report a run and exit without processing.
+  if (statusOnly) {
+    if (!resumeRunId) {
+      console.error("--status requires --resume <runId>.");
+      return 1;
+    }
+    const run = await findReconcileRunById(resumeRunId);
+    if (!run) {
+      console.error(`Run ${resumeRunId} not found.`);
+      return 1;
+    }
+    console.log(JSON.stringify(
+      {
+        id: run.id, organizationId: run.organizationId, mode: run.mode, status: run.status,
+        cursorStudentId: run.cursorStudentId, processed: run.processedCount, succeeded: run.succeededCount,
+        skipped: run.skippedCount, failed: run.failedCount, batchSize: run.batchSize,
+        startedAt: run.startedAt, lastCheckpointAt: run.lastCheckpointAt, completedAt: run.completedAt,
+      },
+      null,
+      2
+    ));
+    return 0;
+  }
 
+  // Resume an existing run.
+  if (resumeRunId) {
+    const outcome = await resumeReconcileRun({ runId: resumeRunId, maxBatches });
+    if (!outcome) {
+      console.error(`Run ${resumeRunId} could not be acquired (held by another worker, or not resumable).`);
+      return 1;
+    }
+    console.log(`Run ${outcome.runId} — ${outcome.status}: processed ${outcome.processed}, succeeded ${outcome.succeeded}, skipped ${outcome.skipped}, failed ${outcome.failed}.`);
+    return outcome.status === "COMPLETED" || outcome.status === "PAUSED" ? 0 : 1;
+  }
+
+  // Start + advance a run for ONE organization.
+  if (organizationId) {
+    const run = await startReconcileRun({ organizationId, mode, batchSize });
+    const outcome = await resumeReconcileRun({ runId: run.id, maxBatches });
+    if (!outcome) {
+      console.error(`Started run ${run.id} but could not acquire it.`);
+      return 1;
+    }
+    console.log(`Run ${outcome.runId} [${mode}] org ${organizationId} — ${outcome.status}: processed ${outcome.processed}, succeeded ${outcome.succeeded}, skipped ${outcome.skipped}, failed ${outcome.failed}.`);
+    if (outcome.status === "PAUSED") console.log(`  paused on budget — resume with: --resume ${outcome.runId}`);
+    return outcome.status === "COMPLETED" || outcome.status === "PAUSED" ? 0 : 1;
+  }
+
+  // No org / no resume → advance all orgs within budget (like the cron).
+  const result = await advanceReconcileRunsWithinBudget({ maxBatches });
   console.log(
-    `\n=== Student risk projection backfill — ${apply ? "APPLY" : "DRY RUN (report only)"}` +
-      ` [mode: ${mode}] across ${orgs.length} organization(s) ===\n`
+    `Reconcile [${result.status}] — started ${result.runsStarted}, resumed ${result.runsResumed}, ` +
+      `orgs completed ${result.organizationsCompleted}, students processed ${result.studentsProcessed}, ` +
+      `failed ${result.studentsFailed}, remaining runs ${result.remainingRuns}.`
   );
-
-  const grand = { processed: 0, changed: 0, failed: 0 };
-
-  for (const org of orgs) {
-    if (!apply) {
-      // Dry run reports the eligible-student count (the --all scope); targeted modes only
-      // ever process a subset of it.
-      const students = await countStudentsForOrg(org.id);
-      if (students === 0) continue;
-      grand.processed += students;
-      console.log(`— ${org.name} (${org.id})`);
-      console.log(`    eligible students ........ ${students}${mode === "all" ? "" : ` (${mode} processes a subset)`}`);
-      console.log("");
-      continue;
-    }
-
-    const result = await reconcileStudentRiskProjectionsForOrg(org.id, { mode, batchSize });
-    if (result.processed === 0) continue;
-
-    grand.processed += result.processed;
-    grand.changed += result.changed;
-    grand.failed += result.failed;
-
-    console.log(`— ${org.name} (${org.id})`);
-    console.log(`    processed ................ ${result.processed}`);
-    console.log(`    changed (written) ........ ${result.changed}`);
-    console.log(`    failed ................... ${result.failed}`);
-    for (const f of result.failures.slice(0, 5)) {
-      console.log(`      ✗ student ${f.studentId} — ${f.error}`);
-    }
-    console.log("");
-  }
-
-  console.log("=== TOTAL ===");
-  console.log(`  processed : ${grand.processed}`);
-  if (apply) {
-    console.log(`  changed   : ${grand.changed}`);
-    console.log(`  failed    : ${grand.failed}`);
-    console.log(
-      grand.failed === 0
-        ? `\n✅ Reconcile complete (mode: ${mode}).${mode === "all" ? " Coverage rollout state updated per org." : ""}`
-        : `\n⚠️  ${grand.failed} student(s) failed to recompute — review the errors above and re-run.`
-    );
-  } else {
-    console.log(`\nℹ️  Dry run only. Re-run with --apply to recompute and persist.`);
-  }
-
-  // Non-zero exit on partial failure so a CI/cron wrapper can detect it.
-  process.exitCode = grand.failed > 0 ? 1 : 0;
+  return result.status === "failed" || result.studentsFailed > 0 ? 1 : 0;
 }
 
 main()
-  .then(() => process.exit(process.exitCode ?? 0))
+  .then((code) => process.exit(code))
   .catch((e) => {
     console.error(e);
     process.exit(1);

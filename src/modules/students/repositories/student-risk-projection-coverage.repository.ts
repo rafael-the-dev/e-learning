@@ -92,6 +92,45 @@ export async function listEligibleStudentIdsWithoutRiskProjection(
   return rows.map((r) => r.id);
 }
 
+/**
+ * One CURSOR page of eligible student ids for a reconcile mode (F-H4). Stable `id ASC`
+ * pagination — `afterStudentId` is exclusive (`id > cursor`), never `skip` (which degrades
+ * as the offset grows). The mode narrows the set:
+ *   - "all"           — every eligible student.
+ *   - "missing"       — eligible students with NO projection row.
+ *   - "version-stale" — eligible students that HAVE a row but NONE on the current version.
+ * Always org-scoped; a page never crosses organizations.
+ */
+export async function findEligibleStudentIdsPageForMode(params: {
+  organizationId: string;
+  mode: "all" | "missing" | "version-stale";
+  sourceVersion: string;
+  afterStudentId: string | null;
+  take: number;
+}): Promise<string[]> {
+  const db = await getDb();
+  const { organizationId, mode, sourceVersion, afterStudentId, take } = params;
+
+  const modeFilter =
+    mode === "missing"
+      ? { studentRiskProjections: { none: {} } }
+      : mode === "version-stale"
+        ? { studentRiskProjections: { some: {}, none: { sourceVersion } } }
+        : {};
+
+  const rows = await db.student.findMany({
+    where: {
+      ...buildRiskProjectionEligibleStudentWhere(organizationId),
+      ...(afterStudentId ? { id: { gt: afterStudentId } } : {}),
+      ...modeFilter,
+    },
+    select: { id: true },
+    orderBy: { id: "asc" },
+    take,
+  });
+  return rows.map((r) => r.id);
+}
+
 // ─── Coverage row CRUD ────────────────────────────────────────────────────────
 
 type CoverageRow = {
