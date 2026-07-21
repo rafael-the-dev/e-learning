@@ -92,9 +92,11 @@ Brief pointers so the review's remaining findings have one home.
 - ~~**H3 — Finance statement eager + unbounded.**~~ **DONE** — `core.finance` now carries
   SQL-aggregated summaries only (`getStudentFinanceSummary`), the history is paged (M2), and
   the overview no longer loads the statement. See CHANGELOG.
-- **H4 — Eligibility N+1.** `evaluateEligibilityForAllSubjects` (~5 queries/subject) in
-  the Progress tab. Lives in `prerequisites`. Fix: batch the enrollment + progress +
-  prerequisite loads.
+- ~~**H4 — Eligibility N+1.**~~ **DONE** — the Progress-tab whole-level evaluation is now a
+  constant-query **batch loader** (`loadEligibilityEvaluationContext`) feeding a **pure**
+  `evaluateEligibilityForAllSubjects(context)` (no IO, no per-subject round-trip); the
+  student's progress is loaded once by student so transitive (out-of-level) prerequisites are
+  covered. Outputs unchanged (data-access optimization, not an engine revision). See CHANGELOG.
 - **Mediums.** Raw reviewer UUID in the attendance justifications table; `refundMethod`
   rendered as a raw enum; header action overload.
   *(Resolved: cross-module prerequisites repo duplication — M1; finance-tab client-side

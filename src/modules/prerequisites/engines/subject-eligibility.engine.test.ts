@@ -2,11 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   decideSubjectEligibility,
   evaluateSubjectEligibility,
+  evaluateEligibilityForAllSubjects,
+  loadEligibilityEvaluationContext,
   type SubjectEligibilityDecisionInput,
   type EligibilityGroupInput,
   type EligibilityPrerequisiteItemInput,
   type EligibilityStudentProgressInput,
+  type EligibilityEvaluationContext,
 } from "@/modules/prerequisites/engines/subject-eligibility.engine";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { SUBJECT_ELIGIBILITY_STATUS } from "@/modules/prerequisites/types";
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
@@ -298,27 +303,42 @@ describe("decideSubjectEligibility", () => {
 
 // ─── IO wrapper: tenant scoping + enrollment validation ───────────────────────
 
-const { enrollmentFindFirst, progressFindFirst, progressFindMany, findGroups, findWaivers } = vi.hoisted(() => ({
+const {
+  enrollmentFindFirst,
+  progressFindFirst,
+  progressFindMany,
+  levelSubjectFindMany,
+  findGroups,
+  findGroupsBatch,
+  findWaivers,
+  findWaiversBatch,
+} = vi.hoisted(() => ({
   enrollmentFindFirst: vi.fn(),
   progressFindFirst: vi.fn(),
   progressFindMany: vi.fn(),
+  levelSubjectFindMany: vi.fn(),
   findGroups: vi.fn(),
+  findGroupsBatch: vi.fn(),
   findWaivers: vi.fn(),
+  findWaiversBatch: vi.fn(),
 }));
 
 vi.mock("@/server/db", () => ({
   getDb: vi.fn(async () => ({
     enrollment: { findFirst: enrollmentFindFirst },
     studentSubjectProgress: { findFirst: progressFindFirst, findMany: progressFindMany },
+    levelSubject: { findMany: levelSubjectFindMany },
   })),
 }));
 
 vi.mock("@/modules/prerequisites/repositories/prerequisite-item.repository", () => ({
   findAllActiveGroupsWithItems: findGroups,
+  findActiveGroupsWithItemsForLevelSubjects: findGroupsBatch,
 }));
 
 vi.mock("@/modules/prerequisites/repositories/prerequisite-waiver.repository", () => ({
   findWaiversByEnrollmentAndSubject: findWaivers,
+  findWaivers: findWaiversBatch,
 }));
 
 describe("evaluateSubjectEligibility (tenant scope + enrollment)", () => {
@@ -360,5 +380,366 @@ describe("evaluateSubjectEligibility (tenant scope + enrollment)", () => {
     expect(result.status).toBe(S.BLOCKED);
     expect(progressFindMany).not.toHaveBeenCalled();
     expect(findGroups).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// H4 — batch loader + PURE all-subjects engine. The whole-level evaluation must
+// (1) produce IDENTICAL outputs to the per-subject path, (2) cost a CONSTANT
+// number of queries regardless of subject count, (3) keep the evaluation pure
+// (no IO), and (4) stay tenant/enrollment scoped.
+// =============================================================================
+
+// ── Pure-engine helpers (no IO) ───────────────────────────────────────────────
+
+function ctx(overrides: Partial<EligibilityEvaluationContext> = {}): EligibilityEvaluationContext {
+  return {
+    organizationId: "org-1",
+    enrollmentId: "enr-1",
+    studentId: "s1",
+    enrollmentExists: true,
+    targetLevelSubjectIds: [],
+    groupsByLevelSubjectId: new Map(),
+    waiversByLevelSubjectId: new Map(),
+    targetStatusByLevelSubjectId: new Map(),
+    studentProgress: [],
+    ...overrides,
+  };
+}
+
+describe("evaluateEligibilityForAllSubjects (pure) — functional parity", () => {
+  it("returns an empty map when the enrollment does not exist", () => {
+    const map = evaluateEligibilityForAllSubjects(
+      ctx({ enrollmentExists: false, targetLevelSubjectIds: ["a", "b"] })
+    );
+    expect(map.size).toBe(0);
+  });
+
+  it("no prerequisites → ELIGIBLE", () => {
+    const map = evaluateEligibilityForAllSubjects(ctx({ targetLevelSubjectIds: ["t1"] }));
+    expect(map.get("t1")?.status).toBe(S.ELIGIBLE);
+  });
+
+  it("ALL group satisfied → ELIGIBLE; partially satisfied → PENDING_PREREQUISITE", () => {
+    const groups = new Map<string, EligibilityGroupInput[]>([
+      [
+        "t1",
+        [
+          group({
+            logicType: "ALL",
+            items: [
+              item({ prerequisiteLevelSubjectId: "A", requirementType: "MUST_PASS" }),
+              item({ prerequisiteLevelSubjectId: "B", requirementType: "MUST_PASS" }),
+            ],
+          }),
+        ],
+      ],
+      [
+        "t2",
+        [
+          group({
+            logicType: "ALL",
+            items: [
+              item({ prerequisiteLevelSubjectId: "A", requirementType: "MUST_PASS" }),
+              item({ prerequisiteLevelSubjectId: "B", requirementType: "MUST_PASS" }),
+            ],
+          }),
+        ],
+      ],
+    ]);
+    const map = evaluateEligibilityForAllSubjects(
+      ctx({
+        targetLevelSubjectIds: ["t1", "t2"],
+        groupsByLevelSubjectId: groups,
+        studentProgress: [prog("A", "PASSED"), prog("B", "PASSED")], // t2's B still passed → both eligible
+      })
+    );
+    expect(map.get("t1")?.status).toBe(S.ELIGIBLE);
+    expect(map.get("t2")?.status).toBe(S.ELIGIBLE);
+
+    const partial = evaluateEligibilityForAllSubjects(
+      ctx({
+        targetLevelSubjectIds: ["t1"],
+        groupsByLevelSubjectId: groups,
+        studentProgress: [prog("A", "PASSED")], // B missing
+      })
+    );
+    expect(partial.get("t1")?.status).toBe(S.PENDING_PREREQUISITE);
+  });
+
+  it("ANY group satisfied by one item → ELIGIBLE; none satisfied → PENDING_PREREQUISITE", () => {
+    const groups = new Map<string, EligibilityGroupInput[]>([
+      [
+        "t1",
+        [
+          group({
+            logicType: "ANY",
+            items: [
+              item({ prerequisiteLevelSubjectId: "A", requirementType: "MUST_PASS" }),
+              item({ prerequisiteLevelSubjectId: "B", requirementType: "MUST_PASS" }),
+            ],
+          }),
+        ],
+      ],
+    ]);
+    expect(
+      evaluateEligibilityForAllSubjects(
+        ctx({ targetLevelSubjectIds: ["t1"], groupsByLevelSubjectId: groups, studentProgress: [prog("A", "PASSED")] })
+      ).get("t1")?.status
+    ).toBe(S.ELIGIBLE);
+    expect(
+      evaluateEligibilityForAllSubjects(
+        ctx({
+          targetLevelSubjectIds: ["t1"],
+          groupsByLevelSubjectId: groups,
+          studentProgress: [prog("A", "IN_PROGRESS"), prog("B", "FAILED")],
+        })
+      ).get("t1")?.status
+    ).toBe(S.PENDING_PREREQUISITE);
+  });
+
+  it("MUST_PASS vs MUST_COMPLETE vs no-progress semantics are preserved per subject", () => {
+    const groups = new Map<string, EligibilityGroupInput[]>([
+      ["mustPass", [group({ items: [item({ prerequisiteLevelSubjectId: "A", requirementType: "MUST_PASS" })] })]],
+      ["mustComplete", [group({ items: [item({ prerequisiteLevelSubjectId: "A", requirementType: "MUST_COMPLETE" })] })]],
+      ["noProgress", [group({ items: [item({ prerequisiteLevelSubjectId: "Z", requirementType: "MUST_PASS" })] })]],
+    ]);
+    const map = evaluateEligibilityForAllSubjects(
+      ctx({
+        targetLevelSubjectIds: ["mustPass", "mustComplete", "noProgress"],
+        groupsByLevelSubjectId: groups,
+        studentProgress: [prog("A", "COMPLETED")], // COMPLETED: fails MUST_PASS, satisfies MUST_COMPLETE
+      })
+    );
+    expect(map.get("mustPass")?.status).toBe(S.PENDING_PREREQUISITE);
+    expect(map.get("mustComplete")?.status).toBe(S.ELIGIBLE);
+    expect(map.get("noProgress")?.status).toBe(S.PENDING_PREREQUISITE); // Z never attempted
+  });
+
+  it("target already PASSED/COMPLETED → ALREADY_COMPLETED (before prereq eval)", () => {
+    const map = evaluateEligibilityForAllSubjects(
+      ctx({
+        targetLevelSubjectIds: ["t1"],
+        targetStatusByLevelSubjectId: new Map([["t1", "PASSED"]]),
+        groupsByLevelSubjectId: new Map([
+          ["t1", [group({ items: [item({ prerequisiteLevelSubjectId: "A" })] })]], // unmet, but irrelevant
+        ]),
+      })
+    );
+    expect(map.get("t1")?.status).toBe(S.ALREADY_COMPLETED);
+  });
+
+  it("a prerequisite OUTSIDE the current level (transitive) is satisfied from org-wide progress", () => {
+    // "OUT" is not a target subject of this level, but the student passed it in a prior
+    // level; because studentProgress is scoped by student (not level), the transitive
+    // dependency is present and the target becomes eligible.
+    const map = evaluateEligibilityForAllSubjects(
+      ctx({
+        targetLevelSubjectIds: ["t1"],
+        groupsByLevelSubjectId: new Map([
+          ["t1", [group({ items: [item({ prerequisiteLevelSubjectId: "OUT", requirementType: "MUST_PASS" })] })]],
+        ]),
+        studentProgress: [prog("OUT", "PASSED")], // earned in another (completed) level
+      })
+    );
+    expect(map.get("t1")?.status).toBe(S.ELIGIBLE);
+  });
+
+  it("evaluates every target and returns exactly one result per subject", () => {
+    const targets = Array.from({ length: 12 }, (_, i) => `t${i}`);
+    const map = evaluateEligibilityForAllSubjects(ctx({ targetLevelSubjectIds: targets }));
+    expect(map.size).toBe(12);
+    for (const t of targets) expect(map.get(t)?.levelSubjectId).toBe(t);
+  });
+});
+
+describe("evaluateEligibilityForAllSubjects (pure) — architecture", () => {
+  const SOURCE = readFileSync(
+    join(process.cwd(), "src/modules/prerequisites/engines/subject-eligibility.engine.ts"),
+    "utf8"
+  );
+
+  it("the all-subjects engine is a SYNCHRONOUS pure function (not async)", () => {
+    expect(SOURCE).toContain("export function evaluateEligibilityForAllSubjects(");
+    expect(SOURCE).not.toContain("export async function evaluateEligibilityForAllSubjects(");
+  });
+
+  it("the evaluation body performs no IO (no await / getDb / db. inside the function)", () => {
+    const start = SOURCE.indexOf("export function evaluateEligibilityForAllSubjects(");
+    const body = SOURCE.slice(start);
+    expect(body).not.toContain("await");
+    expect(body).not.toContain("getDb");
+    expect(body).not.toMatch(/\bdb\./);
+  });
+});
+
+// ── Batch loader (IO): scoping + constant query count ─────────────────────────
+
+function resetLoaderMocks() {
+  enrollmentFindFirst.mockReset();
+  progressFindFirst.mockReset();
+  progressFindMany.mockReset();
+  levelSubjectFindMany.mockReset();
+  findGroups.mockReset();
+  findGroupsBatch.mockReset();
+  findWaivers.mockReset();
+  findWaiversBatch.mockReset();
+}
+
+describe("loadEligibilityEvaluationContext (batch loader) — scoping", () => {
+  beforeEach(resetLoaderMocks);
+
+  it("gates on the enrollment (org + soft-delete); absent → empty context, no further queries", async () => {
+    enrollmentFindFirst.mockResolvedValue(null);
+
+    const context = await loadEligibilityEvaluationContext({
+      organizationId: "org-1",
+      studentId: "s1",
+      enrollmentId: "e-missing",
+      courseLevelId: "lvl-1",
+    });
+
+    expect(enrollmentFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: "e-missing", organizationId: "org-1", deletedAt: null }),
+      })
+    );
+    expect(context.enrollmentExists).toBe(false);
+    expect(context.targetLevelSubjectIds).toEqual([]);
+    // No level-subjects / progress / prerequisites loaded once the gate fails.
+    expect(levelSubjectFindMany).not.toHaveBeenCalled();
+    expect(progressFindMany).not.toHaveBeenCalled();
+    expect(findGroupsBatch).not.toHaveBeenCalled();
+    expect(findWaiversBatch).not.toHaveBeenCalled();
+    // And the pure engine yields no rows for it.
+    expect(evaluateEligibilityForAllSubjects(context).size).toBe(0);
+  });
+
+  it("scopes progress by the enrollment's OWN studentId and every read by organizationId", async () => {
+    enrollmentFindFirst.mockResolvedValue({ studentId: "real-student" });
+    levelSubjectFindMany.mockResolvedValue([{ id: "ls1" }, { id: "ls2" }]);
+    progressFindMany.mockResolvedValue([]);
+    findGroupsBatch.mockResolvedValue([]);
+    findWaiversBatch.mockResolvedValue([]);
+
+    const context = await loadEligibilityEvaluationContext({
+      organizationId: "org-1",
+      studentId: "IGNORED-HINT", // must not be trusted over the enrollment's student
+      enrollmentId: "e1",
+      courseLevelId: "lvl-1",
+    });
+
+    // Progress is scoped by the authoritative student, not the caller hint.
+    expect(progressFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ organizationId: "org-1", studentId: "real-student" }) })
+    );
+    expect(progressFindMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ studentId: "IGNORED-HINT" }) })
+    );
+    // Target subjects: ACTIVE, non-deleted, scoped by org + the resolved level.
+    expect(levelSubjectFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ courseLevelId: "lvl-1", organizationId: "org-1", status: "ACTIVE", deletedAt: null }),
+      })
+    );
+    // Prerequisites batched over the target ids; waivers scoped to the enrollment.
+    expect(findGroupsBatch).toHaveBeenCalledWith(["ls1", "ls2"], "org-1");
+    expect(findWaiversBatch).toHaveBeenCalledWith(
+      "org-1",
+      expect.objectContaining({ enrollmentId: "e1", status: "ACTIVE" })
+    );
+    expect(context.studentId).toBe("real-student");
+    expect(context.targetLevelSubjectIds).toEqual(["ls1", "ls2"]);
+  });
+
+  it("indexes groups, waivers and target status by levelSubjectId", async () => {
+    enrollmentFindFirst.mockResolvedValue({ studentId: "s1" });
+    levelSubjectFindMany.mockResolvedValue([{ id: "ls1" }, { id: "ls2" }]);
+    // studentProgress (by student) then target status (by enrollment) — mocked per call.
+    progressFindMany
+      .mockResolvedValueOnce([{ levelSubjectId: "A", status: "PASSED", finalGrade: 80 }])
+      .mockResolvedValueOnce([{ levelSubjectId: "ls1", status: "COMPLETED" }]);
+    findGroupsBatch.mockResolvedValue([
+      {
+        id: "g1",
+        levelSubjectId: "ls1",
+        name: "G1",
+        logicType: "ALL",
+        items: [
+          {
+            id: "i1",
+            prerequisiteLevelSubjectId: "A",
+            requirementType: "MUST_PASS",
+            minimumRequiredGrade: null,
+            prerequisiteLevelSubject: { subject: { name: "Álgebra" } },
+          },
+        ],
+      },
+    ]);
+    findWaiversBatch.mockResolvedValue([
+      { levelSubjectId: "ls2", prerequisiteGroupId: null, prerequisiteItemId: null },
+    ]);
+
+    const context = await loadEligibilityEvaluationContext({
+      organizationId: "org-1",
+      studentId: "s1",
+      enrollmentId: "e1",
+      courseLevelId: "lvl-1",
+    });
+
+    expect(context.groupsByLevelSubjectId.get("ls1")?.[0].items[0].subjectName).toBe("Álgebra");
+    expect(context.waiversByLevelSubjectId.get("ls2")).toEqual([{ prerequisiteGroupId: null, prerequisiteItemId: null }]);
+    expect(context.targetStatusByLevelSubjectId.get("ls1")).toBe("COMPLETED");
+    expect(context.studentProgress).toEqual([{ levelSubjectId: "A", status: "PASSED", finalGrade: 80 }]);
+  });
+});
+
+describe("loadEligibilityEvaluationContext — CONSTANT query count", () => {
+  beforeEach(resetLoaderMocks);
+
+  const loaderQueryCount = () =>
+    enrollmentFindFirst.mock.calls.length +
+    levelSubjectFindMany.mock.calls.length +
+    progressFindMany.mock.calls.length +
+    findGroupsBatch.mock.calls.length +
+    findWaiversBatch.mock.calls.length;
+
+  async function runForNSubjects(n: number): Promise<number> {
+    resetLoaderMocks();
+    enrollmentFindFirst.mockResolvedValue({ studentId: "s1" });
+    levelSubjectFindMany.mockResolvedValue(Array.from({ length: n }, (_, i) => ({ id: `ls${i}` })));
+    progressFindMany.mockResolvedValue([]);
+    findGroupsBatch.mockResolvedValue([]);
+    findWaiversBatch.mockResolvedValue([]);
+
+    const context = await loadEligibilityEvaluationContext({
+      organizationId: "org-1",
+      studentId: "s1",
+      enrollmentId: "e1",
+      courseLevelId: "lvl-1",
+    });
+    const queriesAfterLoad = loaderQueryCount();
+
+    // The pure evaluation must add ZERO queries no matter how many subjects.
+    const map = evaluateEligibilityForAllSubjects(context);
+    expect(map.size).toBe(n);
+    expect(loaderQueryCount()).toBe(queriesAfterLoad);
+
+    return queriesAfterLoad;
+  }
+
+  it("issues the same number of queries for 5, 20 and 50 subjects (no N+1)", async () => {
+    const q5 = await runForNSubjects(5);
+    const q20 = await runForNSubjects(20);
+    const q50 = await runForNSubjects(50);
+
+    expect(q5).toBe(q20);
+    expect(q20).toBe(q50);
+    // enrollment(1) + levelSubjects(1) + progress×2 + groups(1) + waivers(1) = 6, constant.
+    expect(q5).toBe(6);
+    // The old per-subject loop (evaluateSubjectEligibility) is never used by the batch path.
+    expect(progressFindFirst).not.toHaveBeenCalled();
+    expect(findGroups).not.toHaveBeenCalled();
+    expect(findWaivers).not.toHaveBeenCalled();
   });
 });

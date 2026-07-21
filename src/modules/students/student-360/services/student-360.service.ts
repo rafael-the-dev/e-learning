@@ -24,7 +24,10 @@ import { findStudentAssessmentResults } from "@/modules/grades/repositories/stud
 import { getRecentTimelineEvents, getStudentTimeline } from "@/modules/student-timeline/services/student-timeline.service";
 import { getStudentDocuments, getStudentDocumentCount } from "@/modules/student-documents/services/student-document.service";
 import { getLevelSubjectsByLevel } from "@/modules/courses/services/course.service";
-import { evaluateEligibilityForAllSubjects } from "@/modules/prerequisites/engines/subject-eligibility.engine";
+import {
+  evaluateEligibilityForAllSubjects,
+  loadEligibilityEvaluationContext,
+} from "@/modules/prerequisites/engines/subject-eligibility.engine";
 import { getWalletByStudentId, getRecentTransactions } from "@/modules/wallets/services/wallet.service";
 import {
   findAttendanceRecordsByStudent,
@@ -415,13 +418,21 @@ export async function getProgressTabData(
     return { levelSubjects: [], eligibility: [] };
   }
 
-  const [levelSubjects, eligibilityMap] = await Promise.all([
+  // H4: eligibility for the whole level is now a batch-load (constant query count) +
+  // a PURE evaluation, instead of one query set per subject (the old N+1).
+  const [levelSubjects, eligibilityContext] = await Promise.all([
     getLevelSubjectsByLevel(resolvedLevelId, organizationId),
-    evaluateEligibilityForAllSubjects(currentEnrollment.id, organizationId),
+    loadEligibilityEvaluationContext({
+      organizationId,
+      studentId: currentEnrollment.studentId,
+      enrollmentId: currentEnrollment.id,
+      courseLevelId: resolvedLevelId,
+    }),
   ]);
+  const eligibilityMap = evaluateEligibilityForAllSubjects(eligibilityContext);
 
-  // evaluateEligibilityForAllSubjects only evaluates ACTIVE level-subjects of the
-  // resolved level — filter the display list to match so every row has a real result.
+  // The eligibility engine only evaluates ACTIVE level-subjects of the resolved level —
+  // filter the display list to match so every row has a real result.
   const activeLevelSubjects = levelSubjects.filter((ls) => ls.status === "ACTIVE");
   const eligibility: SubjectEligibilityRow[] = activeLevelSubjects.map((levelSubject) => ({
     levelSubject,

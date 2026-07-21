@@ -69,6 +69,28 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Removed the eligibility N+1 in the Progress tab (H4). Evaluating a whole level used to
+  run one full query set **per subject** (`evaluateEligibilityForAllSubjects` looped
+  `evaluateSubjectEligibility`, which re-loaded the enrollment and the student's entire
+  subject progress for every subject — ~5 queries × N). It is now a two-step design:
+  - a **batch loader** `loadEligibilityEvaluationContext({organizationId, studentId,
+    enrollmentId, courseLevelId})` that fetches everything the decision needs in a
+    **constant** number of queries regardless of subject count (enrollment tenant-gate →
+    ACTIVE level subjects + the student's org-wide progress + the enrollment's target-subject
+    status + the prerequisite groups/items for all targets in one `IN (…)` + the enrollment's
+    active waivers), and
+  - a **pure** `evaluateEligibilityForAllSubjects(context)` that applies the existing
+    `decideSubjectEligibility` rules per subject over in-memory Maps — no IO, no `await`.
+
+  The student's progress is loaded **once, scoped by student** (not by level), so a
+  prerequisite that lives **outside the current level** (a transitive dependency) is already
+  present in the context and evaluated correctly. Outputs are identical to the per-subject
+  path — the academic rules (ALL/ANY, MUST_PASS/MUST_COMPLETE/MINIMUM_GRADE, waivers,
+  ALREADY_COMPLETED, BLOCKED, result order) are unchanged; this is a data-access optimization,
+  not an engine revision. Tenant isolation is preserved (the enrollment is validated against
+  the org + soft-delete, and progress is scoped by the enrollment's own student — a caller
+  studentId hint is not trusted). The single-subject `evaluateSubjectEligibility` IO helper is
+  retained for its own callers; the batch path no longer uses it.
 - Separated the finance **summary** from the finance **history** (H3) — the last big
   structural change to the finance data flow. `core.finance` now carries only aggregate
   SUMMARIES (billing KPIs/counts + wallet KPIs), never the invoice/payment/receipt/refund

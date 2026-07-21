@@ -1,6 +1,12 @@
 import { getDb } from "@/server/db";
-import { findAllActiveGroupsWithItems } from "@/modules/prerequisites/repositories/prerequisite-item.repository";
-import { findWaiversByEnrollmentAndSubject } from "@/modules/prerequisites/repositories/prerequisite-waiver.repository";
+import {
+  findAllActiveGroupsWithItems,
+  findActiveGroupsWithItemsForLevelSubjects,
+} from "@/modules/prerequisites/repositories/prerequisite-item.repository";
+import {
+  findWaiversByEnrollmentAndSubject,
+  findWaivers,
+} from "@/modules/prerequisites/repositories/prerequisite-waiver.repository";
 import type {
   SubjectEligibilityResult,
   MissingPrerequisite,
@@ -248,33 +254,192 @@ export async function evaluateSubjectEligibility(
   });
 }
 
-export async function evaluateEligibilityForAllSubjects(
-  enrollmentId: string,
-  organizationId: string
-): Promise<Map<string, SubjectEligibilityResult>> {
+// ─── Batch loader + pure all-subjects engine (H4) ─────────────────────────────
+// Evaluating a whole level used to run one full query set PER subject (the N+1:
+// `evaluateSubjectEligibility` in a loop re-loaded the enrollment + the student's
+// entire progress for every subject). The batch loader below fetches everything the
+// decision needs in a CONSTANT number of queries (independent of subject count), and
+// `evaluateEligibilityForAllSubjects(context)` is a PURE function over that context —
+// no IO, no `await`, just the same `decideSubjectEligibility` rules applied per subject.
+// Outputs are identical to the per-subject path; this is a data-access optimization,
+// not a change to the academic rules.
+
+/** In-memory bundle of everything needed to evaluate every subject of a level. */
+export interface EligibilityEvaluationContext {
+  organizationId: string;
+  enrollmentId: string;
+  /** The student the (validated) enrollment belongs to; null when the enrollment is absent. */
+  studentId: string | null;
+  /** Whether the enrollment exists for this org and is not soft-deleted (the tenant gate). */
+  enrollmentExists: boolean;
+  /** ACTIVE level-subjects of the resolved level — the subjects to evaluate. */
+  targetLevelSubjectIds: string[];
+  /** Prerequisite groups (with items) for every target subject, keyed by target levelSubjectId. */
+  groupsByLevelSubjectId: Map<string, EligibilityGroupInput[]>;
+  /** Active waivers for this enrollment, keyed by target levelSubjectId. */
+  waiversByLevelSubjectId: Map<string, EligibilityWaiverInput[]>;
+  /** Target-subject progress status scoped to THIS enrollment (drives ALREADY_COMPLETED). */
+  targetStatusByLevelSubjectId: Map<string, string>;
+  /**
+   * The student's subject progress across the whole org. Because it is scoped by
+   * studentId (not by the current level) it already carries the progress of every
+   * prerequisite subject an item can reference — including transitive prerequisites
+   * that live OUTSIDE the current level. Tenant-scoped, so cross-org progress never
+   * enters the decision.
+   */
+  studentProgress: EligibilityStudentProgressInput[];
+}
+
+function emptyEligibilityContext(
+  organizationId: string,
+  enrollmentId: string
+): EligibilityEvaluationContext {
+  return {
+    organizationId,
+    enrollmentId,
+    studentId: null,
+    enrollmentExists: false,
+    targetLevelSubjectIds: [],
+    groupsByLevelSubjectId: new Map(),
+    waiversByLevelSubjectId: new Map(),
+    targetStatusByLevelSubjectId: new Map(),
+    studentProgress: [],
+  };
+}
+
+/**
+ * Batch-load the full eligibility evaluation context for a level in a CONSTANT number
+ * of queries (enrollment gate + level subjects + student progress + target progress +
+ * prerequisite groups + waivers), regardless of how many subjects the level has.
+ * Tenant isolation lives here: the enrollment is validated against the org (and
+ * soft-delete), and every read is scoped by organizationId.
+ */
+export async function loadEligibilityEvaluationContext(params: {
+  organizationId: string;
+  studentId: string;
+  enrollmentId: string;
+  courseLevelId: string;
+}): Promise<EligibilityEvaluationContext> {
+  const { organizationId, enrollmentId, courseLevelId } = params;
   const db = await getDb();
 
+  // Tenant gate: the enrollment must belong to this org and not be soft-deleted.
   const enrollment = await db.enrollment.findFirst({
     where: { id: enrollmentId, organizationId, deletedAt: null },
-    select: { courseId: true, currentLevelId: true, courseLevelId: true },
+    select: { studentId: true },
   });
+  if (!enrollment) return emptyEligibilityContext(organizationId, enrollmentId);
 
-  if (!enrollment) return new Map();
+  // Authoritative student for scoping (the enrollment's own student, not a caller hint).
+  const studentId = enrollment.studentId;
 
-  const levelId = enrollment.currentLevelId ?? enrollment.courseLevelId;
-  if (!levelId) return new Map();
+  const [levelSubjects, allProgress, enrollmentProgress] = await Promise.all([
+    // ACTIVE target subjects of the resolved level.
+    db.levelSubject.findMany({
+      where: { courseLevelId, organizationId, deletedAt: null, status: "ACTIVE" },
+      select: { id: true },
+    }),
+    // All of the student's progress across the org — covers prerequisites, incl. transitive.
+    db.studentSubjectProgress.findMany({
+      where: { organizationId, studentId },
+      select: { levelSubjectId: true, status: true, finalGrade: true },
+    }),
+    // Target-subject status scoped to THIS enrollment (matches the old ALREADY_COMPLETED read).
+    db.studentSubjectProgress.findMany({
+      where: { organizationId, enrollmentId },
+      select: { levelSubjectId: true, status: true },
+    }),
+  ]);
 
-  const levelSubjects = await db.levelSubject.findMany({
-    where: { courseLevelId: levelId, organizationId, deletedAt: null, status: "ACTIVE" },
-    select: { id: true },
-  });
+  const targetLevelSubjectIds = levelSubjects.map((ls) => ls.id);
 
-  const results = await Promise.all(
-    levelSubjects.map(async (ls) => {
-      const result = await evaluateSubjectEligibility(enrollmentId, ls.id, organizationId);
-      return [ls.id, result] as [string, SubjectEligibilityResult];
-    })
-  );
+  const [groups, waivers] = await Promise.all([
+    findActiveGroupsWithItemsForLevelSubjects(targetLevelSubjectIds, organizationId),
+    findWaivers(organizationId, { enrollmentId, status: "ACTIVE" }),
+  ]);
 
-  return new Map(results);
+  const groupsByLevelSubjectId = new Map<string, EligibilityGroupInput[]>();
+  for (const g of groups) {
+    const mapped: EligibilityGroupInput = {
+      id: g.id,
+      name: g.name,
+      logicType: g.logicType,
+      items: g.items.map((item) => ({
+        id: item.id,
+        prerequisiteLevelSubjectId: item.prerequisiteLevelSubjectId,
+        requirementType: item.requirementType,
+        minimumRequiredGrade:
+          item.minimumRequiredGrade != null ? parseFloat(String(item.minimumRequiredGrade)) : null,
+        subjectName: item.prerequisiteLevelSubject.subject.name,
+      })),
+    };
+    const existing = groupsByLevelSubjectId.get(g.levelSubjectId);
+    if (existing) existing.push(mapped);
+    else groupsByLevelSubjectId.set(g.levelSubjectId, [mapped]);
+  }
+
+  const waiversByLevelSubjectId = new Map<string, EligibilityWaiverInput[]>();
+  for (const w of waivers) {
+    const mapped: EligibilityWaiverInput = {
+      prerequisiteGroupId: w.prerequisiteGroupId,
+      prerequisiteItemId: w.prerequisiteItemId,
+    };
+    const existing = waiversByLevelSubjectId.get(w.levelSubjectId);
+    if (existing) existing.push(mapped);
+    else waiversByLevelSubjectId.set(w.levelSubjectId, [mapped]);
+  }
+
+  const targetStatusByLevelSubjectId = new Map<string, string>();
+  for (const p of enrollmentProgress) {
+    if (!targetStatusByLevelSubjectId.has(p.levelSubjectId)) {
+      targetStatusByLevelSubjectId.set(p.levelSubjectId, p.status);
+    }
+  }
+
+  const studentProgress: EligibilityStudentProgressInput[] = allProgress.map((p) => ({
+    levelSubjectId: p.levelSubjectId,
+    status: p.status,
+    finalGrade: p.finalGrade != null ? parseFloat(String(p.finalGrade)) : null,
+  }));
+
+  return {
+    organizationId,
+    enrollmentId,
+    studentId,
+    enrollmentExists: true,
+    targetLevelSubjectIds,
+    groupsByLevelSubjectId,
+    waiversByLevelSubjectId,
+    targetStatusByLevelSubjectId,
+    studentProgress,
+  };
+}
+
+/**
+ * Pure evaluation of every subject of a level from a pre-loaded context. Performs NO IO
+ * and no `await` — it applies the same `decideSubjectEligibility` rules per subject using
+ * in-memory Maps, so the query count is whatever `loadEligibilityEvaluationContext` spent
+ * (constant), never proportional to the number of subjects.
+ */
+export function evaluateEligibilityForAllSubjects(
+  context: EligibilityEvaluationContext
+): Map<string, SubjectEligibilityResult> {
+  const results = new Map<string, SubjectEligibilityResult>();
+  if (!context.enrollmentExists) return results;
+
+  for (const levelSubjectId of context.targetLevelSubjectIds) {
+    results.set(
+      levelSubjectId,
+      decideSubjectEligibility({
+        levelSubjectId,
+        enrollmentExists: true,
+        targetSubjectStatus: context.targetStatusByLevelSubjectId.get(levelSubjectId) ?? null,
+        groups: context.groupsByLevelSubjectId.get(levelSubjectId) ?? [],
+        waivers: context.waiversByLevelSubjectId.get(levelSubjectId) ?? [],
+        studentProgress: context.studentProgress,
+      })
+    );
+  }
+
+  return results;
 }

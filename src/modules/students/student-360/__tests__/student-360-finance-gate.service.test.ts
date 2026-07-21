@@ -66,6 +66,7 @@ vi.mock("@/modules/courses/services/course.service", () => ({
   getLevelSubjectsByLevel: h.getLevelSubjectsByLevel,
 }));
 vi.mock("@/modules/prerequisites/engines/subject-eligibility.engine", () => ({
+  loadEligibilityEvaluationContext: vi.fn(),
   evaluateEligibilityForAllSubjects: h.evaluateEligibilityForAllSubjects,
   evaluateSubjectEligibility: vi.fn(),
 }));

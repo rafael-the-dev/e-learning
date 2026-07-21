@@ -10,6 +10,7 @@ vi.mock("@/modules/courses/services/course.service", () => ({
 }));
 
 vi.mock("@/modules/prerequisites/engines/subject-eligibility.engine", () => ({
+  loadEligibilityEvaluationContext: vi.fn(),
   evaluateEligibilityForAllSubjects: vi.fn(),
   evaluateSubjectEligibility: vi.fn(),
 }));
@@ -20,6 +21,7 @@ import {
 } from "@/modules/students/student-360/services/student-360.service";
 import { getLevelSubjectsByLevel } from "@/modules/courses/services/course.service";
 import {
+  loadEligibilityEvaluationContext,
   evaluateEligibilityForAllSubjects,
   evaluateSubjectEligibility,
 } from "@/modules/prerequisites/engines/subject-eligibility.engine";
@@ -27,6 +29,7 @@ import type { Enrollment } from "@/modules/enrollments/types";
 import type { LevelSubject } from "@/modules/courses/types";
 
 const getLevelSubjectsByLevelMock = getLevelSubjectsByLevel as Mock;
+const loadEligibilityEvaluationContextMock = loadEligibilityEvaluationContext as Mock;
 const evaluateEligibilityForAllSubjectsMock = evaluateEligibilityForAllSubjects as Mock;
 const evaluateSubjectEligibilityMock = evaluateSubjectEligibility as Mock;
 
@@ -132,10 +135,19 @@ describe("resolveCurrentEnrollmentLevel", () => {
 });
 
 describe("getProgressTabData", () => {
+  beforeEach(() => {
+    getLevelSubjectsByLevelMock.mockReset();
+    loadEligibilityEvaluationContextMock.mockReset();
+    evaluateEligibilityForAllSubjectsMock.mockReset();
+    evaluateSubjectEligibilityMock.mockReset();
+    // Defaults: the loader resolves a context (opaque here); the PURE engine returns a Map.
+    loadEligibilityEvaluationContextMock.mockResolvedValue({ enrollmentExists: true, targetLevelSubjectIds: [] });
+    evaluateEligibilityForAllSubjectsMock.mockReturnValue(new Map());
+  });
+
   it("looks up level subjects using currentLevelId when the student has been promoted", async () => {
     const enrollment = makeEnrollment({ courseLevelId: "level-1", currentLevelId: "level-2" });
     getLevelSubjectsByLevelMock.mockResolvedValue([]);
-    evaluateEligibilityForAllSubjectsMock.mockResolvedValue(new Map());
 
     await getProgressTabData(ORG, enrollment);
 
@@ -145,27 +157,36 @@ describe("getProgressTabData", () => {
   it("falls back to courseLevelId for level subject lookup when currentLevelId is null", async () => {
     const enrollment = makeEnrollment({ courseLevelId: "level-1", currentLevelId: null });
     getLevelSubjectsByLevelMock.mockResolvedValue([]);
-    evaluateEligibilityForAllSubjectsMock.mockResolvedValue(new Map());
 
     await getProgressTabData(ORG, enrollment);
 
     expect(getLevelSubjectsByLevelMock).toHaveBeenCalledWith("level-1", ORG);
   });
 
-  it("calls evaluateEligibilityForAllSubjects with the enrollmentId and organizationId, tenant-scoped", async () => {
-    const enrollment = makeEnrollment({ id: "enr-99", currentLevelId: "level-2" });
+  it("batch-loads the eligibility context scoped by org, student, enrollment and resolved level", async () => {
+    const enrollment = makeEnrollment({ id: "enr-99", studentId: "stu-7", currentLevelId: "level-2" });
     getLevelSubjectsByLevelMock.mockResolvedValue([]);
-    evaluateEligibilityForAllSubjectsMock.mockResolvedValue(new Map());
 
     await getProgressTabData(ORG, enrollment);
 
-    expect(evaluateEligibilityForAllSubjectsMock).toHaveBeenCalledWith("enr-99", ORG);
+    // Scoping now lives in the batch loader (H4), not in the pure evaluator.
+    expect(loadEligibilityEvaluationContextMock).toHaveBeenCalledWith({
+      organizationId: ORG,
+      studentId: "stu-7",
+      enrollmentId: "enr-99",
+      courseLevelId: "level-2",
+    });
+    // The pure evaluator is fed the loaded context, not ids.
+    expect(evaluateEligibilityForAllSubjectsMock).toHaveBeenCalledWith({
+      enrollmentExists: true,
+      targetLevelSubjectIds: [],
+    });
   });
 
   it("never calls the manual per-subject evaluateSubjectEligibility loop", async () => {
     const enrollment = makeEnrollment({ currentLevelId: "level-2" });
     getLevelSubjectsByLevelMock.mockResolvedValue([makeLevelSubject()]);
-    evaluateEligibilityForAllSubjectsMock.mockResolvedValue(
+    evaluateEligibilityForAllSubjectsMock.mockReturnValue(
       new Map([["ls-1", { status: "ELIGIBLE", levelSubjectId: "ls-1", missingPrerequisites: [], isEligible: true }]])
     );
 
@@ -179,7 +200,7 @@ describe("getProgressTabData", () => {
     const levelSubject = makeLevelSubject({ id: "ls-1", subjectName: "Física" });
     getLevelSubjectsByLevelMock.mockResolvedValue([levelSubject]);
     const result = { status: "PENDING_PREREQUISITE", levelSubjectId: "ls-1", missingPrerequisites: [], isEligible: false };
-    evaluateEligibilityForAllSubjectsMock.mockResolvedValue(new Map([["ls-1", result]]));
+    evaluateEligibilityForAllSubjectsMock.mockReturnValue(new Map([["ls-1", result]]));
 
     const { eligibility } = await getProgressTabData(ORG, enrollment);
 
@@ -191,7 +212,7 @@ describe("getProgressTabData", () => {
     const active = makeLevelSubject({ id: "ls-active", status: "ACTIVE" });
     const inactive = makeLevelSubject({ id: "ls-inactive", status: "INACTIVE" });
     getLevelSubjectsByLevelMock.mockResolvedValue([active, inactive]);
-    evaluateEligibilityForAllSubjectsMock.mockResolvedValue(
+    evaluateEligibilityForAllSubjectsMock.mockReturnValue(
       new Map([["ls-active", { status: "ELIGIBLE", levelSubjectId: "ls-active", missingPrerequisites: [], isEligible: true }]])
     );
 
@@ -206,7 +227,7 @@ describe("getProgressTabData", () => {
     const enrollment = makeEnrollment({ currentLevelId: "level-2" });
     const levelSubject = makeLevelSubject({ id: "ls-1" });
     getLevelSubjectsByLevelMock.mockResolvedValue([levelSubject]);
-    evaluateEligibilityForAllSubjectsMock.mockResolvedValue(new Map());
+    evaluateEligibilityForAllSubjectsMock.mockReturnValue(new Map());
 
     const { eligibility } = await getProgressTabData(ORG, enrollment);
 
@@ -218,6 +239,7 @@ describe("getProgressTabData", () => {
     const result = await getProgressTabData(ORG, null);
     expect(result).toEqual({ levelSubjects: [], eligibility: [] });
     expect(getLevelSubjectsByLevelMock).not.toHaveBeenCalled();
+    expect(loadEligibilityEvaluationContextMock).not.toHaveBeenCalled();
     expect(evaluateEligibilityForAllSubjectsMock).not.toHaveBeenCalled();
   });
 

@@ -117,3 +117,38 @@ export async function findAllActiveGroupsWithItems(
     },
   });
 }
+
+// Batch variant of `findAllActiveGroupsWithItems` (H4): loads the ACTIVE prerequisite
+// groups + items for MANY target level-subjects in ONE query (`levelSubjectId IN (...)`),
+// so eligibility for a whole level can be evaluated without a per-subject round-trip.
+// Each returned group carries its own `levelSubjectId`, so the caller can index groups by
+// their target subject. Waivers are loaded separately (per enrollment), so unlike the
+// single-subject variant this one does not include them. Tenant-scoped by organizationId.
+export async function findActiveGroupsWithItemsForLevelSubjects(
+  levelSubjectIds: string[],
+  organizationId: string
+) {
+  if (levelSubjectIds.length === 0) return [];
+  const db = await getDb();
+  return db.levelSubjectPrerequisiteGroup.findMany({
+    where: {
+      levelSubjectId: { in: levelSubjectIds },
+      organizationId,
+      status: "ACTIVE",
+      deletedAt: null,
+    },
+    include: {
+      items: {
+        where: { status: "ACTIVE", deletedAt: null },
+        include: {
+          prerequisiteLevelSubject: {
+            include: {
+              subject: { select: { name: true } },
+              courseLevel: { select: { name: true, course: { select: { name: true } } } },
+            },
+          },
+        },
+      },
+    },
+  });
+}
