@@ -1,4 +1,6 @@
 import { getDb } from "@/server/db";
+import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
+import type { PaginationParams, PaginatedResult } from "@/shared/types/common";
 import type {
   StudentStatementFilters,
   StudentStatementKPIs,
@@ -16,6 +18,150 @@ type DecimalLike = { toNumber(): number };
 function toNum(v: DecimalLike | number | null | undefined): number {
   if (v == null) return 0;
   return typeof v === "object" ? v.toNumber() : v;
+}
+
+// =============================================================================
+// SERVER-SIDE PAGINATED READS (M2) — one bounded page per finance dataset, scoped
+// by organization + student, with a STABLE order ([date desc, id desc] — the id
+// tiebreaker keeps pages deterministic when several rows share a date), a matching
+// count, and soft-delete exclusion where the model supports it. The whole history is
+// never loaded; the caller pages in the repository, not in memory/JS.
+// =============================================================================
+
+export async function getStudentInvoicesPage(
+  filters: StudentStatementFilters,
+  pagination: PaginationParams
+): Promise<PaginatedResult<StudentStatementInvoice>> {
+  const db = await getDb();
+  const { skip, take } = buildSkipTake(pagination);
+  const where = { organizationId: filters.organizationId, studentId: filters.studentId, deletedAt: null };
+  const [rows, total] = await db.$transaction([
+    db.invoice.findMany({
+      where,
+      orderBy: [{ issueDate: "desc" }, { id: "desc" }],
+      skip,
+      take,
+      select: {
+        id: true, invoiceNumber: true, issueDate: true, dueDate: true,
+        totalAmount: true, paidAmount: true, balanceAmount: true, status: true,
+      },
+    }),
+    db.invoice.count({ where }),
+  ]);
+  const data: StudentStatementInvoice[] = rows.map((r) => ({
+    invoiceId: r.id,
+    invoiceNumber: r.invoiceNumber,
+    issueDate: r.issueDate,
+    dueDate: r.dueDate,
+    totalAmount: toNum(r.totalAmount as DecimalLike),
+    paidAmount: toNum(r.paidAmount as DecimalLike),
+    balanceAmount: toNum(r.balanceAmount as DecimalLike),
+    status: r.status,
+  }));
+  return buildPaginationMeta(data, total, pagination);
+}
+
+export async function getStudentPaymentsPage(
+  filters: StudentStatementFilters,
+  pagination: PaginationParams
+): Promise<PaginatedResult<StudentStatementPayment>> {
+  const db = await getDb();
+  const { skip, take } = buildSkipTake(pagination);
+  const where = { organizationId: filters.organizationId, studentId: filters.studentId };
+  const [rows, total] = await db.$transaction([
+    db.payment.findMany({
+      where,
+      orderBy: [{ paymentDate: "desc" }, { id: "desc" }],
+      skip,
+      take,
+      select: {
+        id: true, paymentNumber: true, paymentDate: true, totalAmount: true, status: true,
+        splits: { select: { method: true } },
+        invoice: { select: { invoiceNumber: true } },
+        receipt: { select: { receiptNumber: true } },
+      },
+    }),
+    db.payment.count({ where }),
+  ]);
+  const data: StudentStatementPayment[] = rows.map((r) => ({
+    paymentId: r.id,
+    paymentNumber: r.paymentNumber,
+    paymentDate: r.paymentDate,
+    totalAmount: toNum(r.totalAmount as DecimalLike),
+    status: r.status,
+    paymentMethods: [...new Set(r.splits.map((s) => s.method))],
+    invoiceNumber: r.invoice?.invoiceNumber ?? null,
+    receiptNumber: r.receipt?.receiptNumber ?? null,
+  }));
+  return buildPaginationMeta(data, total, pagination);
+}
+
+export async function getStudentReceiptsPage(
+  filters: StudentStatementFilters,
+  pagination: PaginationParams
+): Promise<PaginatedResult<StudentStatementReceipt>> {
+  const db = await getDb();
+  const { skip, take } = buildSkipTake(pagination);
+  const where = { organizationId: filters.organizationId, studentId: filters.studentId };
+  const [rows, total] = await db.$transaction([
+    db.receipt.findMany({
+      where,
+      orderBy: [{ issueDate: "desc" }, { id: "desc" }],
+      skip,
+      take,
+      select: {
+        id: true, receiptNumber: true, issueDate: true, amount: true, refundedAmount: true, status: true,
+        invoice: { select: { invoiceNumber: true } },
+        payment: { select: { paymentNumber: true } },
+      },
+    }),
+    db.receipt.count({ where }),
+  ]);
+  const data: StudentStatementReceipt[] = rows.map((r) => ({
+    receiptId: r.id,
+    receiptNumber: r.receiptNumber,
+    issueDate: r.issueDate,
+    amount: toNum(r.amount as DecimalLike),
+    refundedAmount: toNum(r.refundedAmount as DecimalLike),
+    status: r.status,
+    invoiceNumber: r.invoice?.invoiceNumber ?? null,
+    paymentNumber: r.payment?.paymentNumber ?? null,
+  }));
+  return buildPaginationMeta(data, total, pagination);
+}
+
+export async function getStudentRefundsPage(
+  filters: StudentStatementFilters,
+  pagination: PaginationParams
+): Promise<PaginatedResult<StudentStatementRefund>> {
+  const db = await getDb();
+  const { skip, take } = buildSkipTake(pagination);
+  const where = { organizationId: filters.organizationId, studentId: filters.studentId, deletedAt: null };
+  const [rows, total] = await db.$transaction([
+    db.refund.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip,
+      take,
+      select: {
+        id: true, refundNumber: true, amount: true, refundMethod: true, status: true,
+        createdAt: true, completedAt: true,
+        payment: { select: { paymentNumber: true } },
+      },
+    }),
+    db.refund.count({ where }),
+  ]);
+  const data: StudentStatementRefund[] = rows.map((r) => ({
+    refundId: r.id,
+    refundNumber: r.refundNumber,
+    amount: toNum(r.amount as DecimalLike),
+    refundMethod: r.refundMethod,
+    status: r.status,
+    requestedAt: r.createdAt,
+    completedAt: r.completedAt,
+    paymentNumber: r.payment?.paymentNumber ?? null,
+  }));
+  return buildPaginationMeta(data, total, pagination);
 }
 
 export async function getStudentInfo(

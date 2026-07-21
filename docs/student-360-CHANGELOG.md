@@ -57,6 +57,19 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Server-side paginated the Student 360 finance history (M2). The finance tab previously
+  loaded the student's entire invoice/payment/receipt/refund history and paginated it
+  client-side (`.slice()`); it now fetches one bounded page per section from the repository
+  (`$transaction([findMany, count])`, stable `[date desc, id desc]` order, page size fixed
+  server-side, soft-delete excluded, org+student scoped). The finance tab uses per-section
+  subtabs (Faturas / Pagamentos / Recibos / Reembolsos) with independent URL-persisted
+  pagination (`?tab=finance&financeSection=…&page=…`), each showing "A mostrar X–Y de N",
+  and normalizes an out-of-range page to the last page. The page is fetched LAZILY (only
+  when the finance tab is open) and remains permission-gated (billing sections ←
+  INVOICES_VIEW, refunds ← WALLETS_VIEW; no query when unauthorized — H1 intact). The KPI
+  summary is page-independent (not summed from the current page). Finance calculations,
+  invoice states, balance and wallet rules are unchanged. *(The eager load of the finance
+  statement into `core.finance` for the KPIs/risk/portals remains — tracked as H3.)*
 - Completed the academic-domain separation (M1): the Student 360 aggregator no longer
   queries the prerequisites module's progression tables nor resolves progression state
   itself. The per-student level/course-progress reads moved to the prerequisites

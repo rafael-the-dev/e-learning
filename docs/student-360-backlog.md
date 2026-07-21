@@ -97,9 +97,10 @@ Brief pointers so the review's remaining findings have one home.
   the Progress tab. Lives in `prerequisites`. Fix: batch the enrollment + progress +
   prerequisite loads.
 - **Mediums.** Transcript page missing `assertTeacherCanAccessStudent` (IDOR — **security**);
-  finance tab client-side pagination ships full history; raw reviewer UUID in the attendance
-  justifications table; `refundMethod` rendered as a raw enum; header action overload.
-  *(Resolved: the cross-module repo duplication of the prerequisites reads — done in M1.)*
+  raw reviewer UUID in the attendance justifications table; `refundMethod` rendered as a raw
+  enum; header action overload.
+  *(Resolved: cross-module prerequisites repo duplication — M1; finance-tab client-side
+  pagination shipping the full history — M2.)*
 - **H5 leftovers.** Precise **unjustified-absence count** (the persisted rollup's excused
   count overlaps absences/lateness — needs a dedicated field); the portals' **monthly
   attendance trend** stays raw (per-month grain); the **teacher portal** reads a third,

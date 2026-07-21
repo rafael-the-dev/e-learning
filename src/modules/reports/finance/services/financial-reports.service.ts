@@ -13,6 +13,13 @@ import {
   getStudentRefunds,
   getStudentLedger,
 } from "../repositories/student-statement.repository";
+// M2 — server-side paginated finance-history reads, exposed for the Student 360 finance tab.
+export {
+  getStudentInvoicesPage,
+  getStudentPaymentsPage,
+  getStudentReceiptsPage,
+  getStudentRefundsPage,
+} from "../repositories/student-statement.repository";
 import { getIntegrityReportKPIs, listIntegrityIssuesForReport } from "../repositories/integrity-report.repository";
 import { getStudentDebtKPIs, listStudentDebtRows } from "../repositories/student-debt.repository";
 import { getCollectionsKPIs, listCollectionsRows } from "../repositories/collections.repository";

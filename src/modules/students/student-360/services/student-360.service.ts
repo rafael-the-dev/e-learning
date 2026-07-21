@@ -1,6 +1,19 @@
 import { getStudentById } from "@/modules/students/services/student.service";
 import { getEnrollmentsByOrganization } from "@/modules/enrollments/services/enrollment.service";
-import { getStudentFinancialStatement } from "@/modules/reports/finance/services/financial-reports.service";
+import {
+  getStudentFinancialStatement,
+  getStudentInvoicesPage,
+  getStudentPaymentsPage,
+  getStudentReceiptsPage,
+  getStudentRefundsPage,
+} from "@/modules/reports/finance/services/financial-reports.service";
+import type { PaginationParams, PaginatedResult } from "@/shared/types/common";
+import type {
+  StudentStatementInvoice,
+  StudentStatementPayment,
+  StudentStatementReceipt,
+  StudentStatementRefund,
+} from "@/modules/reports/finance/types";
 import { findProgressByOrganization } from "@/modules/assessments/repositories/student-subject-progress.repository";
 import {
   getStudentSubjectAttendanceViews,
@@ -319,6 +332,61 @@ export async function getAttendanceTabData(
     findJustificationsByOrganization(organizationId, { studentId, page: 1, pageSize: 20 }),
   ]);
   return { records, justifications };
+}
+
+// ── Finance history (M2): server-side paginated, lazy, one section at a time ──────
+export type FinanceSection = "invoices" | "payments" | "receipts" | "refunds";
+
+export type FinanceTabData =
+  | { section: "invoices"; page: PaginatedResult<StudentStatementInvoice> }
+  | { section: "payments"; page: PaginatedResult<StudentStatementPayment> }
+  | { section: "receipts"; page: PaginatedResult<StudentStatementReceipt> }
+  | { section: "refunds"; page: PaginatedResult<StudentStatementRefund> };
+
+// Page size is fixed server-side (never taken from the client) and bounded.
+const FINANCE_HISTORY_PAGE_SIZE = 20;
+
+// Fetch one page; if the requested page is beyond the last (e.g. ?page=999), normalize
+// to the last page rather than showing a misleading empty state.
+async function paginateFinance<T>(
+  fetchPage: (p: PaginationParams) => Promise<PaginatedResult<T>>,
+  page: number
+): Promise<PaginatedResult<T>> {
+  const requested = Math.max(1, Math.floor(page) || 1);
+  const result = await fetchPage({ page: requested, pageSize: FINANCE_HISTORY_PAGE_SIZE });
+  if (result.total > 0 && result.totalPages > 0 && requested > result.totalPages) {
+    return fetchPage({ page: result.totalPages, pageSize: FINANCE_HISTORY_PAGE_SIZE });
+  }
+  return result;
+}
+
+/**
+ * One bounded page of the student's finance history for the ACTIVE section only (M2).
+ * Lazy: called only when the finance tab is open. Permission-gated (H1) — billing
+ * sections require INVOICES_VIEW, refunds require WALLETS_VIEW; an unauthorized section
+ * returns null and issues NO finance query. Summary KPIs are separate (page-independent).
+ */
+export async function getFinanceTabData(
+  studentId: string,
+  organizationId: string,
+  section: FinanceSection,
+  page: number,
+  capabilities: Student360Capabilities
+): Promise<FinanceTabData | null> {
+  const authorized = section === "refunds" ? capabilities.canViewWallet : capabilities.canViewInvoices;
+  if (!authorized) return null;
+
+  const filters = { organizationId, studentId };
+  switch (section) {
+    case "invoices":
+      return { section, page: await paginateFinance((p) => getStudentInvoicesPage(filters, p), page) };
+    case "payments":
+      return { section, page: await paginateFinance((p) => getStudentPaymentsPage(filters, p), page) };
+    case "receipts":
+      return { section, page: await paginateFinance((p) => getStudentReceiptsPage(filters, p), page) };
+    case "refunds":
+      return { section, page: await paginateFinance((p) => getStudentRefundsPage(filters, p), page) };
+  }
 }
 
 export async function getGradesTabData(

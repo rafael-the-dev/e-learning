@@ -12,7 +12,9 @@ import {
   getProgressTabData,
   getDocumentsTabData,
   getTimelineTabData,
+  getFinanceTabData,
 } from "@/modules/students/student-360/services/student-360.service";
+import type { FinanceSection } from "@/modules/students/student-360/services/student-360.service";
 import { getStudentPortalAccountStatus } from "@/modules/students/services/student-user-provisioning.service";
 import { getStudentGuardianLinks } from "@/modules/guardian-portal/services/guardian-provisioning.service";
 import { calculateHealthScore } from "@/modules/students/student-360/services/student-health.service";
@@ -60,7 +62,7 @@ export default async function StudentDetailPage({
   searchParams,
 }: {
   params: Promise<{ studentId: string }>;
-  searchParams: Promise<{ tab?: string; page?: string }>;
+  searchParams: Promise<{ tab?: string; page?: string; financeSection?: string }>;
 }) {
   const context = await requirePermissionOrRedirect(PERMISSIONS.STUDENTS_READ);
 
@@ -169,6 +171,9 @@ export default async function StudentDetailPage({
           studentId={studentId}
           organizationId={context.organizationId}
           page={page}
+          financeSection={sp.financeSection}
+          canViewInvoices={canViewInvoices}
+          canViewWallet={canViewWallet}
           core={core}
           canManagePortalAccount={context.ability.can(PERMISSIONS.STUDENTS_MANAGE_PORTAL_ACCOUNT)}
           canManageGuardians={context.ability.can(PERMISSIONS.GUARDIAN_LINKS_MANAGE)}
@@ -189,6 +194,9 @@ async function ActiveTabPanel({
   studentId,
   organizationId,
   page,
+  financeSection,
+  canViewInvoices,
+  canViewWallet,
   core,
   canManagePortalAccount,
   canManageGuardians,
@@ -203,6 +211,9 @@ async function ActiveTabPanel({
   studentId: string;
   organizationId: string;
   page: number;
+  financeSection?: string;
+  canViewInvoices: boolean;
+  canViewWallet: boolean;
   core: Awaited<ReturnType<typeof getStudent360Core>>;
   canManagePortalAccount: boolean;
   canManageGuardians: boolean;
@@ -217,15 +228,51 @@ async function ActiveTabPanel({
     case "enrollments":
       return <StudentEnrollmentsTab enrollments={core.enrollments} />;
 
-    case "finance":
+    case "finance": {
+      // Sections the viewer may open (billing ← INVOICES_VIEW, refunds ← WALLETS_VIEW),
+      // then resolve the active section (invalid/unauthorized → first authorized).
+      const authorizedSections: FinanceSection[] = [
+        ...(canViewInvoices ? (["invoices", "payments", "receipts"] as const) : []),
+        ...(canViewWallet ? (["refunds"] as const) : []),
+      ];
+      const requested = financeSection as FinanceSection | undefined;
+      const activeSection =
+        requested && authorizedSections.includes(requested) ? requested : authorizedSections[0] ?? "invoices";
+      // Lazy + server-paginated (M2): only the active section's page is fetched.
+      const financeData = await getFinanceTabData(studentId, organizationId, activeSection, page, {
+        canViewInvoices,
+        canViewWallet,
+      });
+      const billing = core.finance?.billing ?? null;
+      const wallet = core.finance?.wallet ?? null;
       return (
         <StudentFinanceTab
-          billing={core.finance?.billing ?? null}
-          wallet={core.finance?.wallet ?? null}
+          billingKpis={
+            billing
+              ? {
+                  totalInvoiced: billing.totalInvoiced,
+                  totalPaid: billing.totalPaid,
+                  outstandingBalance: billing.outstandingBalance,
+                }
+              : null
+          }
+          walletKpis={
+            wallet
+              ? {
+                  walletBalance: wallet.walletBalance,
+                  creditApplied: wallet.creditApplied,
+                  totalRefunded: wallet.totalRefunded,
+                }
+              : null
+          }
+          walletCard={wallet ? { wallet: wallet.wallet, recentTransactions: wallet.recentTransactions } : null}
+          financeData={financeData}
+          activeSection={activeSection}
           canDeposit={canDeposit}
           studentId={studentId}
         />
       );
+    }
 
     case "attendance": {
       const { records, justifications } = await getAttendanceTabData(studentId, organizationId, page, 10);
