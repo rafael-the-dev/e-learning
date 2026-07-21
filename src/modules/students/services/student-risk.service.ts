@@ -78,7 +78,10 @@ export interface StudentRiskInput {
   hasAttendanceData: boolean;
 }
 
-const LEVEL_ORDER: Record<StudentRiskLevel, number> = {
+// The canonical severity precedence. Exported so EVERY surface — the engine, the
+// persisted risk projection (M11) and the dashboards/watchlists that read it — orders
+// and thresholds risk the same way, instead of each re-inventing a 75/85/CASE-WHEN rule.
+export const RISK_LEVEL_ORDER: Record<StudentRiskLevel, number> = {
   UNKNOWN: -1,
   NONE: 0,
   LOW: 1,
@@ -86,6 +89,25 @@ const LEVEL_ORDER: Record<StudentRiskLevel, number> = {
   HIGH: 3,
   CRITICAL: 4,
 };
+
+/** Numeric severity rank of a level — persisted alongside the level for cheap SQL ORDER BY. */
+export function riskLevelRank(level: StudentRiskLevel): number {
+  return RISK_LEVEL_ORDER[level];
+}
+
+/** The single "is this student at risk?" threshold: LOW or worse. */
+export function isRiskLevelAtRisk(level: StudentRiskLevel): boolean {
+  return RISK_LEVEL_ORDER[level] >= RISK_LEVEL_ORDER.LOW;
+}
+
+/**
+ * The version of the risk RULES that produced a classification. Persisted on every
+ * projection row so that, when the rules change, old rows can be located and recomputed
+ * (bump to "student-risk-v2", …). It is tied to the engine, not the storage.
+ */
+export const STUDENT_RISK_SOURCE_VERSION = "student-risk-v1";
+
+const LEVEL_ORDER = RISK_LEVEL_ORDER;
 
 function maxLevel(levels: StudentRiskLevel[]): StudentRiskLevel {
   return levels.reduce<StudentRiskLevel>(

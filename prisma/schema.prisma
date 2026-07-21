@@ -118,6 +118,7 @@ model Organization {
   attendancePolicies         AttendancePolicy[]
   subjectAttendanceSummaries StudentSubjectAttendanceSummary[]
   periodAttendanceSummaries  StudentPeriodAttendanceSummary[]
+  studentRiskProjections     StudentRiskProjection[]
   transcriptNumberCounters   TranscriptNumberCounter[]
   academicTranscripts        AcademicTranscript[]
   academicTranscriptVersions AcademicTranscriptVersion[]
@@ -413,6 +414,7 @@ model Student {
   practicalLessons           PracticalLesson[]
   subjectAttendanceSummaries StudentSubjectAttendanceSummary[]
   periodAttendanceSummaries  StudentPeriodAttendanceSummary[]
+  studentRiskProjections     StudentRiskProjection[]
   invoices                   Invoice[]
   payments                   Payment[]
   receipts                   Receipt[]
@@ -1341,6 +1343,64 @@ model StudentPeriodAttendanceSummary {
   @@index([organizationId, status])
   @@index([organizationId, calculatedAt])
   @@map("student_period_attendance_summaries")
+}
+
+// Canonical persisted per-student risk classification (M11). The risk RULES live once in
+// the risk engine (buildStudentRiskSummary, H6); this table only PERSISTS the engine's
+// output so Student 360, the dashboards and the watchlists all read ONE classification
+// with cheap WHERE/ORDER BY/GROUP BY — never re-deriving risk with their own thresholds,
+// and never running the engine per-student inside a dashboard loop.
+model StudentRiskProjection {
+  id             String @id @default(cuid())
+  organizationId String
+  studentId      String
+
+  // Global level computed with ALL dimensions — this is an org-internal artifact, so the
+  // projection is always computed with finance included.
+  // StudentRiskLevel: UNKNOWN | NONE | LOW | MODERATE | HIGH | CRITICAL
+  level     String @default("UNKNOWN")
+  levelRank Int    @default(-1)
+  // Global level EXCLUDING the financial dimension. Served to viewers WITHOUT finance
+  // permission so they can never infer a hidden financial reason from the global level
+  // (the H6 "no hidden-risk inference" rule, persisted).
+  levelWithoutFinance     String @default("UNKNOWN")
+  levelWithoutFinanceRank Int    @default(-1)
+  isAtRisk                Boolean @default(false)
+  // EvaluationStatus: EVALUATED | INSUFFICIENT_DATA — distinguishes NONE (assessed, no risk)
+  // from UNKNOWN (could not assess). Dashboards must not fold both into "no risk".
+  evaluationStatus String @default("INSUFFICIENT_DATA")
+
+  // Per-dimension levels (StudentRiskLevel). financialLevel is only meaningful because the
+  // projection is computed with finance; the READ layer nulls it for unauthorized viewers.
+  academicLevel    String @default("NONE")
+  attendanceLevel  String @default("NONE")
+  financialLevel   String @default("NONE")
+  progressionLevel String @default("NONE")
+  documentsLevel   String @default("NONE")
+
+  // StudentRiskReason[] as produced (and ordered) by the engine, JSON.stringify'd
+  // (SQL Server has no native JSON type). The primary/ordered reasons come from here.
+  reasonsJson       String? @db.NVarChar(Max)
+  recommendedAction String? @db.NVarChar(1000)
+
+  // The version of the RULES that produced this row (bump when the engine changes) so
+  // stale-version rows can be found and recomputed.
+  sourceVersion String   @default("student-risk-v1")
+  evaluatedAt   DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([organizationId, studentId])
+  @@index([organizationId, level])
+  @@index([organizationId, isAtRisk])
+  @@index([organizationId, evaluatedAt])
+  @@index([organizationId, academicLevel])
+  @@index([organizationId, attendanceLevel])
+  @@index([organizationId, sourceVersion])
+  @@map("student_risk_projections")
 }
 
 // =============================================================================
