@@ -47,6 +47,20 @@ students in the interim. Real-world deploy order should be: apply migration → 
 enable command hooks → flip dashboards → remove legacy. Code-commit order can still be
 M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip is released.
 
+### Post-review remediation status (review 2026-07-21)
+- **F-H1 — coverage gate incompleteness → DONE.** Replaced the `count > 0` gate with a
+  completeness-based, fail-closed `StudentRiskProjectionCoverage` rollout state +
+  `getStudentRiskProjectionCoverage()` (READY only after a full backfill/reconcile at the
+  current version AND a live zero-uncovered re-check; event handler cannot promote READY;
+  completeness measured over students so orphans can't compensate; single shared eligible-
+  student predicate). See CHANGELOG. This also subsumes the "false-zero" facet of the gate.
+- **Still open from the review (not this change):** F-H2 (event coverage = 2 of ~12
+  triggers; `INVOICE_OVERDUE` unhandled), F-H3 (no scheduled reconcile; `--stale` heals only
+  version-drift), F-H4 (backfill not cursor-batched/resumable for very large tenants),
+  F-M1 (overdue status-only vs `dueDate < now`), F-M2 (soft-deleted rows still counted on
+  reads / name leak), F-M4 (synchronous recompute burst), F-M6 (non-finance card/alert
+  permission gating), F-M7 (pager aria-labels), plus the Lows. F-L4 (unused var) fixed here.
+
 ### Context
 H6 introduced the single canonical per-student risk engine (`buildStudentRiskSummary` →
 `StudentRiskSummary`) and pointed the **per-student surfaces** (Student 360 alerts panel,

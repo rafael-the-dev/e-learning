@@ -26,7 +26,6 @@ import {
   findStudentRiskProjection,
   getStudentRiskLevelCounts,
   findStudentRiskWatchlist,
-  hasStudentRiskProjectionCoverage,
   getStudentRiskDimensionAtRiskCounts,
   getStudentIdsWithDimensionRisk,
 } from "@/modules/students/repositories/student-risk-projection.repository";
@@ -238,14 +237,6 @@ describe("findStudentRiskWatchlist", () => {
 });
 
 describe("M11.3 read-through fallback + dimension reads", () => {
-  it("hasStudentRiskProjectionCoverage is true only when the org has rows", async () => {
-    count.mockResolvedValueOnce(0);
-    expect(await hasStudentRiskProjectionCoverage(ORG)).toBe(false);
-    count.mockResolvedValueOnce(7);
-    expect(await hasStudentRiskProjectionCoverage(ORG)).toBe(true);
-    expect(count.mock.calls[0][0].where).toEqual({ organizationId: ORG });
-  });
-
   it("getStudentRiskDimensionAtRiskCounts counts each dimension at level ≥ LOW; finance 0 when unauthorized", async () => {
     count.mockResolvedValue(4);
     const dims = await getStudentRiskDimensionAtRiskCounts(ORG, { financeAuthorized: false });

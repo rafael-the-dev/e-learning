@@ -1,8 +1,6 @@
 import { getDb } from "@/server/db";
-import {
-  hasStudentRiskProjectionCoverage,
-  getStudentRiskDimensionAtRiskCounts,
-} from "@/modules/students/repositories/student-risk-projection.repository";
+import { getStudentRiskDimensionAtRiskCounts } from "@/modules/students/repositories/student-risk-projection.repository";
+import { getStudentRiskProjectionCoverage } from "@/modules/students/services/student-risk-projection-coverage.service";
 
 export interface AcademicRiskStats {
   atRiskStudentCount: number;
@@ -21,7 +19,7 @@ export async function getAcademicRiskStats(organizationId: string): Promise<Acad
   // M11.3: the at-risk classification comes from the canonical projection once backfilled
   // (academic dimension = the SAME decision Student 360 shows); legacy FAILED-subject
   // distinct count as the fallback. The operational assessment counts stay as-is.
-  const covered = await hasStudentRiskProjectionCoverage(organizationId);
+  const covered = (await getStudentRiskProjectionCoverage({ organizationId })).ready;
 
   const [atRisk, pending, submitted, failedThisMonth, projectionDimensions] = await Promise.all([
     // distinct students with at least one FAILED subject (fallback only)

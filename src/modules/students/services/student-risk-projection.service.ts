@@ -42,6 +42,17 @@ import {
   findStudentRiskProjection,
   findStudentIdsWithStaleRiskProjection,
 } from "@/modules/students/repositories/student-risk-projection.repository";
+import {
+  buildRiskProjectionEligibleStudentWhere,
+  countEligibleStudentsForRiskProjection,
+} from "@/modules/students/repositories/student-risk-projection-coverage.repository";
+import {
+  markRiskProjectionCoverageRunning,
+  markRiskProjectionCoverageReady,
+  markRiskProjectionCoverageIncomplete,
+  markRiskProjectionCoverageFailed,
+  verifyStudentRiskProjectionCoverage,
+} from "@/modules/students/services/student-risk-projection-coverage.service";
 import type {
   StudentRiskProjection,
   StudentRiskEvaluationStatus,
@@ -231,6 +242,24 @@ export async function reconcileStudentRiskProjectionsForOrg(
 ): Promise<ReconcileStudentRiskProjectionsResult> {
   const batchSize = options.batchSize ?? 500;
   const now = options.now ?? new Date();
+  // A FULL sweep (not staleOnly) owns the coverage rollout state: it marks RUNNING, then
+  // READY only if verification confirms 100% coverage, else INCOMPLETE. A staleOnly sweep is
+  // partial (version-migration only) and must NOT touch the rollout status — it cannot prove
+  // completeness (it never visits students that have no row at all).
+  const isFullSweep = !options.staleOnly;
+
+  if (isFullSweep) {
+    try {
+      const expected = await countEligibleStudentsForRiskProjection(organizationId);
+      await markRiskProjectionCoverageRunning({ organizationId, expectedStudentCount: expected, now });
+    } catch (e) {
+      await markRiskProjectionCoverageFailed({
+        organizationId,
+        errorSummary: `coverage-running-failed: ${e instanceof Error ? e.message : String(e)}`,
+      });
+      throw e;
+    }
+  }
 
   const studentIds = options.staleOnly
     ? await findStudentIdsWithStaleRiskProjection(organizationId, STUDENT_RISK_SOURCE_VERSION, batchSize)
@@ -247,19 +276,43 @@ export async function reconcileStudentRiskProjectionsForOrg(
       result.failures.push({ studentId, error: e instanceof Error ? e.message : String(e) });
     }
   }
+
+  if (isFullSweep) {
+    const v = await verifyStudentRiskProjectionCoverage({ organizationId });
+    // READY only when nothing is missing/stale AND no student failed to recompute.
+    if (v.withoutCurrentCount === 0 && result.failed === 0) {
+      await markRiskProjectionCoverageReady({
+        organizationId,
+        expectedStudentCount: v.expectedStudentCount,
+        projectedStudentCount: v.projectedStudentCount,
+        now,
+      });
+    } else {
+      await markRiskProjectionCoverageIncomplete({
+        organizationId,
+        expectedStudentCount: v.expectedStudentCount,
+        projectedStudentCount: v.projectedStudentCount,
+        missingStudentCount: v.missingStudentCount,
+        staleStudentCount: v.staleStudentCount,
+        now,
+      });
+    }
+  }
+
   return result;
 }
 
-/** Count how many students an org has (for the backfill dry-run report). */
+/** Count how many ELIGIBLE students an org has (for the backfill dry-run report). */
 export async function countStudentsForOrg(organizationId: string): Promise<number> {
-  const db = await getDb();
-  return db.student.count({ where: { organizationId, deletedAt: null } });
+  return countEligibleStudentsForRiskProjection(organizationId);
 }
 
 async function listStudentIdsForOrg(organizationId: string): Promise<string[]> {
   const db = await getDb();
+  // Same "eligible student" predicate the coverage gate and expected-count use, so the
+  // backfill scope and the completeness measurement can never diverge (F-H1).
   const rows = await db.student.findMany({
-    where: { organizationId, deletedAt: null },
+    where: buildRiskProjectionEligibleStudentWhere(organizationId),
     select: { id: true },
   });
   return rows.map((r) => r.id);

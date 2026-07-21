@@ -1,10 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import { findUpcomingEventsByOrganization } from "@/modules/academic-calendar/repositories/academic-event.repository";
-import {
-  hasStudentRiskProjectionCoverage,
-  getStudentIdsWithDimensionRisk,
-} from "@/modules/students/repositories/student-risk-projection.repository";
+import { getStudentIdsWithDimensionRisk } from "@/modules/students/repositories/student-risk-projection.repository";
+import { getStudentRiskProjectionCoverage } from "@/modules/students/services/student-risk-projection-coverage.service";
 import type {
   TeacherTodaySession,
   AttendancePendingRow,
@@ -296,7 +294,7 @@ export async function findTeacherRiskRows(
   // flat LOW=75 / TREND=85 split into one at-risk answer. Until coverage exists, fall back to
   // the legacy percentage thresholds. The other sources are teacher-scoped status/assessment
   // signals not represented in the projection, so they stay.
-  const covered = await hasStudentRiskProjectionCoverage(organizationId);
+  const covered = (await getStudentRiskProjectionCoverage({ organizationId })).ready;
 
   const [blocked, levelRecovery, courseRecovery, failedSubjects, legacyLowAttendance, missingAssessments] =
     await Promise.all([

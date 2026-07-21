@@ -69,6 +69,25 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Hardened the dashboard rollout gate (review finding **F-H1**). The fragile
+  `count(organizationId) > 0` "coverage" check — which flipped a whole org onto the
+  projection the instant a single event-driven row was written, silently undercounting
+  everyone else — was replaced by a **completeness** gate. A new
+  `StudentRiskProjectionCoverage` row records the per-org rollout state
+  (`NOT_STARTED / RUNNING / INCOMPLETE / READY / STALE / FAILED`), and
+  `getStudentRiskProjectionCoverage()` returns `ready: true` only when the org was marked
+  READY by a **full** backfill/reconcile at the current rules version **and** a live
+  re-check confirms zero eligible students lack a current-version projection (fail-closed —
+  a student created/soft-deleted/version-bumped since the backfill immediately drops the org
+  back to the legacy path). Only the full backfill/reconcile may mark READY; the event
+  handler never touches rollout state, so an incidental projection write can no longer
+  activate canonical mode (deploy-ordering hazard closed). Completeness is measured over
+  *students* (a `students … NOT EXISTS current projection` relation count), so orphan/soft-
+  deleted projection rows can never compensate a missing student. A single `eligible student`
+  predicate (`buildRiskProjectionEligibleStudentWhere` = non-deleted students of the org) is
+  now shared by the backfill scope, the expected count, and the gate so they cannot diverge.
+  The four dashboard consumers read the new gate. (Migration
+  `20260721140000_add_student_risk_projection_coverage`, additive/forward-only.)
 - Began converging the dashboards/watchlists onto the canonical risk classification (M11).
   A persisted `StudentRiskProjection` (M11.1) now holds the H6 engine's per-student output
   (`level` + finance-excluded `levelWithoutFinance`, per-dimension levels, ordered reasons,

@@ -122,6 +122,12 @@ const h = vi.hoisted(() => ({
   findStudentIdsWithStaleRiskProjection: vi.fn(),
   studentFindMany: vi.fn(),
   studentCount: vi.fn(),
+  countEligible: vi.fn(),
+  verify: vi.fn(),
+  markRunning: vi.fn(),
+  markReady: vi.fn(),
+  markIncomplete: vi.fn(),
+  markFailed: vi.fn(),
 }));
 
 vi.mock("@/modules/students/services/student.service", () => ({ getStudentById: h.getStudentById }));
@@ -143,6 +149,17 @@ vi.mock("@/modules/students/repositories/student-risk-projection.repository", ()
 }));
 vi.mock("@/server/db", () => ({
   getDb: async () => ({ student: { findMany: h.studentFindMany, count: h.studentCount } }),
+}));
+vi.mock("@/modules/students/repositories/student-risk-projection-coverage.repository", () => ({
+  buildRiskProjectionEligibleStudentWhere: (organizationId: string) => ({ organizationId, deletedAt: null }),
+  countEligibleStudentsForRiskProjection: h.countEligible,
+}));
+vi.mock("@/modules/students/services/student-risk-projection-coverage.service", () => ({
+  markRiskProjectionCoverageRunning: h.markRunning,
+  markRiskProjectionCoverageReady: h.markReady,
+  markRiskProjectionCoverageIncomplete: h.markIncomplete,
+  markRiskProjectionCoverageFailed: h.markFailed,
+  verifyStudentRiskProjectionCoverage: h.verify,
 }));
 
 import {
@@ -232,9 +249,14 @@ describe("reconcileStudentRiskProjectionsForOrg (M11.4 backfill / reconciliation
     primeEmptyLoaders();
     h.findStudentRiskProjection.mockResolvedValue(null); // always "changed" on write
     h.upsertStudentRiskProjection.mockImplementation(async (d) => ({ ...d, id: "p", levelRank: 0, levelWithoutFinanceRank: 0, createdAt: NOW, updatedAt: NOW }));
+    // Coverage: default to a clean, fully-covered verification.
+    h.countEligible.mockResolvedValue(3);
+    h.verify.mockResolvedValue({
+      expectedStudentCount: 3, projectedStudentCount: 3, missingStudentCount: 0, staleStudentCount: 0, withoutCurrentCount: 0,
+    });
   });
 
-  it("recomputes every (non-deleted) student of the org", async () => {
+  it("recomputes every eligible student and, when complete, marks coverage READY", async () => {
     h.studentFindMany.mockResolvedValue([{ id: "s1" }, { id: "s2" }, { id: "s3" }]);
 
     const result = await reconcileStudentRiskProjectionsForOrg(ORG, { now: NOW });
@@ -245,9 +267,13 @@ describe("reconcileStudentRiskProjectionsForOrg (M11.4 backfill / reconciliation
     expect(result.processed).toBe(3);
     expect(result.changed).toBe(3);
     expect(result.failed).toBe(0);
+    // Full sweep owns the rollout state.
+    expect(h.markRunning).toHaveBeenCalledWith(expect.objectContaining({ organizationId: ORG, expectedStudentCount: 3 }));
+    expect(h.markReady).toHaveBeenCalledTimes(1);
+    expect(h.markIncomplete).not.toHaveBeenCalled();
   });
 
-  it("staleOnly recomputes only the rows written by an older rules version", async () => {
+  it("staleOnly recomputes only old-version rows and does NOT touch the rollout state", async () => {
     h.findStudentIdsWithStaleRiskProjection.mockResolvedValue(["s9"]);
 
     const result = await reconcileStudentRiskProjectionsForOrg(ORG, { staleOnly: true, now: NOW });
@@ -255,9 +281,13 @@ describe("reconcileStudentRiskProjectionsForOrg (M11.4 backfill / reconciliation
     expect(h.findStudentIdsWithStaleRiskProjection).toHaveBeenCalledWith(ORG, STUDENT_RISK_SOURCE_VERSION, 500);
     expect(h.studentFindMany).not.toHaveBeenCalled();
     expect(result.processed).toBe(1);
+    // A partial (version-migration) sweep must never promote/alter coverage.
+    expect(h.markRunning).not.toHaveBeenCalled();
+    expect(h.markReady).not.toHaveBeenCalled();
+    expect(h.markIncomplete).not.toHaveBeenCalled();
   });
 
-  it("one student failing never aborts the sweep (records the failure, continues)", async () => {
+  it("one student failing never aborts the sweep and forces coverage INCOMPLETE (not READY)", async () => {
     h.studentFindMany.mockResolvedValue([{ id: "s1" }, { id: "bad" }, { id: "s3" }]);
     h.getStudentById.mockImplementation(async (studentId: string) => {
       if (studentId === "bad") throw new Error("NotFound");
@@ -270,5 +300,22 @@ describe("reconcileStudentRiskProjectionsForOrg (M11.4 backfill / reconciliation
     expect(result.changed).toBe(2);
     expect(result.failed).toBe(1);
     expect(result.failures[0].studentId).toBe("bad");
+    // A failed student means the sweep can't prove completeness → never READY.
+    expect(h.markReady).not.toHaveBeenCalled();
+    expect(h.markIncomplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks coverage INCOMPLETE when verification still finds uncovered students", async () => {
+    h.studentFindMany.mockResolvedValue([{ id: "s1" }]);
+    h.verify.mockResolvedValue({
+      expectedStudentCount: 5, projectedStudentCount: 4, missingStudentCount: 1, staleStudentCount: 0, withoutCurrentCount: 1,
+    });
+
+    await reconcileStudentRiskProjectionsForOrg(ORG, { now: NOW });
+
+    expect(h.markReady).not.toHaveBeenCalled();
+    expect(h.markIncomplete).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: ORG, missingStudentCount: 1, expectedStudentCount: 5 })
+    );
   });
 });

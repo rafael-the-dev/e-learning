@@ -12,7 +12,6 @@ const mockQueryRaw = vi.fn();
 const mockStudentLevelProgressFindMany = vi.fn();
 const mockStudentCourseProgressFindMany = vi.fn();
 const mockStudentSubjectProgressFindMany = vi.fn();
-const mockRiskProjectionCount = vi.fn();
 const mockRiskProjectionFindMany = vi.fn();
 const mockEnrollmentFindMany = vi.fn();
 
@@ -33,19 +32,23 @@ vi.mock("@/server/db", () => ({
     studentLevelProgress: { findMany: mockStudentLevelProgressFindMany },
     studentCourseProgress: { findMany: mockStudentCourseProgressFindMany },
     studentSubjectProgress: { findMany: mockStudentSubjectProgressFindMany },
-    // M11.3: coverage gate + projection reads. Default (set in beforeEach) is count 0 =
-    // not backfilled → the flat-threshold attendance fallback is exercised.
-    studentRiskProjection: { count: mockRiskProjectionCount, findMany: mockRiskProjectionFindMany },
+    // getStudentIdsWithDimensionRisk reads this when the org is covered (F-H1).
+    studentRiskProjection: { findMany: mockRiskProjectionFindMany },
     enrollment: { findMany: mockEnrollmentFindMany },
     $queryRaw: mockQueryRaw,
   }),
 }));
 
-const { mockFindUpcomingEventsByOrganization } = vi.hoisted(() => ({
+const { mockFindUpcomingEventsByOrganization, mockGetCoverage } = vi.hoisted(() => ({
   mockFindUpcomingEventsByOrganization: vi.fn(),
+  mockGetCoverage: vi.fn(),
 }));
 vi.mock("@/modules/academic-calendar/repositories/academic-event.repository", () => ({
   findUpcomingEventsByOrganization: mockFindUpcomingEventsByOrganization,
+}));
+// F-H1: the coverage gate is now the fail-closed rollout service, not a raw count.
+vi.mock("@/modules/students/services/student-risk-projection-coverage.service", () => ({
+  getStudentRiskProjectionCoverage: mockGetCoverage,
 }));
 
 import {
@@ -65,9 +68,9 @@ const TEACHER = "teacher-1";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Default: no projection coverage → legacy paths (clearAllMocks keeps implementations,
-  // so these must be re-defaulted or a covered test's value would leak into the next).
-  mockRiskProjectionCount.mockResolvedValue(0);
+  // Default: org NOT covered → legacy paths (clearAllMocks keeps implementations, so these
+  // must be re-defaulted or a covered test's value would leak into the next).
+  mockGetCoverage.mockResolvedValue({ ready: false });
   mockRiskProjectionFindMany.mockResolvedValue([]);
   mockEnrollmentFindMany.mockResolvedValue([]);
 });
@@ -355,7 +358,7 @@ describe("findTeacherRiskRows", () => {
   });
 
   it("M11.3: when the projection is backfilled, attendance risk uses the canonical decision (no flat 75/85 split)", async () => {
-    mockRiskProjectionCount.mockResolvedValue(1); // org is backfilled → coverage
+    mockGetCoverage.mockResolvedValue({ ready: true }); // org fully covered (F-H1)
     mockStudentLevelProgressFindMany.mockResolvedValue([]);
     mockStudentCourseProgressFindMany.mockResolvedValue([]);
     mockStudentSubjectProgressFindMany.mockResolvedValue([]); // FAILED query only (legacy attendance skipped)

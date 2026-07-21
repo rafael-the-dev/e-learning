@@ -1,10 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import {
-  hasStudentRiskProjectionCoverage,
   getStudentRiskLevelCounts,
   getStudentRiskDimensionAtRiskCounts,
 } from "@/modules/students/repositories/student-risk-projection.repository";
+import { getStudentRiskProjectionCoverage } from "@/modules/students/services/student-risk-projection-coverage.service";
 
 // =============================================================================
 // DASHBOARD ACADEMIC REPOSITORY
@@ -40,7 +40,7 @@ export async function getAcademicRiskCounts(organizationId: string): Promise<Aca
   // 360 shows, not a flat-75 re-derivation. Until coverage exists, fall back to the legacy
   // queries below. The purely-operational counts (blocked / recovery / eligible / overdue /
   // class-group attendance) are direct status counts, consistent by origin, and stay as-is.
-  const covered = await hasStudentRiskProjectionCoverage(organizationId);
+  const covered = (await getStudentRiskProjectionCoverage({ organizationId })).ready;
 
   const [
     blockedStudents,

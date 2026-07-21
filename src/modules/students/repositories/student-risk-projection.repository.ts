@@ -27,7 +27,6 @@ import type {
   StudentRiskWatchlistRow,
 } from "@/modules/students/services/student-risk-projection.types";
 
-const ALL_LEVELS: StudentRiskLevel[] = ["UNKNOWN", "NONE", "LOW", "MODERATE", "HIGH", "CRITICAL"];
 const LOW_RANK = riskLevelRank("LOW");
 
 // ── Mapping ───────────────────────────────────────────────────────────────────
@@ -141,17 +140,11 @@ export async function findStudentRiskProjection(
   return row ? toProjection(row) : null;
 }
 
-/**
- * Whether this org has ANY persisted projection (i.e. the backfill has run). Consumers
- * use this as the read-through fallback gate during M11.3: with coverage they read the
- * projection, without it they fall back to the legacy SQL classification, so an
- * un-backfilled org never shows a false "zero at risk". Removed in M11.4 with the legacy.
- */
-export async function hasStudentRiskProjectionCoverage(organizationId: string): Promise<boolean> {
-  const db = await getDb();
-  const count = await db.studentRiskProjection.count({ where: { organizationId } });
-  return count > 0;
-}
+// NOTE (F-H1): the fragile `count(org) > 0` coverage gate that used to live here was
+// replaced by `getStudentRiskProjectionCoverage` (student-risk-projection-coverage.service),
+// which measures COMPLETENESS (every eligible student has a current-version projection) and
+// is fail-closed — a single event-driven projection write can no longer flip a whole org
+// onto an under-populated projection.
 
 /**
  * Org-wide risk KPI counts. Finance-blind consumers pass `financeAuthorized: false` so the

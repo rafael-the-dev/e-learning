@@ -119,6 +119,7 @@ model Organization {
   subjectAttendanceSummaries StudentSubjectAttendanceSummary[]
   periodAttendanceSummaries  StudentPeriodAttendanceSummary[]
   studentRiskProjections     StudentRiskProjection[]
+  studentRiskProjectionCoverage StudentRiskProjectionCoverage?
   transcriptNumberCounters   TranscriptNumberCounter[]
   academicTranscripts        AcademicTranscript[]
   academicTranscriptVersions AcademicTranscriptVersion[]
@@ -1401,6 +1402,37 @@ model StudentRiskProjection {
   @@index([organizationId, attendanceLevel])
   @@index([organizationId, sourceVersion])
   @@map("student_risk_projections")
+}
+
+// Per-organization rollout state for the risk projection (M11 / F-H1). The dashboards may
+// only read the canonical projection when an org is fully covered — every ELIGIBLE student
+// has a projection of the CURRENT rules version. This row records that rollout state so a
+// single incidental event-driven projection write can never flip a whole org to "covered"
+// (deploy-ordering hazard): only a full backfill/reconcile may set status READY, and the
+// gate additionally re-verifies completeness live (fail-closed) on each decision.
+model StudentRiskProjectionCoverage {
+  id             String @id @default(cuid())
+  organizationId String @unique
+  sourceVersion  String
+  // StudentRiskProjectionCoverageStatus: NOT_STARTED | RUNNING | INCOMPLETE | READY | STALE | FAILED
+  status                String    @default("NOT_STARTED")
+  expectedStudentCount  Int       @default(0)
+  projectedStudentCount Int       @default(0)
+  missingStudentCount   Int       @default(0)
+  staleStudentCount     Int       @default(0)
+  // Operational code/summary only — never a stack trace or sensitive data.
+  errorSummary      String?   @db.NVarChar(1000)
+  backfillStartedAt DateTime?
+  backfilledAt      DateTime?
+  verifiedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([status])
+  @@index([sourceVersion])
+  @@map("student_risk_projection_coverage")
 }
 
 // =============================================================================
