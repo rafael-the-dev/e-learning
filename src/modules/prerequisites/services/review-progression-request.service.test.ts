@@ -154,7 +154,7 @@ describe("approveProgressionRequest", () => {
     );
   });
 
-  it("does NOT emit completion side effects when the course is not completed", async () => {
+  it("does NOT emit COURSE-COMPLETION side effects when the course is not completed", async () => {
     primeApproveHappyPath(); // courseLevel.findMany = [] → NOT_STARTED
 
     await approveProgressionRequest({
@@ -163,8 +163,35 @@ describe("approveProgressionRequest", () => {
       actorId: "admin-1",
     });
 
+    // No course-completion audit or event...
     expect(auditCreate).not.toHaveBeenCalled();
-    expect(publish).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "student_course.completed" })
+    );
+  });
+
+  it("F-H2: the manual promotion emits STUDENT_LEVEL_PROGRESSION_CHANGED for the origin level", async () => {
+    primeApproveHappyPath(); // previous from-level status null → PROMOTED (a real change)
+
+    await approveProgressionRequest({
+      requestId: "req-1",
+      organizationId: "org-1",
+      actorId: "admin-1",
+    });
+
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "student_level_progression.changed",
+        aggregateId: "e1",
+        payload: expect.objectContaining({
+          studentId: "s1",
+          enrollmentId: "e1",
+          courseLevelId: "L1",
+          previousStatus: null,
+          currentStatus: "PROMOTED",
+        }),
+      })
+    );
   });
 
   it("throws when the request is not PENDING (already processed)", async () => {

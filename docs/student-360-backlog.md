@@ -54,9 +54,19 @@ M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip 
   current version AND a live zero-uncovered re-check; event handler cannot promote READY;
   completeness measured over students so orphans can't compensate; single shared eligible-
   student predicate). See CHANGELOG. This also subsumes the "false-zero" facet of the gate.
-- **Still open from the review (not this change):** F-H2 (event coverage = 2 of ~12
-  triggers; `INVOICE_OVERDUE` unhandled), F-H3 (no scheduled reconcile; `--stale` heals only
-  version-drift), F-H4 (backfill not cursor-batched/resumable for very large tenants),
+- **F-H2 — event coverage → DONE.** `StudentRiskProjectionHandler` now subscribes to a
+  centralized contract of all direct risk mutations (academic / attendance incl.
+  justifications / payment+refund / enrolment+progression / documents / per-student waivers),
+  all post-commit with a payload `studentId`. New events emitted at canonical points
+  (`STUDENT_LEVEL_PROGRESSION_CHANGED`, `ENROLLMENT_CANCELLED/COMPLETED`,
+  `STUDENT_DOCUMENT_STATUS_CHANGED`, `STUDENT_PREREQUISITE_WAIVER_CHANGED`) + `studentId`
+  added to refund reject/complete. Best-effort (never rolls back the mutation), idempotent
+  dedup, coverage state untouched by events. See CHANGELOG. **Still deferred to F-H3:** the
+  temporal `INVOICE_OVERDUE` trigger (dueDate + job), document expiry, policy fan-out, and
+  lost/failed-event recovery.
+- **Still open from the review (not this change):** F-H3 (no scheduled reconcile; `--stale`
+  heals only version-drift; wire the temporal `INVOICE_OVERDUE`), F-H4 (backfill not
+  cursor-batched/resumable for very large tenants),
   F-M1 (overdue status-only vs `dueDate < now`), F-M2 (soft-deleted rows still counted on
   reads / name leak), F-M4 (synchronous recompute burst), F-M6 (non-finance card/alert
   permission gating), F-M7 (pager aria-labels), plus the Lows. F-L4 (unused var) fixed here.

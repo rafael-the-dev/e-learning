@@ -69,6 +69,35 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Closed the risk-projection event-coverage gap (review finding **F-H2**). Previously only
+  two events (`attendance.summary_recalculated`, `payment.confirmed`) kept the projection
+  fresh, so most direct risk mutations relied on the reconcile sweep. The
+  `StudentRiskProjectionHandler` now subscribes to a **single centralized contract**
+  (`STUDENT_RISK_RECALCULATION_EVENTS`) covering every direct mutation with a known student:
+  academic (`student_subject.passed/failed`), attendance (summary + justification
+  approved/rejected — the justification events are the only trigger when the % is unchanged),
+  financial (payment confirmed/cancelled, refund requested/rejected/completed),
+  enrolment/progression (`enrollment.created/activated/cancelled/completed`,
+  `student_course.completed/reopened`, `student_level_progression.changed`), documents
+  (`student_document.status_changed`) and per-student prerequisite waivers
+  (`student_prerequisite_waiver.changed`). All are emitted **post-commit** (so a failed
+  recompute can never roll back the mutation — the handler is best-effort and never throws),
+  and identity comes from a payload `studentId` (no extra query).
+  - **New events emitted at their canonical mutation point:** `STUDENT_LEVEL_PROGRESSION_CHANGED`
+    (both the recompute and the manual-approval paths, only on a real status change),
+    `ENROLLMENT_CANCELLED`/`ENROLLMENT_COMPLETED` (were declared but never published),
+    `STUDENT_DOCUMENT_STATUS_CHANGED` (submit/verify/remove), `STUDENT_PREREQUISITE_WAIVER_CHANGED`
+    (grant/revoke, with `studentId` derived from the validated enrolment). `studentId` was
+    added to the existing `REFUND_REJECTED`/`REFUND_COMPLETED` payloads.
+  - **Deduplication:** only the final canonical fact of an operation is subscribed (e.g. the
+    attendance summary event, not its BELOW_REQUIRED/RECOVERED transitions); where two
+    legitimate finals co-fire (subject-passed + course-completed, or justification + summary),
+    the extra recompute is an idempotent no-op (the classification write is skipped).
+  - **Explicitly deferred to F-H3:** temporal `INVOICE_OVERDUE` (dueDate + daily job — the
+    biggest financial trigger), document expiry, policy fan-out (min grade / min attendance %
+    affecting whole cohorts), and lost/failed-event recovery (no outbox/retry) — all remain the
+    responsibility of the reconciliation sweep. Individual handler events never change the
+    `StudentRiskProjectionCoverage` rollout state (F-H1 preserved).
 - Hardened the dashboard rollout gate (review finding **F-H1**). The fragile
   `count(organizationId) > 0` "coverage" check — which flipped a whole org onto the
   projection the instant a single event-driven row was written, silently undercounting

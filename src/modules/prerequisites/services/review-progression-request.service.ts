@@ -13,6 +13,8 @@ import {
 } from "@/modules/prerequisites/engines/course-completion.engine";
 import { STUDENT_LEVEL_PROGRESS_STATUS } from "@/modules/prerequisites/types";
 import { resolveStableCompletedAt } from "@/shared/lib/completed-at";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import {
   LEVEL_TERMINAL_STATUSES,
   LEVEL_COMPLETION_STATUSES,
@@ -275,13 +277,14 @@ export async function approveProgressionRequest(params: {
       fromLevelId: request.fromLevelId,
       toLevelId: request.toLevelId,
       fromLevelStatus,
+      previousFromLevelStatus: existing?.status ?? null,
       courseCompletion,
     };
   });
 
   // Emit completion side effects AFTER the transaction commits (event-bus
   // contract). Fires on either boundary crossing (COMPLETED entered / left).
-  const { courseCompletion, ...approval } = result;
+  const { courseCompletion, previousFromLevelStatus, ...approval } = result;
   if (courseCompletion.transition) {
     await emitCourseCompletionSideEffects({
       organizationId,
@@ -290,6 +293,26 @@ export async function approveProgressionRequest(params: {
       previousStatus: courseCompletion.previousStatus,
       transition: courseCompletion.transition,
       completionReason: courseCompletion.completionReason,
+    });
+  }
+
+  // F-H2: the manual promotion changes the origin level's status → emit the canonical
+  // progression fact (post-commit) so the risk projection refreshes. Only on a real change.
+  if (previousFromLevelStatus !== approval.fromLevelStatus) {
+    await eventPublisher.publish({
+      organizationId,
+      eventType: DomainEventType.STUDENT_LEVEL_PROGRESSION_CHANGED,
+      aggregateType: DomainAggregateType.STUDENT_LEVEL_PROGRESS,
+      aggregateId: approval.enrollmentId,
+      actorId,
+      payload: {
+        studentId: approval.studentId,
+        enrollmentId: approval.enrollmentId,
+        courseLevelId: approval.fromLevelId,
+        previousStatus: previousFromLevelStatus,
+        currentStatus: approval.fromLevelStatus,
+        occurredAt: new Date().toISOString(),
+      },
     });
   }
 

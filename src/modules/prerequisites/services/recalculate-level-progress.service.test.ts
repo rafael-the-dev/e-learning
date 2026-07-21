@@ -204,3 +204,33 @@ describe("recalculateStudentLevelProgress — attendance INCOMPLETE (Phase 5)", 
     expect(statusArg()).toBe("FAILED"); // INCOMPLETE does not mask a real failure
   });
 });
+
+describe("recalculateStudentLevelProgress — F-H2 progression-changed event", () => {
+  it("collects STUDENT_LEVEL_PROGRESSION_CHANGED when the level status actually changes", async () => {
+    setSubjects(true); // → PASSED
+    mocks.levelProgressFindFirst.mockResolvedValue({ status: "IN_PROGRESS", completedAt: null });
+    const events: Array<{ eventType: string; payload: Record<string, unknown> }> = [];
+
+    await recalculateStudentLevelProgress(ENR, LVL, ORG, { events });
+
+    const evt = events.find((e) => e.eventType === "student_level_progression.changed");
+    expect(evt).toBeDefined();
+    expect(evt!.payload).toMatchObject({
+      studentId: "s1",
+      enrollmentId: ENR,
+      courseLevelId: LVL,
+      previousStatus: "IN_PROGRESS",
+      currentStatus: "PASSED",
+    });
+  });
+
+  it("does NOT emit when the level status is unchanged (no-op recompute)", async () => {
+    setSubjects(true); // → PASSED
+    mocks.levelProgressFindFirst.mockResolvedValue({ status: "PASSED", completedAt: D1 });
+    const events: Array<{ eventType: string }> = [];
+
+    await recalculateStudentLevelProgress(ENR, LVL, ORG, { events });
+
+    expect(events.some((e) => e.eventType === "student_level_progression.changed")).toBe(false);
+  });
+});

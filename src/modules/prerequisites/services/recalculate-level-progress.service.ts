@@ -3,7 +3,8 @@ import { upsertStudentLevelProgress } from "@/modules/prerequisites/repositories
 import { evaluateLevelProgression, computeWeightedLevelGrade } from "@/modules/prerequisites/engines/level-progression.engine";
 import { evaluateCourseCompletion } from "@/modules/prerequisites/engines/course-completion.engine";
 import { PROGRESSION_OUTCOME } from "@/modules/prerequisites/types";
-import type { CascadeContext } from "@/shared/lib/cascade";
+import { type CascadeContext, emitOrCollect } from "@/shared/lib/cascade";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import { resolveStableCompletedAt } from "@/shared/lib/completed-at";
 
 // completedAt semantics for StudentLevelProgress.
@@ -167,6 +168,28 @@ export async function recalculateStudentLevelProgress(
     progressReason,
     completedAt,
   }, db);
+
+  // F-H2: emit the canonical final progression fact ONLY when the level status actually
+  // changed (never on a no-op recompute). Collected for post-commit publication via the
+  // cascade context (or published immediately when standalone) — so a rolled-back grade
+  // mutation never emits it. Drives the StudentRiskProjection (blocked / recovery inputs).
+  const previousStatus = existingLevel?.status ?? null;
+  if (previousStatus !== levelStatus) {
+    await emitOrCollect(ctx, {
+      organizationId,
+      eventType: DomainEventType.STUDENT_LEVEL_PROGRESSION_CHANGED,
+      aggregateType: DomainAggregateType.STUDENT_LEVEL_PROGRESS,
+      aggregateId: enrollmentId,
+      payload: {
+        studentId: enrollment.studentId,
+        enrollmentId,
+        courseLevelId,
+        previousStatus,
+        currentStatus: levelStatus,
+        occurredAt: new Date().toISOString(),
+      },
+    });
+  }
 
   // Cascade to course progress (same tx client + event collector).
   await evaluateCourseCompletion(enrollmentId, organizationId, null, ctx);

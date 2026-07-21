@@ -20,6 +20,8 @@ import {
 import { ENROLLMENT_TRANSITIONS } from "@/modules/enrollments/types";
 import type { Enrollment } from "@/modules/enrollments/types";
 import { getDb } from "@/server/db";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 
 export class CancelEnrollmentCommand extends BaseCommand<CancelEnrollmentSchema, Enrollment> {
   private _existing: Enrollment | null = null;
@@ -90,6 +92,21 @@ export class CancelEnrollmentCommand extends BaseCommand<CancelEnrollmentSchema,
       action: "enrollment.cancelled",
       oldValues: { status: prev.status },
       newValues: { status: "CANCELLED", reason: this.input.reason },
+    });
+
+    // F-H2: publish the lifecycle fact (post-write) so the risk projection refreshes the
+    // student's enrollment-derived signals (active / any enrollment).
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.ENROLLMENT_CANCELLED,
+      aggregateType: DomainAggregateType.ENROLLMENT,
+      aggregateId: enrollment.id,
+      actorId: this.context.userId,
+      payload: {
+        studentId: enrollment.studentId,
+        enrollmentId: enrollment.id,
+        occurredAt: new Date().toISOString(),
+      },
     });
 
     return enrollment;

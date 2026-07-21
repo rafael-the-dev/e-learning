@@ -16,6 +16,8 @@ import {
   type VerifyStudentDocumentSchema,
 } from "@/modules/student-documents/schemas/student-document.schema";
 import type { StudentDocument } from "@/modules/student-documents/types";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 
 export class VerifyStudentDocumentCommand extends BaseCommand<
   VerifyStudentDocumentSchema,
@@ -62,6 +64,23 @@ export class VerifyStudentDocumentCommand extends BaseCommand<
       entityId: document.id,
       action: "student_document.verified",
       newValues: { status: document.status, studentId: document.studentId },
+    });
+
+    // F-H2: publish the canonical document status-change fact (post-write).
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.STUDENT_DOCUMENT_STATUS_CHANGED,
+      aggregateType: DomainAggregateType.STUDENT_DOCUMENT,
+      aggregateId: document.id,
+      actorId: this.context.userId,
+      payload: {
+        studentId: document.studentId,
+        documentId: document.id,
+        previousStatus: null,
+        currentStatus: document.status,
+        changeType: document.status === "APPROVED" ? "APPROVED" : "REJECTED",
+        occurredAt: new Date().toISOString(),
+      },
     });
 
     return document;

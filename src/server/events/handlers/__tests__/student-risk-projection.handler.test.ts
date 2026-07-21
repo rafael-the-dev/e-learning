@@ -5,7 +5,10 @@ vi.mock("@/modules/students/services/student-risk-projection.service", () => ({
   recalculateStudentRiskProjection: recalc,
 }));
 
-import { StudentRiskProjectionHandler } from "../student-risk-projection.handler";
+import {
+  StudentRiskProjectionHandler,
+  STUDENT_RISK_RECALCULATION_EVENTS,
+} from "../student-risk-projection.handler";
 import { DomainEventType } from "../../event-types";
 import type { PersistedDomainEvent } from "../../domain-event";
 
@@ -32,10 +35,34 @@ const handler = new StudentRiskProjectionHandler();
 beforeEach(() => recalc.mockReset());
 
 describe("StudentRiskProjectionHandler", () => {
-  it("handles the risk-relevant emitted events and ignores others", () => {
-    expect(handler.canHandle(event({ eventType: DomainEventType.PAYMENT_CONFIRMED }))).toBe(true);
-    expect(handler.canHandle(event({ eventType: DomainEventType.ATTENDANCE_SUMMARY_RECALCULATED }))).toBe(true);
+  it("handles EVERY event in the centralized F-H2 recalculation contract", () => {
+    for (const eventType of STUDENT_RISK_RECALCULATION_EVENTS) {
+      expect(handler.canHandle(event({ eventType }))).toBe(true);
+    }
+    // Spot-check the direct-mutation families the F-H2 scope added.
+    for (const eventType of [
+      DomainEventType.STUDENT_SUBJECT_FAILED,
+      DomainEventType.ATTENDANCE_JUSTIFICATION_APPROVED,
+      DomainEventType.ATTENDANCE_JUSTIFICATION_REJECTED,
+      DomainEventType.PAYMENT_CANCELLED,
+      DomainEventType.REFUND_REQUESTED,
+      DomainEventType.REFUND_REJECTED,
+      DomainEventType.REFUND_COMPLETED,
+      DomainEventType.ENROLLMENT_CANCELLED,
+      DomainEventType.ENROLLMENT_COMPLETED,
+      DomainEventType.STUDENT_COURSE_COMPLETED,
+      DomainEventType.STUDENT_LEVEL_PROGRESSION_CHANGED,
+      DomainEventType.STUDENT_DOCUMENT_STATUS_CHANGED,
+      DomainEventType.STUDENT_PREREQUISITE_WAIVER_CHANGED,
+    ]) {
+      expect(handler.canHandle(event({ eventType }))).toBe(true);
+    }
+  });
+
+  it("ignores events outside the contract", () => {
     expect(handler.canHandle(event({ eventType: DomainEventType.NOTIFICATION_CREATED }))).toBe(false);
+    expect(handler.canHandle(event({ eventType: DomainEventType.INVOICE_OVERDUE }))).toBe(false); // temporal → F-H3
+    expect(handler.canHandle(event({ eventType: DomainEventType.WALLET_DEPOSIT_CREATED }))).toBe(false); // not a risk input
   });
 
   it("recomputes the projection for the payload's student, scoped to the event's org", async () => {

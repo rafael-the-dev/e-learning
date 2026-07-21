@@ -136,6 +136,14 @@ export const DomainEventType = {
   REFUND_APPROVED: "refund.approved",
   REFUND_REJECTED: "refund.rejected",
   REFUND_COMPLETED: "refund.completed",
+
+  // Student risk-relevant direct mutations (F-H2). Final-state facts emitted post-commit,
+  // each carrying organizationId + studentId, so the StudentRiskProjectionHandler can keep
+  // the canonical projection fresh. Emitted ONLY on a real state change (never on a no-op
+  // recompute). Temporal / policy-fan-out / recovery cases stay with reconciliation (F-H3).
+  STUDENT_LEVEL_PROGRESSION_CHANGED: "student_level_progression.changed",
+  STUDENT_DOCUMENT_STATUS_CHANGED: "student_document.status_changed",
+  STUDENT_PREREQUISITE_WAIVER_CHANGED: "student_prerequisite_waiver.changed",
 } as const;
 
 export type DomainEventType = (typeof DomainEventType)[keyof typeof DomainEventType];
@@ -158,6 +166,9 @@ export const DomainAggregateType = {
   REFUND: "REFUND",
   TRANSCRIPT: "TRANSCRIPT",
   CERTIFICATE: "CERTIFICATE",
+  STUDENT_LEVEL_PROGRESS: "STUDENT_LEVEL_PROGRESS",
+  STUDENT_DOCUMENT: "STUDENT_DOCUMENT",
+  PREREQUISITE_WAIVER: "PREREQUISITE_WAIVER",
 } as const;
 
 export type DomainAggregateType = (typeof DomainAggregateType)[keyof typeof DomainAggregateType];

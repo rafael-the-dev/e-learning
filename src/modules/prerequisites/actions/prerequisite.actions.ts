@@ -35,6 +35,8 @@ import {
   createWaiver,
   revokeWaiver,
 } from "@/modules/prerequisites/repositories/prerequisite-waiver.repository";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 import {
   createProgressionPolicy,
   findPolicyByTransition,
@@ -189,6 +191,23 @@ export async function grantPrerequisiteWaiverAction(input: unknown): Promise<Act
       action: "prerequisite_waiver.created",
       newValues: { studentId: data.studentId, levelSubjectId: data.levelSubjectId },
     });
+
+    // F-H2: a per-student waiver changes eligibility inputs → publish the canonical fact
+    // (post-write). studentId is derived from the VALIDATED enrollment, not the request.
+    await eventPublisher.publish({
+      organizationId: context.organizationId,
+      eventType: DomainEventType.STUDENT_PREREQUISITE_WAIVER_CHANGED,
+      aggregateType: DomainAggregateType.PREREQUISITE_WAIVER,
+      aggregateId: waiver.id,
+      actorId: context.userId,
+      payload: {
+        studentId: enrollment.studentId,
+        enrollmentId: data.enrollmentId,
+        waiverId: waiver.id,
+        changeType: "CREATED",
+        occurredAt: new Date().toISOString(),
+      },
+    });
     return { success: true, data: { id: waiver.id } };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : "Erro desconhecido" };
@@ -201,6 +220,13 @@ export async function revokePrerequisiteWaiverAction(
 ): Promise<ActionResult> {
   try {
     const context = await requirePermission(PERMISSIONS.PREREQUISITES_WAIVERS_MANAGE);
+    // Resolve the waiver's owning student/enrollment (tenant-scoped) BEFORE revoking, so the
+    // event carries a validated studentId (never trusted from the caller).
+    const db = await getDb();
+    const waiver = await db.prerequisiteWaiver.findFirst({
+      where: { id: waiverId, organizationId: context.organizationId },
+      select: { id: true, studentId: true, enrollmentId: true },
+    });
     await revokeWaiver(waiverId, context.organizationId, context.userId, reason);
     await auditService.log(context, {
       entity: "PrerequisiteWaiver",
@@ -208,6 +234,24 @@ export async function revokePrerequisiteWaiverAction(
       action: "prerequisite_waiver.revoked",
       newValues: { reason },
     });
+
+    // F-H2: publish the canonical waiver-change fact (post-write) for the owning student.
+    if (waiver) {
+      await eventPublisher.publish({
+        organizationId: context.organizationId,
+        eventType: DomainEventType.STUDENT_PREREQUISITE_WAIVER_CHANGED,
+        aggregateType: DomainAggregateType.PREREQUISITE_WAIVER,
+        aggregateId: waiver.id,
+        actorId: context.userId,
+        payload: {
+          studentId: waiver.studentId,
+          enrollmentId: waiver.enrollmentId,
+          waiverId: waiver.id,
+          changeType: "REVOKED",
+          occurredAt: new Date().toISOString(),
+        },
+      });
+    }
     return { success: true };
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : "Erro desconhecido" };

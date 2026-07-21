@@ -85,6 +85,9 @@ export class RejectRefundCommand extends BaseCommand<RejectRefundInput, Refund> 
       aggregateId: refund.id,
       actorId: this.context.userId,
       payload: {
+        // F-H2: studentId (from the loaded refund entity) lets the risk projection refresh
+        // pendingRefundCount when a pending refund leaves the set.
+        studentId: refund.studentId ?? undefined,
         refundId: refund.id,
         refundNumber: refund.refundNumber,
         paymentId: refund.paymentId,

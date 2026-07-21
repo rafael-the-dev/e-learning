@@ -360,6 +360,8 @@ export class CompleteRefundCommand extends BaseCommand<CompleteRefundInput, Refu
       aggregateId: refund.id,
       actorId: this.context.userId,
       payload: {
+        // F-H2: studentId lets the risk projection refresh pendingRefundCount / totals.
+        studentId: refund.studentId ?? undefined,
         refundId: refund.id,
         refundNumber: refund.refundNumber,
         paymentId: refund.paymentId,

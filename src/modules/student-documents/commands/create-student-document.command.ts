@@ -14,6 +14,8 @@ import {
   type CreateStudentDocumentSchema,
 } from "@/modules/student-documents/schemas/student-document.schema";
 import type { StudentDocument } from "@/modules/student-documents/types";
+import { eventPublisher } from "@/server/events/event-publisher";
+import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
 
 export class CreateStudentDocumentCommand extends BaseCommand<
   CreateStudentDocumentSchema,
@@ -62,6 +64,24 @@ export class CreateStudentDocumentCommand extends BaseCommand<
       entityId: document.id,
       action: "student_document.uploaded",
       newValues: { studentId: document.studentId, fileName: document.fileName },
+    });
+
+    // F-H2: the documents dimension (documentCount === 0 → HIGH) changes when the first
+    // document is uploaded; publish the canonical status-change fact (post-write).
+    await eventPublisher.publish({
+      organizationId: this.context.organizationId,
+      eventType: DomainEventType.STUDENT_DOCUMENT_STATUS_CHANGED,
+      aggregateType: DomainAggregateType.STUDENT_DOCUMENT,
+      aggregateId: document.id,
+      actorId: this.context.userId,
+      payload: {
+        studentId: document.studentId,
+        documentId: document.id,
+        previousStatus: null,
+        currentStatus: document.status,
+        changeType: "SUBMITTED",
+        occurredAt: new Date().toISOString(),
+      },
     });
 
     return document;
