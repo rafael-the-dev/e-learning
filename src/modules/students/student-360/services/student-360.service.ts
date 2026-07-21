@@ -50,6 +50,7 @@ export { resolveCurrentEnrollmentLevel };
 export type { ResolvedEnrollmentLevel };
 import {
   buildStudentRiskSummary,
+  assembleStudentRiskInput,
   type StudentRiskSummary,
   type StudentRiskInput,
 } from "@/modules/students/services/student-risk.service";
@@ -242,28 +243,30 @@ export async function getStudent360Core(
     currentEnrollment,
   });
 
-  // Single canonical risk classification (H6), derived from the consolidated read models.
+  // Single canonical risk classification (H6), derived from the consolidated read models
+  // via the SHARED input assembler (the same mapping the persisted projection uses — M11).
   // financial is null unless the viewer is authorized for finance → no hidden-risk inference.
   const financeAuthorized = finance != null && (finance.billing != null || finance.wallet != null);
-  const riskInput: StudentRiskInput = {
+  const riskInput: StudentRiskInput = assembleStudentRiskInput({
+    enrollmentCount: enrollments.length,
+    activeEnrollmentCount: activeEnrollments.length,
     blockedLevelCount: levelProgress.filter((p) => p.status === "BLOCKED").length,
     recoveryRequiredCount: levelProgress.filter((p) => p.status === "RECOVERY_REQUIRED").length,
-    hasActiveEnrollment: activeEnrollments.length > 0,
-    hasAnyEnrollment: enrollments.length > 0,
     failedSubjectCount: academicSummary.failedSubjects,
     incompleteAssessmentCount: academicSummary.incompleteSubjects,
+    gradedSubjectCount: academicSummary.gradedSubjects,
+    subjectProgressCount: subjectProgressResult.data.length,
     belowRequiredAttendanceCount: attendanceSubjects.filter((s) => s.status === "BELOW_REQUIRED").length,
     pendingJustificationCount: justificationsResult.total,
     documentCount,
+    attendancePercentage: attendanceSummary.attendancePercentage,
     financial: financeAuthorized
       ? {
           overdueInvoiceCount: finance?.billing?.overdueInvoiceCount ?? 0,
           pendingRefundCount: finance?.wallet?.pendingRefundCount ?? 0,
         }
       : null,
-    hasAcademicData: subjectProgressResult.data.length > 0 || academicSummary.gradedSubjects > 0,
-    hasAttendanceData: attendanceSummary.attendancePercentage != null,
-  };
+  });
   const riskSummary = buildStudentRiskSummary(riskInput);
 
   return {

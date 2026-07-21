@@ -120,6 +120,45 @@ function toDimension(reasons: StudentRiskReason[]): RiskDimension {
   return { level: reasons.length > 0 ? maxLevel(reasons.map((r) => r.level)) : "NONE", reasons };
 }
 
+// Raw per-student signals, before the engine's boolean derivations. The SINGLE place
+// that maps domain counts → StudentRiskInput, so Student 360 and the persisted projection
+// (M11) feed the engine identically (they only differ in how `financial` is gated). Pure,
+// primitives only — no domain imports — so the engine file stays dependency-free.
+export interface StudentRiskSignals {
+  enrollmentCount: number;
+  activeEnrollmentCount: number;
+  blockedLevelCount: number;
+  recoveryRequiredCount: number;
+  failedSubjectCount: number;
+  incompleteAssessmentCount: number;
+  gradedSubjectCount: number;
+  subjectProgressCount: number;
+  belowRequiredAttendanceCount: number;
+  pendingJustificationCount: number;
+  documentCount: number;
+  attendancePercentage: number | null;
+  // null → finance dimension not included (unauthorized viewer, or the finance-excluded pass).
+  financial: { overdueInvoiceCount: number; pendingRefundCount: number } | null;
+}
+
+/** Map raw signals to the engine input, centralizing the "has X data" derivations. */
+export function assembleStudentRiskInput(s: StudentRiskSignals): StudentRiskInput {
+  return {
+    blockedLevelCount: s.blockedLevelCount,
+    recoveryRequiredCount: s.recoveryRequiredCount,
+    hasActiveEnrollment: s.activeEnrollmentCount > 0,
+    hasAnyEnrollment: s.enrollmentCount > 0,
+    failedSubjectCount: s.failedSubjectCount,
+    incompleteAssessmentCount: s.incompleteAssessmentCount,
+    belowRequiredAttendanceCount: s.belowRequiredAttendanceCount,
+    pendingJustificationCount: s.pendingJustificationCount,
+    documentCount: s.documentCount,
+    financial: s.financial,
+    hasAcademicData: s.subjectProgressCount > 0 || s.gradedSubjectCount > 0,
+    hasAttendanceData: s.attendancePercentage != null,
+  };
+}
+
 /**
  * The canonical risk classification. Pure — no I/O — so it is fully unit-tested and
  * produces the same answer for the same inputs everywhere it runs.
