@@ -9,7 +9,31 @@ deliberately deferred, so the review's conclusions don't live only in chat.
 
 ## M11 — Dashboard Risk Aggregation Convergence
 
-**Status:** open debt · **Severity:** Medium · **Does NOT block current hardening.**
+**Status:** IN PROGRESS — M11.1 + M11.2 DONE; M11.3 (dashboard migration) + M11.4 (backfill /
+command hooks / reconciliation / legacy removal / arch tests) pending · **Severity:** Medium.
+
+**Progress:**
+- **M11.1 — projection contract (DONE).** `StudentRiskProjection` model + SQL Server
+  migration; shared risk semantics exported from the engine (`RISK_LEVEL_ORDER`,
+  `riskLevelRank`, `isRiskLevelAtRisk`, `STUDENT_RISK_SOURCE_VERSION`); repository (single
+  writer `upsertStudentRiskProjection` + `getStudentRiskLevelCounts` /
+  `findStudentRiskWatchlist` / `findStudentIdsWithStaleRiskProjection`, finance-blind reads
+  over `levelWithoutFinance`). Stores the H6 pair `level` + `levelWithoutFinance` + ranks.
+- **M11.2 — recalculation service (DONE).** `recalculateStudentRiskProjection()` uses the
+  SAME H6 engine + shared `assembleStudentRiskInput` (extracted; `getStudent360Core`
+  repointed to it), runs the engine twice (with/without finance), idempotent, tenant-guarded.
+- **M11.3 — dashboard migration (PENDING).** Point the executive dashboard, secretary
+  watchlist, teacher dashboard and debt/risk watchlists at the projection reads.
+- **M11.4 — backfill + hooks + reconciliation + legacy removal + arch tests (PENDING).**
+  `prisma/backfill-student-risk-projection.ts` (idempotent, batched, per-org), post-command
+  recalc hooks, periodic reconciliation, remove the legacy SQL classifications, add
+  architecture tests forbidding duplicated 75/85 thresholds.
+
+**Sequencing note:** the projection table is EMPTY until the backfill (M11.4) runs, so
+flipping the dashboards (M11.3) to read it before backfill+hooks land would show 0 at-risk
+students in the interim. Real-world deploy order should be: apply migration → backfill →
+enable command hooks → flip dashboards → remove legacy. Code-commit order can still be
+M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip is released.
 
 ### Context
 H6 introduced the single canonical per-student risk engine (`buildStudentRiskSummary` →
