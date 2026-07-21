@@ -96,11 +96,11 @@ Brief pointers so the review's remaining findings have one home.
 - **H4 — Eligibility N+1.** `evaluateEligibilityForAllSubjects` (~5 queries/subject) in
   the Progress tab. Lives in `prerequisites`. Fix: batch the enrollment + progress +
   prerequisite loads.
-- **Mediums.** Transcript page missing `assertTeacherCanAccessStudent` (IDOR — **security**);
-  raw reviewer UUID in the attendance justifications table; `refundMethod` rendered as a raw
-  enum; header action overload.
+- **Mediums.** Raw reviewer UUID in the attendance justifications table; `refundMethod`
+  rendered as a raw enum; header action overload.
   *(Resolved: cross-module prerequisites repo duplication — M1; finance-tab client-side
-  pagination shipping the full history — M2.)*
+  pagination shipping the full history — M2; transcript page missing the teacher-scope IDOR
+  guard — done, see CHANGELOG "Security (IDOR)".)*
 - **H5 leftovers.** Precise **unjustified-absence count** (the persisted rollup's excused
   count overlaps absences/lateness — needs a dedicated field); the portals' **monthly
   attendance trend** stays raw (per-month grain); the **teacher portal** reads a third,

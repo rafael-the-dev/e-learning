@@ -13,6 +13,18 @@ Architectural-review hardening of the Student 360 aggregator (H1 security bounda
 H2 single-source academic average). On feature branch `feat/transcript-engine`;
 validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
 
+### Security (IDOR)
+- Closed an IDOR on the student transcript page (`/students/[studentId]/transcript`): it now
+  resolves scoped access via the shared `assertTeacherCanAccessStudent` guard **before**
+  reading any transcript data, so a teacher-scoped caller holding `TRANSCRIPTS_VIEW` can no
+  longer open the transcript of a student outside the classes they teach by changing the URL
+  `studentId`. Out-of-scope (and cross-org / non-existent) access returns **404** — not 403 —
+  to avoid id enumeration. Reuses the same contract as the Student 360 + timeline pages (no
+  duplicated teacher-scope logic). Org isolation was already enforced by the org-scoped
+  lookup; student-scoped users are already redirected to their own portal; the GUARDIAN role
+  lacks `TRANSCRIPTS_VIEW`. `getStudentTranscript` is the only surface that reads this
+  transcript — there is no export/PDF/API endpoint to guard separately.
+
 ### Security
 - **Finance permission boundary at the aggregator.** Student 360 no longer queries,
   computes, or returns any finance figure to a viewer without finance permission — the

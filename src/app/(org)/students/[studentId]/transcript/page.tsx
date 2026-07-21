@@ -7,6 +7,8 @@ import { Badge } from "@/shared/components/ui/badge";
 import { EmptyState } from "@/shared/components/layout/empty-state";
 import { requirePermissionOrRedirect } from "@/server/auth/context";
 import { redirectIfStudentScoped } from "@/server/auth/student-scope";
+import { assertTeacherCanAccessStudent } from "@/server/auth/teacher-access";
+import { AuthorizationError } from "@/shared/lib/command";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { getStudentTranscript } from "@/modules/grades/services/academic-progress.service";
@@ -51,6 +53,19 @@ export default async function StudentTranscriptPage({
   await redirectIfStudentScoped(context);
 
   const { studentId } = await params;
+
+  // Resolve scoped access BEFORE reading any transcript data (IDOR guard). A
+  // teacher-scoped caller may only open a student they teach — never any org student
+  // by id. Reuses the same contract as the Student 360 + timeline pages (no duplicated
+  // scope logic). 404 (not 403) so we don't disclose that the record exists, and the
+  // transcript read below is never reached when the guard fails.
+  try {
+    await assertTeacherCanAccessStudent(context, studentId);
+  } catch (e) {
+    if (e instanceof AuthorizationError) notFound();
+    throw e;
+  }
+
   const db = await getDb();
 
   const student = await db.student.findFirst({
