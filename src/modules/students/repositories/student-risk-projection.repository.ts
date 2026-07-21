@@ -12,6 +12,7 @@
 // "no hidden financial-risk inference" rule, enforced at the data boundary.
 // =============================================================================
 
+import type { Prisma } from "@prisma/client";
 import { getDb, type PrismaClientOrTx } from "@/server/db";
 import {
   riskLevelRank,
@@ -28,6 +29,18 @@ import type {
 } from "@/modules/students/services/student-risk-projection.types";
 
 const LOW_RANK = riskLevelRank("LOW");
+
+/**
+ * The canonical base filter for every KPI / watchlist / aggregate read (F-M2). A projection
+ * only counts when its student is VISIBLE — belongs to this org AND is not soft-deleted. A
+ * student soft-deleted after their row was written keeps the row (audit / restore / reconcile)
+ * but disappears from all aggregates. The `student: { organizationId, deletedAt: null }`
+ * relation filter also hardens tenant scoping (belt-and-suspenders over the projection's own
+ * organizationId) and excludes orphan rows by construction (the required relation must match).
+ */
+function buildVisibleRiskProjectionWhere(organizationId: string): Prisma.StudentRiskProjectionWhereInput {
+  return { organizationId, student: { organizationId, deletedAt: null } };
+}
 
 // ── Mapping ───────────────────────────────────────────────────────────────────
 
@@ -161,8 +174,8 @@ export async function getStudentRiskLevelCounts(
   if (options.studentIds && options.studentIds.length === 0) {
     return { atRisk: 0, noRisk: 0, insufficientData: 0, byLevel: { UNKNOWN: 0, NONE: 0, LOW: 0, MODERATE: 0, HIGH: 0, CRITICAL: 0 } };
   }
-  const where = {
-    organizationId,
+  const where: Prisma.StudentRiskProjectionWhereInput = {
+    ...buildVisibleRiskProjectionWhere(organizationId),
     ...(options.sourceVersion ? { sourceVersion: options.sourceVersion } : {}),
     ...(options.studentIds ? { studentId: { in: options.studentIds } } : {}),
   };
@@ -206,8 +219,8 @@ export async function getStudentRiskDimensionAtRiskCounts(
   if (options.studentIds && options.studentIds.length === 0) {
     return { academic: 0, attendance: 0, financial: 0, progression: 0, documents: 0 };
   }
-  const base = {
-    organizationId,
+  const base: Prisma.StudentRiskProjectionWhereInput = {
+    ...buildVisibleRiskProjectionWhere(organizationId),
     ...(options.sourceVersion ? { sourceVersion: options.sourceVersion } : {}),
     ...(options.studentIds ? { studentId: { in: options.studentIds } } : {}),
   };
@@ -239,7 +252,7 @@ export async function getStudentIdsWithDimensionRisk(
   const db = await getDb();
   const rows = await db.studentRiskProjection.findMany({
     where: {
-      organizationId,
+      ...buildVisibleRiskProjectionWhere(organizationId),
       studentId: { in: studentIds },
       [`${dimension}Level`]: { in: AT_RISK_LEVELS },
     },
@@ -261,8 +274,10 @@ export async function findStudentRiskWatchlist(
   const limit = options.limit ?? 20;
   // Empty studentIds means "no students in scope" → empty watchlist (not "no filter").
   if (options.studentIds && options.studentIds.length === 0) return [];
-  const base = {
-    organizationId,
+  // F-M2: soft-deleted students are excluded in the QUERY (before orderBy/take), so the list
+  // never returns fewer than `limit` active students because of an in-memory post-filter.
+  const base: Prisma.StudentRiskProjectionWhereInput = {
+    ...buildVisibleRiskProjectionWhere(organizationId),
     ...(options.sourceVersion ? { sourceVersion: options.sourceVersion } : {}),
     ...(options.studentIds ? { studentId: { in: options.studentIds } } : {}),
   };
@@ -270,13 +285,13 @@ export async function findStudentRiskWatchlist(
   const rows = options.financeAuthorized
     ? await db.studentRiskProjection.findMany({
         where: { ...base, levelRank: { gte: LOW_RANK } },
-        orderBy: [{ levelRank: "desc" }, { evaluatedAt: "desc" }],
+        orderBy: [{ levelRank: "desc" }, { evaluatedAt: "desc" }, { studentId: "asc" }],
         take: limit,
         include: { student: { select: { firstName: true, lastName: true } } },
       })
     : await db.studentRiskProjection.findMany({
         where: { ...base, levelWithoutFinanceRank: { gte: LOW_RANK } },
-        orderBy: [{ levelWithoutFinanceRank: "desc" }, { evaluatedAt: "desc" }],
+        orderBy: [{ levelWithoutFinanceRank: "desc" }, { evaluatedAt: "desc" }, { studentId: "asc" }],
         take: limit,
         include: { student: { select: { firstName: true, lastName: true } } },
       });
@@ -305,7 +320,11 @@ export async function findStudentRiskWatchlist(
   });
 }
 
-/** Reconciliation helper (M11.4): projections written by an OLD rules version. */
+/**
+ * Reconciliation helper (M11.4): projections written by an OLD rules version. Excludes
+ * soft-deleted students (F-M2) so the version-stale sweep never tries to recompute a student
+ * who is no longer eligible.
+ */
 export async function findStudentIdsWithStaleRiskProjection(
   organizationId: string,
   currentSourceVersion: string,
@@ -313,7 +332,10 @@ export async function findStudentIdsWithStaleRiskProjection(
 ): Promise<string[]> {
   const db = await getDb();
   const rows = await db.studentRiskProjection.findMany({
-    where: { organizationId, sourceVersion: { not: currentSourceVersion } },
+    where: {
+      ...buildVisibleRiskProjectionWhere(organizationId),
+      sourceVersion: { not: currentSourceVersion },
+    },
     select: { studentId: true },
     take: limit,
   });

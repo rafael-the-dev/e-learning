@@ -194,7 +194,9 @@ describe("findStudentRiskWatchlist", () => {
     const rows = await findStudentRiskWatchlist(ORG, { financeAuthorized: true, limit: 10 });
     const arg = findMany.mock.calls[0][0];
     expect(arg.where.levelRank).toEqual({ gte: 1 });
-    expect(arg.orderBy).toEqual([{ levelRank: "desc" }, { evaluatedAt: "desc" }]);
+    expect(arg.orderBy).toEqual([{ levelRank: "desc" }, { evaluatedAt: "desc" }, { studentId: "asc" }]);
+    // F-M2: soft-deleted students are excluded in the query (before orderBy/take).
+    expect(arg.where.student).toEqual({ organizationId: ORG, deletedAt: null });
     expect(arg.take).toBe(10);
     expect(rows[0].studentName).toBe("Ana Silva");
     expect(rows[0].primaryReason?.id).toBe("failed-subject");
@@ -217,7 +219,9 @@ describe("findStudentRiskWatchlist", () => {
     const rows = await findStudentRiskWatchlist(ORG, { financeAuthorized: false });
     const arg = findMany.mock.calls[0][0];
     expect(arg.where.levelWithoutFinanceRank).toEqual({ gte: 1 });
-    expect(arg.orderBy).toEqual([{ levelWithoutFinanceRank: "desc" }, { evaluatedAt: "desc" }]);
+    expect(arg.orderBy).toEqual([{ levelWithoutFinanceRank: "desc" }, { evaluatedAt: "desc" }, { studentId: "asc" }]);
+    // F-M2: the finance-blind path applies the SAME soft-delete exclusion.
+    expect(arg.where.student).toEqual({ organizationId: ORG, deletedAt: null });
     // The finance CRITICAL reason must NOT leak; the academic reason wins.
     expect(rows[0].primaryReason?.dimension).toBe("academic");
     expect(rows[0].recommendedAction).toBe("Concluir avaliações.");
@@ -263,5 +267,42 @@ describe("M11.3 read-through fallback + dimension reads", () => {
     const ids = await getStudentIdsWithDimensionRisk(ORG, "academic", []);
     expect(ids.size).toBe(0);
     expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("F-M2 — soft-deleted students excluded from every aggregate read", () => {
+  const VISIBLE = { organizationId: ORG, deletedAt: null };
+
+  it("level counts (both finance-authorized and finance-blind) filter by a visible student", async () => {
+    groupBy.mockResolvedValue([]);
+    await getStudentRiskLevelCounts(ORG, { financeAuthorized: true });
+    expect(groupBy.mock.calls[0][0].where.student).toEqual(VISIBLE);
+
+    groupBy.mockClear();
+    groupBy.mockResolvedValue([]);
+    await getStudentRiskLevelCounts(ORG, { financeAuthorized: false });
+    expect(groupBy.mock.calls[0][0].where.student).toEqual(VISIBLE);
+  });
+
+  it("per-dimension counts filter by a visible student", async () => {
+    count.mockResolvedValue(0);
+    await getStudentRiskDimensionAtRiskCounts(ORG, { financeAuthorized: true });
+    for (const call of count.mock.calls) {
+      expect(call[0].where.student).toEqual(VISIBLE);
+    }
+  });
+
+  it("getStudentIdsWithDimensionRisk filters by a visible student", async () => {
+    findMany.mockResolvedValue([]);
+    await getStudentIdsWithDimensionRisk(ORG, "attendance", ["s1"]);
+    expect(findMany.mock.calls[0][0].where.student).toEqual(VISIBLE);
+  });
+
+  it("the visible-student filter hardens tenant scoping (student.organizationId = the org)", async () => {
+    groupBy.mockResolvedValue([]);
+    await getStudentRiskLevelCounts(ORG, { financeAuthorized: true });
+    // The relation filter requires the student to belong to the SAME org — a projection whose
+    // student row is in another org (inconsistent data) can never be counted.
+    expect(groupBy.mock.calls[0][0].where.student.organizationId).toBe(ORG);
   });
 });

@@ -69,6 +69,21 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Excluded **soft-deleted students** from every risk-projection aggregate read (review finding
+  **F-M2**). A `StudentRiskProjection` row is intentionally kept when its student is soft-deleted
+  (audit / restore / reconcile), but it must not inflate KPIs or watchlists. All aggregate reads
+  now go through one canonical base filter `buildVisibleRiskProjectionWhere(organizationId)` =
+  `{ organizationId, student: { organizationId, deletedAt: null } }`, applied in the QUERY
+  (before `orderBy`/`take`, never an in-memory post-filter that would shrink a page below its
+  limit). Covered methods: `getStudentRiskLevelCounts`, `getStudentRiskDimensionAtRiskCounts`,
+  `getStudentIdsWithDimensionRisk`, `findStudentRiskWatchlist` (both the finance-authorized
+  `level` and the finance-blind `levelWithoutFinance` paths), and the version-stale reconcile
+  helper. The relation filter also hardens tenant scoping (the student must be in the same org)
+  and excludes orphan rows by construction. Watchlist ordering gained a deterministic tertiary
+  key (`studentId asc`). Coverage semantics, the reconcile pipeline, the risk engine and the
+  persisted projection are unchanged — a soft-deleted student simply stops appearing in
+  aggregates (and reappears only once restored AND re-made eligible, via the fail-closed gate /
+  reconcile). No figure changes for orgs without soft-deleted students.
 - Unified the financial **"overdue" semantics** (review finding **F-M1**). Overdue is now a
   single canonical **financial fact**, not the materialized status: an invoice is overdue when
   it is **open** (`PENDING`/`PARTIALLY_PAID`/`OVERDUE`) **and** has a **balance > 0** **and**

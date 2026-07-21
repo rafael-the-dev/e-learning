@@ -84,10 +84,16 @@ M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip 
   daily-billing job delegates to the shared boundary/timezone. Fact-based → correct even
   before the job flips statuses / with auto-processing off. See CHANGELOG (visible-number
   change noted).
+- **F-M2 — soft-deleted students excluded from projection reads → DONE.** Canonical
+  `buildVisibleRiskProjectionWhere` (`student: { organizationId, deletedAt: null }`) routed
+  through all aggregate reads (level counts, dimension counts, dimension-risk set, watchlist —
+  both finance paths — + version-stale reconcile helper); filter in the query before
+  orderBy/take; hardens tenant scoping + excludes orphans; watchlist gains a deterministic
+  tertiary sort. Rows are NOT deleted on soft-delete. See CHANGELOG.
 - **Still open from the review (Mediums/Lows, do NOT block the F-H cluster):**
-  F-M2 (soft-deleted rows still counted on
-  reads / name leak), F-M4 (synchronous recompute burst), F-M6 (non-finance card/alert
-  permission gating), F-M7 (pager aria-labels), plus the Lows. F-L4 (unused var) fixed here.
+  F-M4 (synchronous recompute burst on bulk attendance/session recalc), F-M6 (non-finance
+  card/alert permission gating), F-M7 (pager aria-labels), plus the Lows. F-L4 (unused var)
+  fixed earlier.
 
 ### Context
 H6 introduced the single canonical per-student risk engine (`buildStudentRiskSummary` →
