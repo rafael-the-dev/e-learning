@@ -69,6 +69,29 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Unified the financial **"overdue" semantics** (review finding **F-M1**). Overdue is now a
+  single canonical **financial fact**, not the materialized status: an invoice is overdue when
+  it is **open** (`PENDING`/`PARTIALLY_PAID`/`OVERDUE`) **and** has a **balance > 0** **and**
+  its `dueDate` is before the org's day **boundary** (start of today in the org timezone, minus
+  the configured grace days — the SAME window the daily-billing job uses).
+  - New single specification `student-finance-semantics` (`OPEN_INVOICE_STATUSES`,
+    `resolveOverdueBoundary`, `resolveInvoiceTimezone`, `buildOutstandingInvoiceWhere`,
+    `buildOverdueInvoiceWhere`). `getStudentFinanceSummary` computes `overdueAmount` /
+    `overdueInvoiceCount` (and a new `oldestOverdueDate`, plus `asOf`) from this fact aggregate
+    instead of counting the `OVERDUE` status; the daily-billing job delegates its
+    boundary/timezone helpers to the same module (single source).
+  - Because the risk engine consumes the summary, **Student 360, the risk projection and the
+    dashboards now converge on one overdue definition** — and it is correct **even before the
+    daily job flips statuses** or when automatic overdue processing is off (the review's sharp
+    gap). A partly-paid invoice contributes only its **remaining balance**; an invoice paid to
+    a zero balance is **not** overdue even if its status is still `OVERDUE`; `CANCELLED` and
+    zero-balance invoices are excluded; an invoice due **today** is not yet overdue.
+  - Unallocated wallet balance/credit does **not** reduce overdue (only credit already
+    *applied* to an invoice lowers its `balanceAmount`); the wallet balance stays a separate
+    figure the risk engine may recommend using, never a silent debt write-off.
+  - **Visible-number change (intentional):** overdue figures now reflect the financial fact
+    (past-due-by-date), so they can differ from the old status-only counts during the grace/
+    pre-job window. No schema change.
 - Made the backfill/reconcile **resumable and cursor-based** (review finding **F-H4**) — safe
   for very large tenants. The blocking "load every eligible student → process → lose progress
   on interrupt" sweep is replaced by a run pipeline: **cursor page → recompute batch →

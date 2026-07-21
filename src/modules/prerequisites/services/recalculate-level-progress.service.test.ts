@@ -36,6 +36,7 @@ vi.mock("@/modules/prerequisites/engines/course-completion.engine", () => ({
 
 import { recalculateStudentLevelProgress } from "@/modules/prerequisites/services/recalculate-level-progress.service";
 import { PROGRESSION_OUTCOME } from "@/modules/prerequisites/types";
+import type { DomainEvent } from "@/server/events/domain-event";
 
 const D1 = new Date("2026-03-01T00:00:00Z");
 const ORG = "org-1";
@@ -209,7 +210,7 @@ describe("recalculateStudentLevelProgress — F-H2 progression-changed event", (
   it("collects STUDENT_LEVEL_PROGRESSION_CHANGED when the level status actually changes", async () => {
     setSubjects(true); // → PASSED
     mocks.levelProgressFindFirst.mockResolvedValue({ status: "IN_PROGRESS", completedAt: null });
-    const events: Array<{ eventType: string; payload: Record<string, unknown> }> = [];
+    const events: DomainEvent[] = [];
 
     await recalculateStudentLevelProgress(ENR, LVL, ORG, { events });
 
@@ -227,7 +228,7 @@ describe("recalculateStudentLevelProgress — F-H2 progression-changed event", (
   it("does NOT emit when the level status is unchanged (no-op recompute)", async () => {
     setSubjects(true); // → PASSED
     mocks.levelProgressFindFirst.mockResolvedValue({ status: "PASSED", completedAt: D1 });
-    const events: Array<{ eventType: string }> = [];
+    const events: DomainEvent[] = [];
 
     await recalculateStudentLevelProgress(ENR, LVL, ORG, { events });
 

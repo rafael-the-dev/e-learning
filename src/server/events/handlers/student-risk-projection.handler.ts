@@ -28,7 +28,7 @@ import { recalculateStudentRiskProjection } from "@/modules/students/services/st
 // fan-out (min grade / min attendance %), and lost/failed-event recovery.
 // =============================================================================
 
-export const STUDENT_RISK_RECALCULATION_EVENTS: readonly string[] = [
+export const STUDENT_RISK_RECALCULATION_EVENTS: readonly DomainEventType[] = [
   // Academic
   DomainEventType.STUDENT_SUBJECT_PASSED,
   DomainEventType.STUDENT_SUBJECT_FAILED,

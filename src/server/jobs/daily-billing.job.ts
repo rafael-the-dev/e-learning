@@ -2,6 +2,10 @@ import { randomUUID } from "crypto";
 import { getDb } from "@/server/db";
 import { eventPublisher } from "@/server/events/event-publisher";
 import { DomainEventType, DomainAggregateType } from "@/server/events/event-types";
+import {
+  resolveOverdueBoundary,
+  resolveInvoiceTimezone,
+} from "@/modules/reports/finance/student-finance-semantics";
 
 // =============================================================================
 // TYPES
@@ -53,54 +57,18 @@ const INSTALLMENT_INVOICE_BATCH_SIZE = 500;
  * this function so that configuration issues surface as warnings in the result.
  * The internal try/catch acts only as a last-resort safety net.
  */
+// F-M1: the overdue boundary + timezone resolution are the CANONICAL shared helpers
+// (student-finance-semantics) so the daily job and the finance summary/risk use one window.
+// These thin re-exports preserve the job's public API (and existing tests).
 export function getCutoffDate(timezone: string, graceDays: number): Date {
-  const now = new Date();
-  let year: number;
-  let month: number;
-  let day: number;
-
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(now);
-
-    year = Number(parts.find((p) => p.type === "year")?.value ?? 0);
-    month = Number(parts.find((p) => p.type === "month")?.value ?? 1) - 1;
-    day = Number(parts.find((p) => p.type === "day")?.value ?? 1);
-  } catch {
-    // Safety net: fall back to UTC if timezone is somehow still invalid.
-    year = now.getUTCFullYear();
-    month = now.getUTCMonth();
-    day = now.getUTCDate();
-  }
-
-  const todayMidnightUtc = new Date(Date.UTC(year, month, day));
-  return new Date(todayMidnightUtc.getTime() - graceDays * 24 * 60 * 60 * 1000);
+  return resolveOverdueBoundary({ timezone, graceDays });
 }
 
-/**
- * Validates an IANA timezone string and returns it unchanged if valid, or
- * "UTC" plus a human-readable warning if invalid. Call this before
- * getCutoffDate so that misconfigured org timezones surface as actionable
- * warnings rather than silent fallbacks.
- */
 export function resolveTimezone(rawTimezone: string | null | undefined): {
   timezone: string;
   warning?: string;
 } {
-  const tz = rawTimezone ?? "UTC";
-  try {
-    Intl.DateTimeFormat(undefined, { timeZone: tz });
-    return { timezone: tz };
-  } catch {
-    return {
-      timezone: "UTC",
-      warning: `Fuso horário inválido "${tz}" — fallback para UTC`,
-    };
-  }
+  return resolveInvoiceTimezone(rawTimezone);
 }
 
 // =============================================================================

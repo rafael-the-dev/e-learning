@@ -77,8 +77,15 @@ M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip 
   cron switched to `advanceReconcileRunsWithinBudget` (resume-first, then start new); CLI
   `--resume`/`--status`/`--batch-size`/`--max-batches`. Coverage/engine/handler unchanged.
   See CHANGELOG. **The F-H review-High cluster (F-H1..F-H4) is now fully resolved.**
+- **F-M1 — overdue semantics → DONE.** Canonical spec `student-finance-semantics`
+  (open + balance>0 + dueDate<boundary, boundary = startOfDay(org tz) − graceDays, same as
+  the billing job). `getStudentFinanceSummary` computes overdue from the fact aggregate
+  (+ `oldestOverdueDate`, `asOf`); risk/projection/dashboards converge via the summary; the
+  daily-billing job delegates to the shared boundary/timezone. Fact-based → correct even
+  before the job flips statuses / with auto-processing off. See CHANGELOG (visible-number
+  change noted).
 - **Still open from the review (Mediums/Lows, do NOT block the F-H cluster):**
-  F-M1 (overdue status-only vs `dueDate < now`), F-M2 (soft-deleted rows still counted on
+  F-M2 (soft-deleted rows still counted on
   reads / name leak), F-M4 (synchronous recompute burst), F-M6 (non-finance card/alert
   permission gating), F-M7 (pager aria-labels), plus the Lows. F-L4 (unused var) fixed here.
 
