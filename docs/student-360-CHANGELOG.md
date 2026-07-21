@@ -69,6 +69,34 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Added the periodic reconciliation + temporal-risk coverage (review finding **F-H3**) — the
+  safety net for what direct events (F-H2) can't guarantee: time-driven drift, lost/FAILED
+  events (the bus has no outbox/retry), rules-version drift, policy fan-out and partially-
+  covered orgs.
+  - **Scheduled reconcile job** `runReconcileRiskProjectionsJob` + internal cron route
+    `POST /api/internal/jobs/reconcile-risk-projections` (same `x-internal-job-secret`
+    fail-closed contract as the billing job). It iterates organizations **sequentially**
+    (bounded load; the per-org reconcile pages internally, never loading all students),
+    isolates per-org failure (one org failing never aborts the rest), runs the **full**
+    reconcile per org (the only mode that updates coverage), guards against overlapping runs
+    on the same instance (idempotency covers the multi-instance case), and writes an audit
+    record. Intended cadence: daily.
+  - **Explicit reconcile modes** (replacing the ambiguous `--stale`): `all` (every eligible
+    student; owns the coverage rollout state), `missing` (only students with no projection
+    row) and `version-stale` (only rows on an older rules version — *not* factual-drift
+    detection). The backfill CLI now takes `--all` (default) / `--missing` / `--version-stale`
+    (with `--stale` kept as an alias) and exits non-zero on partial failure.
+  - **Temporal financial risk (`INVOICE_OVERDUE`):** the daily billing job now emits
+    `INVOICE_OVERDUE` **per affected student** (the delta that newly crossed its dueDate this
+    run — distinct, org-scoped), and the risk handler subscribes to it. So a student going
+    overdue by the passage of time refreshes promptly instead of waiting for the reconcile;
+    the reconcile remains the backstop. Independent of `notifyOnOverdue` (that flag governs
+    notifications, not risk).
+  - **Covered by the daily reconcile (documented, not per-event):** document expiry, academic/
+    attendance **policy fan-out** (a min-grade / min-attendance change re-classifies whole
+    cohorts — handled by the batch sweep, never a synchronous loop in the mutation command),
+    lost/FAILED events, missing rows and version drift. Individual events never change the
+    coverage rollout state (F-H1 preserved); only the full sweep does.
 - Closed the risk-projection event-coverage gap (review finding **F-H2**). Previously only
   two events (`attendance.summary_recalculated`, `payment.confirmed`) kept the projection
   fresh, so most direct risk mutations relied on the reconcile sweep. The

@@ -64,8 +64,14 @@ M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip 
   dedup, coverage state untouched by events. See CHANGELOG. **Still deferred to F-H3:** the
   temporal `INVOICE_OVERDUE` trigger (dueDate + job), document expiry, policy fan-out, and
   lost/failed-event recovery.
-- **Still open from the review (not this change):** F-H3 (no scheduled reconcile; `--stale`
-  heals only version-drift; wire the temporal `INVOICE_OVERDUE`), F-H4 (backfill not
+- **F-H3 — reconcile scheduling + temporal risk → DONE.** Scheduled `runReconcileRiskProjectionsJob`
+  + cron route (`/api/internal/jobs/reconcile-risk-projections`, secret-gated), per-org
+  sequential + failure-isolated + overlap-guarded, full sweep owns coverage. Reconcile modes
+  split into `all`/`missing`/`version-stale` (CLI `--all`/`--missing`/`--version-stale`,
+  non-zero exit on partial failure). Daily billing job emits `INVOICE_OVERDUE` per newly-
+  overdue student; handler subscribes. Document-expiry / policy-fan-out / lost-event recovery
+  documented as reconcile-covered (batch, never synchronous). See CHANGELOG.
+- **Still open from the review (not this change):** F-H4 (backfill not
   cursor-batched/resumable for very large tenants),
   F-M1 (overdue status-only vs `dueDate < now`), F-M2 (soft-deleted rows still counted on
   reads / name leak), F-M4 (synchronous recompute burst), F-M6 (non-finance card/alert

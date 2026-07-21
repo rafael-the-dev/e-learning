@@ -109,8 +109,9 @@ export function resolveTimezone(rawTimezone: string | null | undefined): {
 
 async function processOrganization(
   db: Awaited<ReturnType<typeof getDb>>,
-  settings: OrgBillingSettings
-): Promise<{ invoicesMarkedOverdue: number; installmentsMarkedOverdue: number }> {
+  settings: OrgBillingSettings,
+  runStartedAt: Date
+): Promise<{ invoicesMarkedOverdue: number; installmentsMarkedOverdue: number; affectedStudentIds: string[] }> {
   const { organizationId, timezone, overdueGraceDays, markInvoiceOverdueWhenAnyInstallmentOverdue } =
     settings;
 
@@ -171,9 +172,29 @@ async function processOrganization(
     }
   }
 
+  // F-H3: the students whose invoices were marked OVERDUE by THIS run (updatedAt bumped by
+  // the updateMany calls above, at/after runStartedAt) — the DELTA that newly went overdue,
+  // not the whole overdue population. Distinct, org-scoped; emitted as INVOICE_OVERDUE per
+  // student so the risk projection refreshes without waiting for the daily reconcile.
+  const affectedRows =
+    invDirectResult.count + invFromInstallmentsCount > 0
+      ? await db.invoice.findMany({
+          where: {
+            organizationId,
+            status: "OVERDUE",
+            deletedAt: null,
+            studentId: { not: null },
+            updatedAt: { gte: runStartedAt },
+          },
+          select: { studentId: true },
+          distinct: ["studentId"],
+        })
+      : [];
+
   return {
     invoicesMarkedOverdue: invDirectResult.count + invFromInstallmentsCount,
     installmentsMarkedOverdue: instResult.count,
+    affectedStudentIds: affectedRows.map((r) => r.studentId).filter((id): id is string => id !== null),
   };
 }
 
@@ -244,11 +265,25 @@ export async function runDailyBillingJob(
         overdueGraceDays: s?.overdueGraceDays ?? 0,
         markInvoiceOverdueWhenAnyInstallmentOverdue:
           s?.markInvoiceOverdueWhenAnyInstallmentOverdue ?? true,
-      });
+      }, startedAt);
 
       totalInvoices += result.invoicesMarkedOverdue;
       totalInstallments += result.installmentsMarkedOverdue;
       processed++;
+
+      // F-H3: emit a per-student INVOICE_OVERDUE for each student who newly went overdue this
+      // run, so the StudentRiskProjection refreshes promptly (the daily reconcile is the
+      // backstop). Independent of notifyOnOverdue — that flag governs notifications, not risk.
+      for (const studentId of result.affectedStudentIds) {
+        await eventPublisher.publish({
+          organizationId: org.id,
+          eventType: DomainEventType.INVOICE_OVERDUE,
+          aggregateType: DomainAggregateType.INVOICE,
+          aggregateId: studentId,
+          actorId: "SYSTEM",
+          payload: { studentId, organizationId: org.id, jobRunId, occurredAt: startedAt.toISOString() },
+        });
+      }
 
       // Publish one aggregated event per org per run.
       // Skipped when notifyOnOverdue=false so notification handlers are not

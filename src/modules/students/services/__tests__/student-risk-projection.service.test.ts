@@ -123,6 +123,7 @@ const h = vi.hoisted(() => ({
   studentFindMany: vi.fn(),
   studentCount: vi.fn(),
   countEligible: vi.fn(),
+  listMissing: vi.fn(),
   verify: vi.fn(),
   markRunning: vi.fn(),
   markReady: vi.fn(),
@@ -153,6 +154,7 @@ vi.mock("@/server/db", () => ({
 vi.mock("@/modules/students/repositories/student-risk-projection-coverage.repository", () => ({
   buildRiskProjectionEligibleStudentWhere: (organizationId: string) => ({ organizationId, deletedAt: null }),
   countEligibleStudentsForRiskProjection: h.countEligible,
+  listEligibleStudentIdsWithoutRiskProjection: h.listMissing,
 }));
 vi.mock("@/modules/students/services/student-risk-projection-coverage.service", () => ({
   markRiskProjectionCoverageRunning: h.markRunning,
@@ -276,12 +278,25 @@ describe("reconcileStudentRiskProjectionsForOrg (M11.4 backfill / reconciliation
   it("staleOnly recomputes only old-version rows and does NOT touch the rollout state", async () => {
     h.findStudentIdsWithStaleRiskProjection.mockResolvedValue(["s9"]);
 
-    const result = await reconcileStudentRiskProjectionsForOrg(ORG, { staleOnly: true, now: NOW });
+    const result = await reconcileStudentRiskProjectionsForOrg(ORG, { mode: "version-stale", now: NOW });
 
     expect(h.findStudentIdsWithStaleRiskProjection).toHaveBeenCalledWith(ORG, STUDENT_RISK_SOURCE_VERSION, 500);
     expect(h.studentFindMany).not.toHaveBeenCalled();
     expect(result.processed).toBe(1);
     // A partial (version-migration) sweep must never promote/alter coverage.
+    expect(h.markRunning).not.toHaveBeenCalled();
+    expect(h.markReady).not.toHaveBeenCalled();
+    expect(h.markIncomplete).not.toHaveBeenCalled();
+  });
+
+  it("mode 'missing' recomputes only students with no row and does NOT touch coverage", async () => {
+    h.listMissing.mockResolvedValue(["s-new"]);
+
+    const result = await reconcileStudentRiskProjectionsForOrg(ORG, { mode: "missing", now: NOW });
+
+    expect(h.listMissing).toHaveBeenCalledWith(ORG, 500);
+    expect(h.studentFindMany).not.toHaveBeenCalled();
+    expect(result.processed).toBe(1);
     expect(h.markRunning).not.toHaveBeenCalled();
     expect(h.markReady).not.toHaveBeenCalled();
     expect(h.markIncomplete).not.toHaveBeenCalled();

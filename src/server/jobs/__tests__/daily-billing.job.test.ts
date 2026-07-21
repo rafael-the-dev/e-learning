@@ -44,6 +44,7 @@ function makeDb(overrides?: {
   installmentUpdateCount?: number;
   invoiceUpdateCounts?: number[];
   installmentFindRows?: { invoiceId: string }[];
+  affectedStudentRows?: { studentId: string | null }[];
 }) {
   const invoiceCounts = overrides?.invoiceUpdateCounts ?? [0, 0];
   let invCallIndex = 0;
@@ -66,6 +67,8 @@ function makeDb(overrides?: {
         invCallIndex++;
         return Promise.resolve({ count });
       }),
+      // F-H3: distinct students whose invoices were marked overdue this run.
+      findMany: vi.fn().mockResolvedValue(overrides?.affectedStudentRows ?? []),
     },
     auditLog: {
       create: vi.fn().mockResolvedValue(undefined),
@@ -455,6 +458,25 @@ describe("runDailyBillingJob — notifyOnOverdue policy", () => {
 
     const call = (eventPublisher.publish as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(call.payload.overdueNotificationDelayDays).toBe(3);
+  });
+
+  it("F-H3: emits INVOICE_OVERDUE per newly-overdue student (risk), independent of notifyOnOverdue", async () => {
+    const db = makeDb({
+      orgRows: [makeOrg({ notifyOnOverdue: false })], // notifications off — risk events still fire
+      invoiceUpdateCounts: [2, 0],
+      affectedStudentRows: [{ studentId: "s1" }, { studentId: "s2" }, { studentId: null }],
+    });
+    (getDb as ReturnType<typeof vi.fn>).mockResolvedValue(db);
+
+    await runDailyBillingJob();
+
+    const calls = (eventPublisher.publish as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    const overdue = calls.filter((c) => c.eventType === "invoice.overdue");
+    expect(overdue).toHaveLength(2); // the null studentId is filtered out
+    expect(overdue.map((c) => c.payload.studentId).sort()).toEqual(["s1", "s2"]);
+    expect(overdue[0].payload.studentId).toBeTruthy();
+    // notifyOnOverdue=false → the aggregate notification event is NOT published...
+    expect(calls.some((c) => c.eventType === "billing.overdue_detected")).toBe(false);
   });
 });
 

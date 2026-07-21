@@ -54,6 +54,7 @@ describe("StudentRiskProjectionHandler", () => {
       DomainEventType.STUDENT_LEVEL_PROGRESSION_CHANGED,
       DomainEventType.STUDENT_DOCUMENT_STATUS_CHANGED,
       DomainEventType.STUDENT_PREREQUISITE_WAIVER_CHANGED,
+      DomainEventType.INVOICE_OVERDUE, // F-H3: time-driven, emitted per student by the billing job
     ]) {
       expect(handler.canHandle(event({ eventType }))).toBe(true);
     }
@@ -61,7 +62,7 @@ describe("StudentRiskProjectionHandler", () => {
 
   it("ignores events outside the contract", () => {
     expect(handler.canHandle(event({ eventType: DomainEventType.NOTIFICATION_CREATED }))).toBe(false);
-    expect(handler.canHandle(event({ eventType: DomainEventType.INVOICE_OVERDUE }))).toBe(false); // temporal → F-H3
+    expect(handler.canHandle(event({ eventType: DomainEventType.BILLING_OVERDUE_DETECTED }))).toBe(false); // aggregate, no studentId
     expect(handler.canHandle(event({ eventType: DomainEventType.WALLET_DEPOSIT_CREATED }))).toBe(false); // not a risk input
   });
 

@@ -22,9 +22,10 @@ import { recalculateStudentRiskProjection } from "@/modules/students/services/st
 // STUDENT_COURSE_COMPLETED, or a justification + a summary recalc), the extra run is
 // an idempotent no-op (recalc skips the write when the classification is unchanged).
 //
-// Deliberately NOT here (→ F-H3, temporal / fan-out / recovery): dueDate-driven
-// INVOICE_OVERDUE, document expiry, policy fan-out (min grade / min attendance %),
-// and lost/failed-event recovery (handled by reconcileStudentRiskProjectionsForOrg).
+// Time-driven INVOICE_OVERDUE is now included (F-H3): the daily billing job emits it per
+// affected student when an invoice crosses its dueDate. Still NOT here (handled by the
+// periodic reconcile — reconcileStudentRiskProjectionsForOrg): document expiry, policy
+// fan-out (min grade / min attendance %), and lost/failed-event recovery.
 // =============================================================================
 
 export const STUDENT_RISK_RECALCULATION_EVENTS: readonly string[] = [
@@ -43,6 +44,9 @@ export const STUDENT_RISK_RECALCULATION_EVENTS: readonly string[] = [
   DomainEventType.REFUND_REQUESTED,
   DomainEventType.REFUND_REJECTED,
   DomainEventType.REFUND_COMPLETED,
+  // Time-driven: emitted per affected student by the daily billing job when an invoice
+  // crosses its dueDate (F-H3). The daily reconcile is the backstop for any missed here.
+  DomainEventType.INVOICE_OVERDUE,
   // Progression / enrollment lifecycle
   DomainEventType.ENROLLMENT_CREATED,
   DomainEventType.ENROLLMENT_ACTIVATED,

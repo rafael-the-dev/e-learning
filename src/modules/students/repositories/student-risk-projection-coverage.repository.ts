@@ -71,6 +71,27 @@ export async function countEligibleStudentsWithoutAnyRiskProjection(
   });
 }
 
+/**
+ * Ids of eligible students with NO projection row (the "missing" reconcile scope). Bounded by
+ * `limit` so a targeted repair never loads the whole cohort. Ordered by id for stable paging.
+ */
+export async function listEligibleStudentIdsWithoutRiskProjection(
+  organizationId: string,
+  limit: number
+): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.student.findMany({
+    where: {
+      ...buildRiskProjectionEligibleStudentWhere(organizationId),
+      studentRiskProjections: { none: {} },
+    },
+    select: { id: true },
+    orderBy: { id: "asc" },
+    take: limit,
+  });
+  return rows.map((r) => r.id);
+}
+
 // ─── Coverage row CRUD ────────────────────────────────────────────────────────
 
 type CoverageRow = {

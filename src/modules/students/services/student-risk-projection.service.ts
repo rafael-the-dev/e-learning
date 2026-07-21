@@ -45,6 +45,7 @@ import {
 import {
   buildRiskProjectionEligibleStudentWhere,
   countEligibleStudentsForRiskProjection,
+  listEligibleStudentIdsWithoutRiskProjection,
 } from "@/modules/students/repositories/student-risk-projection-coverage.repository";
 import {
   markRiskProjectionCoverageRunning,
@@ -230,23 +231,34 @@ export interface ReconcileStudentRiskProjectionsResult {
 }
 
 /**
- * Recompute the risk projection for every (non-deleted) student of an org — the backfill
- * and the periodic reconciliation both use this. `staleOnly` limits the pass to rows written
- * by an OLDER rules version (after a `STUDENT_RISK_SOURCE_VERSION` bump). One student failing
- * never aborts the sweep (its error is recorded and the sweep continues). Idempotent: a
- * student whose classification is unchanged is a no-op (counted in `processed`, not `changed`).
+ * The scope of a reconcile pass (F-H3). Explicit, so we never promise a factual-drift
+ * detection we can't prove:
+ *   - "all"           — every eligible student. The ONLY mode that owns the coverage rollout
+ *                       state (marks RUNNING → READY/INCOMPLETE). Use for the periodic sweep.
+ *   - "missing"       — only eligible students with NO projection row at all (targeted repair).
+ *   - "version-stale" — only students whose row was written by an OLDER rules version
+ *                       (after a STUDENT_RISK_SOURCE_VERSION bump). NOT factual-drift.
+ * The partial modes never touch coverage: they cannot prove completeness (they don't visit
+ * every student), so they must not be able to promote an org to READY.
+ */
+export type ReconcileMode = "all" | "missing" | "version-stale";
+
+/**
+ * Recompute the risk projection for a scoped set of an org's students — the backfill and the
+ * periodic reconciliation both use this. One student failing never aborts the sweep (its error
+ * is recorded and the sweep continues). Idempotent: a student whose classification is unchanged
+ * is a no-op (counted in `processed`, not `changed`).
  */
 export async function reconcileStudentRiskProjectionsForOrg(
   organizationId: string,
-  options: { staleOnly?: boolean; batchSize?: number; now?: Date } = {}
+  options: { mode?: ReconcileMode; batchSize?: number; now?: Date } = {}
 ): Promise<ReconcileStudentRiskProjectionsResult> {
   const batchSize = options.batchSize ?? 500;
   const now = options.now ?? new Date();
-  // A FULL sweep (not staleOnly) owns the coverage rollout state: it marks RUNNING, then
-  // READY only if verification confirms 100% coverage, else INCOMPLETE. A staleOnly sweep is
-  // partial (version-migration only) and must NOT touch the rollout status — it cannot prove
-  // completeness (it never visits students that have no row at all).
-  const isFullSweep = !options.staleOnly;
+  const mode: ReconcileMode = options.mode ?? "all";
+  // Only a FULL sweep owns the coverage rollout state — a partial mode cannot prove
+  // completeness, so it must never be able to mark READY.
+  const isFullSweep = mode === "all";
 
   if (isFullSweep) {
     try {
@@ -261,9 +273,12 @@ export async function reconcileStudentRiskProjectionsForOrg(
     }
   }
 
-  const studentIds = options.staleOnly
-    ? await findStudentIdsWithStaleRiskProjection(organizationId, STUDENT_RISK_SOURCE_VERSION, batchSize)
-    : await listStudentIdsForOrg(organizationId);
+  const studentIds =
+    mode === "version-stale"
+      ? await findStudentIdsWithStaleRiskProjection(organizationId, STUDENT_RISK_SOURCE_VERSION, batchSize)
+      : mode === "missing"
+        ? await listEligibleStudentIdsWithoutRiskProjection(organizationId, batchSize)
+        : await listStudentIdsForOrg(organizationId);
 
   const result: ReconcileStudentRiskProjectionsResult = { processed: 0, changed: 0, failed: 0, failures: [] };
   for (const studentId of studentIds) {
