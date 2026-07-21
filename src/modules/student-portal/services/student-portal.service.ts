@@ -1,4 +1,5 @@
 import { getStudent360Core } from "@/modules/students/student-360/services/student-360.service";
+import { getStudentInvoicesPage, getStudentPaymentsPage } from "@/modules/reports/finance/services/financial-reports.service";
 import type { Student360Core } from "@/modules/students/student-360/services/student-360.service";
 import { findAttendanceRecordsByStudent } from "@/modules/students/student-360/repositories/student-360.repository";
 import { getStudentDocuments } from "@/modules/student-documents/services/student-document.service";
@@ -127,6 +128,8 @@ export async function getStudentPortalData(
     documentsRaw,
     unreadNotificationCount,
     notifications,
+    invoicesPage,
+    paymentsPage,
   ] = await Promise.all([
     findStudentUpcomingClasses(organizationId, activeClassGroupIds, windowStart, windowEnd, UPCOMING_CLASSES_LIMIT),
     findStudentAssessments(organizationId, activeClassGroupIds, studentId, ASSESSMENTS_LIMIT),
@@ -136,6 +139,10 @@ export async function getStudentPortalData(
     getStudentDocuments(studentId, organizationId),
     getUnreadCount(organizationId, userId),
     getLatestForUser(organizationId, userId, NOTIFICATIONS_LIMIT),
+    // Bounded, server-paged UNPAID invoices / recent payments (H3/M2). The summary
+    // figures below come from the SQL-aggregated finance summary, not from these lists.
+    getStudentInvoicesPage({ organizationId, studentId }, { page: 1, pageSize: INVOICE_ROWS_LIMIT }, UNPAID_INVOICE_STATUSES),
+    getStudentPaymentsPage({ organizationId, studentId }, { page: 1, pageSize: PAYMENT_ROWS_LIMIT }),
   ]);
 
   // Subject-name lookup (re-asserts org) for the IDs surfaced above.
@@ -194,46 +201,35 @@ export async function getStudentPortalData(
     status: r.status,
   }));
 
-  // ── Finance (reused from the Student 360 billing/wallet projections) ─────────
+  // ── Finance ──────────────────────────────────────────────────────────────────
+  // The lists are bounded server-paged reads; the summary figures (total due / overdue
+  // / next due / wallet) come from the SQL-aggregated finance summary (H3) — never
+  // recomputed from a loaded list.
   const billing = core.finance?.billing ?? null;
   const wallet = core.finance?.wallet ?? null;
-  const invoices: StudentInvoiceRow[] = (billing?.invoices ?? [])
-    .filter((inv) => UNPAID_INVOICE_STATUSES.includes(inv.status))
-    .slice(0, INVOICE_ROWS_LIMIT)
-    .map((inv) => ({
-      invoiceId: inv.invoiceId,
-      invoiceNumber: inv.invoiceNumber,
-      issueDate: inv.issueDate,
-      dueDate: inv.dueDate,
-      totalAmount: inv.totalAmount,
-      paidAmount: inv.paidAmount,
-      balanceAmount: inv.balanceAmount,
-      status: inv.status,
-    }));
+  const invoices: StudentInvoiceRow[] = invoicesPage.data.map((inv) => ({
+    invoiceId: inv.invoiceId,
+    invoiceNumber: inv.invoiceNumber,
+    issueDate: inv.issueDate,
+    dueDate: inv.dueDate,
+    totalAmount: inv.totalAmount,
+    paidAmount: inv.paidAmount,
+    balanceAmount: inv.balanceAmount,
+    status: inv.status,
+  }));
 
-  const payments: StudentPaymentRow[] = (billing?.payments ?? [])
-    .slice(0, PAYMENT_ROWS_LIMIT)
-    .map((p) => ({
-      paymentId: p.paymentId,
-      paymentNumber: p.paymentNumber,
-      paymentDate: p.paymentDate,
-      totalAmount: p.totalAmount,
-      status: p.status,
-    }));
-
-  const overdueAmount = (billing?.invoices ?? [])
-    .filter((inv) => inv.status === "OVERDUE")
-    .reduce((sum, inv) => sum + inv.balanceAmount, 0);
-
-  const nextDueDate = (billing?.invoices ?? [])
-    .filter((inv) => UNPAID_INVOICE_STATUSES.includes(inv.status) && inv.dueDate != null)
-    .map((inv) => inv.dueDate as Date)
-    .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+  const payments: StudentPaymentRow[] = paymentsPage.data.map((p) => ({
+    paymentId: p.paymentId,
+    paymentNumber: p.paymentNumber,
+    paymentDate: p.paymentDate,
+    totalAmount: p.totalAmount,
+    status: p.status,
+  }));
 
   const paymentsSummary: StudentPaymentsSummary = {
     totalDue: billing?.outstandingBalance ?? 0,
-    overdueAmount,
-    nextDueDate,
+    overdueAmount: billing?.overdueAmount ?? 0,
+    nextDueDate: billing?.nextDueDate ?? null,
     walletBalance: wallet?.walletBalance ?? 0,
   };
 
@@ -284,9 +280,8 @@ function buildKpis(
   const pendingSubjects = core.subjectProgress.length - approvedSubjects;
   const today = startOfDay(new Date());
   const upcomingAssessments = assessments.filter((a) => a.assessmentDate >= today).length;
-  const pendingInvoices = (core.finance?.billing?.invoices ?? []).filter((inv) =>
-    UNPAID_INVOICE_STATUSES.includes(inv.status)
-  ).length;
+  // Unpaid-invoice count from the aggregated summary (H3) — not a filtered loaded list.
+  const pendingInvoices = core.finance?.billing?.unpaidInvoiceCount ?? 0;
 
   return {
     averageAttendance,

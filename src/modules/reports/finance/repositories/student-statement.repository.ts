@@ -30,11 +30,18 @@ function toNum(v: DecimalLike | number | null | undefined): number {
 
 export async function getStudentInvoicesPage(
   filters: StudentStatementFilters,
-  pagination: PaginationParams
+  pagination: PaginationParams,
+  // Optional status filter (e.g. the portals' "unpaid invoices" bounded list).
+  statuses?: string[]
 ): Promise<PaginatedResult<StudentStatementInvoice>> {
   const db = await getDb();
   const { skip, take } = buildSkipTake(pagination);
-  const where = { organizationId: filters.organizationId, studentId: filters.studentId, deletedAt: null };
+  const where = {
+    organizationId: filters.organizationId,
+    studentId: filters.studentId,
+    deletedAt: null,
+    ...(statuses && statuses.length > 0 ? { status: { in: statuses } } : {}),
+  };
   const [rows, total] = await db.$transaction([
     db.invoice.findMany({
       where,

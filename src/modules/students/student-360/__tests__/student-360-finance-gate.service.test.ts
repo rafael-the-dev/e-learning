@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const h = vi.hoisted(() => ({
   getStudentById: vi.fn(),
   getEnrollmentsByOrganization: vi.fn(),
-  getStudentFinancialStatement: vi.fn(),
+  getStudentFinanceSummary: vi.fn(),
   findProgressByOrganization: vi.fn(),
   getStudentSubjectAttendanceViews: vi.fn(),
   getStudentAttendanceSummary: vi.fn(),
@@ -34,7 +34,12 @@ vi.mock("@/modules/enrollments/services/enrollment.service", () => ({
   getEnrollmentsByOrganization: h.getEnrollmentsByOrganization,
 }));
 vi.mock("@/modules/reports/finance/services/financial-reports.service", () => ({
-  getStudentFinancialStatement: h.getStudentFinancialStatement,
+  getStudentFinanceSummary: h.getStudentFinanceSummary,
+  // getStudent360Core imports these (M2) but does not call them here; provide stubs.
+  getStudentInvoicesPage: vi.fn(),
+  getStudentPaymentsPage: vi.fn(),
+  getStudentReceiptsPage: vi.fn(),
+  getStudentRefundsPage: vi.fn(),
 }));
 vi.mock("@/modules/assessments/repositories/student-subject-progress.repository", () => ({
   findProgressByOrganization: h.findProgressByOrganization,
@@ -85,12 +90,11 @@ import { getStudent360Core } from "../services/student-360.service";
 const ORG = "org-1";
 const STUDENT = "student-1";
 
-const STATEMENT = {
-  invoices: [{ status: "OVERDUE" }],
-  payments: [],
-  receipts: [],
-  refunds: [{ status: "REQUESTED" }],
-  kpis: { outstandingBalance: 500, walletBalance: 20, totalInvoiced: 500, totalPaid: 0, totalRefunded: 0, creditApplied: 0 },
+const SUMMARY = {
+  totalInvoiced: 500, totalPaid: 0, outstandingBalance: 500, overdueAmount: 500,
+  overdueInvoiceCount: 1, unpaidInvoiceCount: 1, paidInvoiceCount: 0,
+  nextDueDate: null, lastPaymentDate: null,
+  walletBalance: 20, creditApplied: 0, totalRefunded: 0, pendingRefundCount: 1,
 };
 
 beforeEach(() => {
@@ -110,16 +114,16 @@ beforeEach(() => {
     attendancePercentage: null, attendedSessions: 0,
   });
   // Finance mocks — should only ever be reached when authorized.
-  h.getStudentFinancialStatement.mockResolvedValue(STATEMENT);
+  h.getStudentFinanceSummary.mockResolvedValue(SUMMARY);
   h.getWalletByStudentId.mockResolvedValue({ id: "wallet-1" });
   h.getRecentTransactions.mockResolvedValue([]);
 });
 
 describe("getStudent360Core — finance permission boundary (billing vs wallet)", () => {
-  it("BOTH capabilities: fetches statement + wallet and populates both halves", async () => {
+  it("BOTH capabilities: fetches the aggregated summary + wallet and populates both halves", async () => {
     const core = await getStudent360Core(STUDENT, ORG, { canViewInvoices: true, canViewWallet: true });
 
-    expect(h.getStudentFinancialStatement).toHaveBeenCalledWith({ organizationId: ORG, studentId: STUDENT });
+    expect(h.getStudentFinanceSummary).toHaveBeenCalledWith(STUDENT, ORG);
     expect(h.getWalletByStudentId).toHaveBeenCalledWith(STUDENT, ORG);
     expect(core.finance?.billing).not.toBeNull();
     expect(core.finance?.billing?.outstandingBalance).toBe(500);
@@ -132,7 +136,7 @@ describe("getStudent360Core — finance permission boundary (billing vs wallet)"
     const core = await getStudent360Core(STUDENT, ORG, { canViewInvoices: false, canViewWallet: false });
 
     // No finance query, no finance computation, no finance payload.
-    expect(h.getStudentFinancialStatement).not.toHaveBeenCalled();
+    expect(h.getStudentFinanceSummary).not.toHaveBeenCalled();
     expect(h.getWalletByStudentId).not.toHaveBeenCalled();
     expect(h.getRecentTransactions).not.toHaveBeenCalled();
     expect(core.finance).toBeNull();
@@ -141,8 +145,8 @@ describe("getStudent360Core — finance permission boundary (billing vs wallet)"
   it("ONLY invoices: billing present, wallet absent, NO wallet query issued", async () => {
     const core = await getStudent360Core(STUDENT, ORG, { canViewInvoices: true, canViewWallet: false });
 
-    // The statement is still read (billing source), but the wallet entity/movements are not.
-    expect(h.getStudentFinancialStatement).toHaveBeenCalled();
+    // The summary is still read (billing source), but the wallet entity/movements are not.
+    expect(h.getStudentFinanceSummary).toHaveBeenCalled();
     expect(h.getWalletByStudentId).not.toHaveBeenCalled();
     expect(h.getRecentTransactions).not.toHaveBeenCalled();
     expect(core.finance?.billing).not.toBeNull();
@@ -154,8 +158,8 @@ describe("getStudent360Core — finance permission boundary (billing vs wallet)"
   it("ONLY wallet: wallet present, billing absent", async () => {
     const core = await getStudent360Core(STUDENT, ORG, { canViewInvoices: false, canViewWallet: true });
 
-    // The statement is read (wallet KPIs live there) and the wallet entity is fetched.
-    expect(h.getStudentFinancialStatement).toHaveBeenCalled();
+    // The summary is read (wallet KPIs live there) and the wallet entity is fetched.
+    expect(h.getStudentFinanceSummary).toHaveBeenCalled();
     expect(h.getWalletByStudentId).toHaveBeenCalledWith(STUDENT, ORG);
     expect(core.finance?.wallet).not.toBeNull();
     expect(core.finance?.wallet?.walletBalance).toBe(20);

@@ -89,10 +89,9 @@ over the canonical decision (not the legacy flat %).
 
 Brief pointers so the review's remaining findings have one home.
 
-- **H3 — Finance statement eager + unbounded.** `getStudentFinancialStatement` load-alls
-  invoices/payments/receipts/refunds/wallet-txns and JS-reduces KPIs; fetched eagerly in
-  the Student 360 core. Lives in `reports/finance`. Fix: lazy (only `?tab=finance`),
-  server pagination, `aggregate({_sum})`.
+- ~~**H3 — Finance statement eager + unbounded.**~~ **DONE** — `core.finance` now carries
+  SQL-aggregated summaries only (`getStudentFinanceSummary`), the history is paged (M2), and
+  the overview no longer loads the statement. See CHANGELOG.
 - **H4 — Eligibility N+1.** `evaluateEligibilityForAllSubjects` (~5 queries/subject) in
   the Progress tab. Lives in `prerequisites`. Fix: batch the enrollment + progress +
   prerequisite loads.

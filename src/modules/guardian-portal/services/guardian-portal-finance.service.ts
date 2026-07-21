@@ -7,16 +7,16 @@ import type {
   StudentPaymentRow,
   StudentPaymentsSummary,
 } from "@/modules/student-portal/types";
+import type { StudentStatementInvoice, StudentStatementPayment } from "@/modules/reports/finance/types";
 
 // =============================================================================
 // GUARDIAN PORTAL — FINANCE SECTION
-// Pure builder over the SELECTED student's financial statement (the same
-// statement Student 360 / the Student Portal use). Scope is guaranteed by the
-// caller: the statement only ever belongs to the validated, linked student.
-// Only invoked when the link's canViewFinance flag is true.
+// Pure builder. The summary figures (total due / overdue / next due / wallet) come
+// from the SQL-aggregated finance summary (H3) — never computed from a loaded list.
+// The invoice/payment rows are a pre-fetched BOUNDED page (H3/M2), scoped to the
+// validated linked student by the caller. Only invoked when the link's canViewFinance
+// flag is true.
 // =============================================================================
-
-const UNPAID_INVOICE_STATUSES = ["PENDING", "OVERDUE", "PARTIALLY_PAID"];
 
 export interface GuardianFinanceSection {
   summary: StudentPaymentsSummary;
@@ -28,27 +28,21 @@ export interface GuardianFinanceSection {
 export function buildGuardianFinanceSection(
   billing: Student360BillingSummary | null,
   wallet: Student360WalletSummary | null,
-  invoiceLimit: number,
-  paymentLimit: number
+  invoiceRows: StudentStatementInvoice[],
+  paymentRows: StudentStatementPayment[]
 ): GuardianFinanceSection {
-  const allInvoices = billing?.invoices ?? [];
-  const allPayments = billing?.payments ?? [];
+  const invoices: StudentInvoiceRow[] = invoiceRows.map((inv) => ({
+    invoiceId: inv.invoiceId,
+    invoiceNumber: inv.invoiceNumber,
+    issueDate: inv.issueDate,
+    dueDate: inv.dueDate,
+    totalAmount: inv.totalAmount,
+    paidAmount: inv.paidAmount,
+    balanceAmount: inv.balanceAmount,
+    status: inv.status,
+  }));
 
-  const invoices: StudentInvoiceRow[] = allInvoices
-    .filter((inv) => UNPAID_INVOICE_STATUSES.includes(inv.status))
-    .slice(0, invoiceLimit)
-    .map((inv) => ({
-      invoiceId: inv.invoiceId,
-      invoiceNumber: inv.invoiceNumber,
-      issueDate: inv.issueDate,
-      dueDate: inv.dueDate,
-      totalAmount: inv.totalAmount,
-      paidAmount: inv.paidAmount,
-      balanceAmount: inv.balanceAmount,
-      status: inv.status,
-    }));
-
-  const payments: StudentPaymentRow[] = allPayments.slice(0, paymentLimit).map((p) => ({
+  const payments: StudentPaymentRow[] = paymentRows.map((p) => ({
     paymentId: p.paymentId,
     paymentNumber: p.paymentNumber,
     paymentDate: p.paymentDate,
@@ -56,29 +50,15 @@ export function buildGuardianFinanceSection(
     status: p.status,
   }));
 
-  const overdueAmount = allInvoices
-    .filter((inv) => inv.status === "OVERDUE")
-    .reduce((sum, inv) => sum + inv.balanceAmount, 0);
-
-  const nextDueDate =
-    allInvoices
-      .filter((inv) => UNPAID_INVOICE_STATUSES.includes(inv.status) && inv.dueDate != null)
-      .map((inv) => inv.dueDate as Date)
-      .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
-
-  const pendingInvoiceCount = allInvoices.filter((inv) =>
-    UNPAID_INVOICE_STATUSES.includes(inv.status)
-  ).length;
-
   return {
     summary: {
       totalDue: billing?.outstandingBalance ?? 0,
-      overdueAmount,
-      nextDueDate,
+      overdueAmount: billing?.overdueAmount ?? 0,
+      nextDueDate: billing?.nextDueDate ?? null,
       walletBalance: wallet?.walletBalance ?? 0,
     },
     invoices,
     payments,
-    pendingInvoiceCount,
+    pendingInvoiceCount: billing?.unpaidInvoiceCount ?? 0,
   };
 }

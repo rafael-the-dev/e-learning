@@ -1,7 +1,7 @@
 import { getStudentById } from "@/modules/students/services/student.service";
 import { getEnrollmentsByOrganization } from "@/modules/enrollments/services/enrollment.service";
 import {
-  getStudentFinancialStatement,
+  getStudentFinanceSummary,
   getStudentInvoicesPage,
   getStudentPaymentsPage,
   getStudentReceiptsPage,
@@ -57,7 +57,6 @@ import type {
 } from "@/modules/students/student-360/types";
 import type { Student } from "@/modules/students/types";
 import type { Enrollment } from "@/modules/enrollments/types";
-import type { StudentFinancialStatement } from "@/modules/reports/finance/types";
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
 import { SUBJECT_ELIGIBILITY_STATUS } from "@/modules/prerequisites/types";
 import type { StudentLevelProgress, StudentCourseProgress, SubjectEligibilityResult } from "@/modules/prerequisites/types";
@@ -66,28 +65,31 @@ import type { StudentTimelineEvent } from "@/modules/student-timeline/types";
 import type { LevelSubject } from "@/modules/courses/types";
 import type { StudentWallet, WalletTransaction } from "@/modules/wallets/types";
 
-// Finance is split into two independently-authorized halves. Each is a PROJECTION of
-// the source data carrying only its own fields — a billing-only viewer never receives
-// wallet figures in the payload, and vice-versa (no masking, no over-serialization).
+// Finance is split into two independently-authorized halves, and each is a SUMMARY of
+// aggregate indicators only (H3) — never the invoice/payment/receipt/refund lists. The
+// full history is loaded lazily and paged in the finance tab (M2). A billing-only viewer
+// never receives wallet figures, and vice-versa (H1).
 
-// Billing (INVOICES_VIEW): invoices / payments / receipts + billing KPIs.
+// Billing (INVOICES_VIEW): invoice + payment aggregates.
 export interface Student360BillingSummary {
-  invoices: StudentFinancialStatement["invoices"];
-  payments: StudentFinancialStatement["payments"];
-  receipts: StudentFinancialStatement["receipts"];
   totalInvoiced: number;
   totalPaid: number;
   outstandingBalance: number;
+  overdueAmount: number;
+  overdueInvoiceCount: number;
+  unpaidInvoiceCount: number;
+  nextDueDate: Date | null;
+  lastPaymentDate: Date | null;
 }
 
-// Wallet (WALLETS_VIEW): saldo / crédito / movimentos / reembolsos.
+// Wallet (WALLETS_VIEW): wallet/credit/refund aggregates + the wallet card's own data.
 export interface Student360WalletSummary {
-  wallet: StudentWallet | null;
-  recentTransactions: WalletTransaction[];
   walletBalance: number;
   creditApplied: number;
   totalRefunded: number;
-  refunds: StudentFinancialStatement["refunds"];
+  pendingRefundCount: number;
+  wallet: StudentWallet | null;
+  recentTransactions: WalletTransaction[];
 }
 
 // Finance section — `billing`/`wallet` are each null unless their capability holds; the
@@ -123,12 +125,11 @@ export interface Student360Core {
   pendingJustificationCount: number;
 }
 
-// Fetch the finance section, honouring the two independent capabilities:
-//  - the statement is read only if AT LEAST ONE half is authorized (it is the shared
-//    source of both billing and wallet KPIs);
-//  - the wallet entity + movements are read only if the wallet half is authorized.
-// Each returned half is a projection carrying only its own fields; an unauthorized half
-// is null (never fetched/serialized). Returns null only when NEITHER half is authorized.
+// Fetch the finance section as AGGREGATE SUMMARIES only (H3) — never the history lists.
+//  - the SQL-aggregated summary is read only if AT LEAST ONE half is authorized;
+//  - the wallet entity + recent movements (for the wallet card) only if the wallet half is.
+// Each returned half is null unless its capability holds (never fetched/serialized).
+// Returns null only when NEITHER half is authorized. No full-table load happens here.
 async function loadFinanceSection(
   studentId: string,
   organizationId: string,
@@ -137,8 +138,8 @@ async function loadFinanceSection(
   const { canViewInvoices, canViewWallet } = capabilities;
   if (!canViewInvoices && !canViewWallet) return null;
 
-  const [statement, walletData] = await Promise.all([
-    getStudentFinancialStatement({ organizationId, studentId }),
+  const [summary, walletData] = await Promise.all([
+    getStudentFinanceSummary(studentId, organizationId),
     canViewWallet
       ? getWalletByStudentId(studentId, organizationId).then(async (wallet) => ({
           wallet,
@@ -149,24 +150,26 @@ async function loadFinanceSection(
 
   const billing: Student360BillingSummary | null = canViewInvoices
     ? {
-        invoices: statement?.invoices ?? [],
-        payments: statement?.payments ?? [],
-        receipts: statement?.receipts ?? [],
-        totalInvoiced: statement?.kpis.totalInvoiced ?? 0,
-        totalPaid: statement?.kpis.totalPaid ?? 0,
-        outstandingBalance: statement?.kpis.outstandingBalance ?? 0,
+        totalInvoiced: summary.totalInvoiced,
+        totalPaid: summary.totalPaid,
+        outstandingBalance: summary.outstandingBalance,
+        overdueAmount: summary.overdueAmount,
+        overdueInvoiceCount: summary.overdueInvoiceCount,
+        unpaidInvoiceCount: summary.unpaidInvoiceCount,
+        nextDueDate: summary.nextDueDate,
+        lastPaymentDate: summary.lastPaymentDate,
       }
     : null;
 
   const wallet: Student360WalletSummary | null =
     canViewWallet && walletData
       ? {
+          walletBalance: summary.walletBalance,
+          creditApplied: summary.creditApplied,
+          totalRefunded: summary.totalRefunded,
+          pendingRefundCount: summary.pendingRefundCount,
           wallet: walletData.wallet,
           recentTransactions: walletData.recentTransactions,
-          walletBalance: statement?.kpis.walletBalance ?? 0,
-          creditApplied: statement?.kpis.creditApplied ?? 0,
-          totalRefunded: statement?.kpis.totalRefunded ?? 0,
-          refunds: statement?.refunds ?? [],
         }
       : null;
 
@@ -251,9 +254,8 @@ export async function getStudent360Core(
     documentCount,
     financial: financeAuthorized
       ? {
-          overdueInvoiceCount: finance?.billing?.invoices.filter((i) => i.status === "OVERDUE").length ?? 0,
-          pendingRefundCount:
-            finance?.wallet?.refunds.filter((r) => r.status === "REQUESTED" || r.status === "APPROVED").length ?? 0,
+          overdueInvoiceCount: finance?.billing?.overdueInvoiceCount ?? 0,
+          pendingRefundCount: finance?.wallet?.pendingRefundCount ?? 0,
         }
       : null,
     hasAcademicData: subjectProgressResult.data.length > 0 || academicSummary.gradedSubjects > 0,
@@ -309,7 +311,7 @@ export function buildHealthScoreInput(core: Student360Core): HealthScoreInput {
     finance: core.finance?.billing
       ? {
           outstandingBalance: core.finance.billing.outstandingBalance,
-          hasOverdueInvoice: core.finance.billing.invoices.some((i) => i.status === "OVERDUE"),
+          hasOverdueInvoice: core.finance.billing.overdueInvoiceCount > 0,
         }
       : null,
     // Canonical attendance percentage (H5) — the same value shown everywhere; null when

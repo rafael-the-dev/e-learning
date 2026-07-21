@@ -1,6 +1,8 @@
 import { getDb } from "@/server/db";
 import { NotFoundError } from "@/shared/lib/command";
 import { getStudent360Core } from "@/modules/students/student-360/services/student-360.service";
+import { getStudentInvoicesPage, getStudentPaymentsPage } from "@/modules/reports/finance/services/financial-reports.service";
+import type { StudentStatementInvoice, StudentStatementPayment } from "@/modules/reports/finance/types";
 import { findAttendanceRecordsByStudent } from "@/modules/students/student-360/repositories/student-360.repository";
 import { getStudentDocuments } from "@/modules/student-documents/services/student-document.service";
 import {
@@ -59,6 +61,8 @@ const PUBLISHED_GRADES_LIMIT = 15;
 const ATTENDANCE_ROWS_LIMIT = 12;
 const INVOICE_ROWS_LIMIT = 10;
 const PAYMENT_ROWS_LIMIT = 10;
+// The guardian's finance card shows the student's UNPAID invoices (bounded, H3/M2).
+const UNPAID_INVOICE_STATUSES = ["PENDING", "OVERDUE", "PARTIALLY_PAID"];
 const DOCUMENTS_LIMIT = 20;
 const NOTIFICATIONS_LIMIT = 8;
 const UPCOMING_WINDOW_DAYS = 7;
@@ -124,8 +128,16 @@ async function buildSelectedStudentData(
   const showClasses = permissions.canViewAcademic || permissions.canViewAttendance;
 
   // ── Conditional reads — a forbidden section is never queried ────────────────
-  const [assessmentsRaw, publishedGradesRaw, upcomingClassesRaw, attendanceStatsRaw, attendanceRecords, documentsRaw] =
-    await Promise.all([
+  const [
+    assessmentsRaw,
+    publishedGradesRaw,
+    upcomingClassesRaw,
+    attendanceStatsRaw,
+    attendanceRecords,
+    documentsRaw,
+    invoicesPage,
+    paymentsPage,
+  ] = await Promise.all([
       permissions.canViewAcademic
         ? findStudentAssessments(organizationId, activeClassGroupIds, studentId, ASSESSMENTS_LIMIT)
         : Promise.resolve([]),
@@ -144,6 +156,14 @@ async function buildSelectedStudentData(
       permissions.canViewDocuments
         ? getStudentDocuments(studentId, organizationId)
         : Promise.resolve([]),
+      // Bounded, server-paged UNPAID invoices / recent payments (H3/M2) — only fetched
+      // when finance is authorized; the summary aggregates come from core.finance.
+      permissions.canViewFinance
+        ? getStudentInvoicesPage({ organizationId, studentId }, { page: 1, pageSize: INVOICE_ROWS_LIMIT }, UNPAID_INVOICE_STATUSES)
+        : Promise.resolve({ data: [] as StudentStatementInvoice[] }),
+      permissions.canViewFinance
+        ? getStudentPaymentsPage({ organizationId, studentId }, { page: 1, pageSize: PAYMENT_ROWS_LIMIT })
+        : Promise.resolve({ data: [] as StudentStatementPayment[] }),
     ]);
 
   const subjectNames = await findSubjectNamesByIds(
@@ -216,8 +236,8 @@ async function buildSelectedStudentData(
     ? buildGuardianFinanceSection(
         core.finance?.billing ?? null,
         core.finance?.wallet ?? null,
-        INVOICE_ROWS_LIMIT,
-        PAYMENT_ROWS_LIMIT
+        invoicesPage.data,
+        paymentsPage.data
       )
     : null;
 

@@ -42,6 +42,13 @@ describe("Student 360 architecture (M1)", () => {
     expect(src).not.toMatch(/deriveAcademicStatusLabel|deriveProgression/);
   });
 
+  it("the overview reads the SQL-aggregated finance summary, never the full statement (H3)", () => {
+    const src = read(SERVICE);
+    expect(src).toContain("getStudentFinanceSummary");
+    // The eager full-statement load must be gone from the aggregator.
+    expect(src).not.toContain("getStudentFinancialStatement");
+  });
+
   it("the overview tab renders the current level from the summary, not by re-resolving it", () => {
     const src = read(OVERVIEW);
     expect(src).not.toContain("resolveCurrentEnrollmentLevel");

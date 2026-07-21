@@ -69,6 +69,21 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Separated the finance **summary** from the finance **history** (H3) — the last big
+  structural change to the finance data flow. `core.finance` now carries only aggregate
+  SUMMARIES (billing KPIs/counts + wallet KPIs), never the invoice/payment/receipt/refund
+  lists. New `getStudentFinanceSummary` computes every figure with SQL `COUNT`/`SUM`/`MIN`/
+  `MAX` (a grouped-by-status invoice pass + payment/refund/wallet/credit aggregates) instead
+  of loading hundreds/thousands of rows and reducing them in JS. Consequences:
+  - The **overview never loads the full statement** — only aggregates. The risk engine's
+    finance dimension (overdue / pending-refund counts), the operational-card KPI and the
+    finance-tab KPI cards all read the summary.
+  - The **history stays paginated** (M2): the finance tab pages one bounded section at a
+    time; the Student & Guardian portals fetch their bounded (unpaid-invoice / recent-
+    payment) lists via the paginated reads and take their summary figures from the summary.
+  - Aggregations are parallelizable with the academic/attendance summaries in the core
+    `Promise.all`; the permission boundary (H1) is preserved (a half is queried only when
+    its capability holds); no figure changed (semantics copied exactly from the old KPIs).
 - Server-side paginated the Student 360 finance history (M2). The finance tab previously
   loaded the student's entire invoice/payment/receipt/refund history and paginated it
   client-side (`.slice()`); it now fetches one bounded page per section from the repository

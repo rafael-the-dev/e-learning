@@ -15,6 +15,8 @@ const h = vi.hoisted(() => ({
   findSubjectNamesByIds: vi.fn(),
   getGuardianNotifications: vi.fn(),
   userFindUnique: vi.fn(),
+  getStudentInvoicesPage: vi.fn(),
+  getStudentPaymentsPage: vi.fn(),
 }));
 
 vi.mock("@/modules/guardian-portal/repositories/guardian-portal.repository", () => ({
@@ -25,6 +27,10 @@ vi.mock("@/modules/guardian-portal/repositories/guardian-portal.repository", () 
 vi.mock("@/modules/students/student-360/services/student-360.service", () => ({
   getStudent360Core: h.getStudent360Core,
   resolveCurrentEnrollmentLevel: h.resolveCurrentEnrollmentLevel,
+}));
+vi.mock("@/modules/reports/finance/services/financial-reports.service", () => ({
+  getStudentInvoicesPage: h.getStudentInvoicesPage,
+  getStudentPaymentsPage: h.getStudentPaymentsPage,
 }));
 vi.mock("@/modules/students/student-360/repositories/student-360.repository", () => ({
   findAttendanceRecordsByStudent: h.findAttendanceRecordsByStudent,
@@ -81,22 +87,22 @@ function makeCore() {
     },
     finance: {
       billing: {
-        invoices: [
-          { invoiceId: "i1", invoiceNumber: "F1", issueDate: new Date(), dueDate: new Date("2026-12-01"), totalAmount: 100, paidAmount: 0, balanceAmount: 100, status: "PENDING" },
-        ],
-        payments: [],
-        receipts: [],
         totalInvoiced: 100,
         totalPaid: 0,
         outstandingBalance: 100,
+        overdueAmount: 0,
+        overdueInvoiceCount: 0,
+        unpaidInvoiceCount: 1,
+        nextDueDate: new Date("2026-12-01"),
+        lastPaymentDate: null,
       },
       wallet: {
-        wallet: null,
-        recentTransactions: [],
         walletBalance: 0,
         creditApplied: 0,
         totalRefunded: 0,
-        refunds: [],
+        pendingRefundCount: 0,
+        wallet: null,
+        recentTransactions: [],
       },
     },
   };
@@ -141,6 +147,8 @@ beforeEach(() => {
   );
   h.getStudent360Core.mockResolvedValue(makeCore());
   h.resolveCurrentEnrollmentLevel.mockReturnValue({ id: "lvl1", name: "Nível 1" });
+  h.getStudentInvoicesPage.mockResolvedValue({ data: [] });
+  h.getStudentPaymentsPage.mockResolvedValue({ data: [] });
   h.findStudentPublishedGrades.mockResolvedValue([
     { id: "g1", subjectId: "sub1", assessmentTitle: "Teste 1", score: 80, maxScore: 100, status: "PASSED", publishedAt: new Date() },
   ]);

@@ -20,6 +20,11 @@ export {
   getStudentReceiptsPage,
   getStudentRefundsPage,
 } from "../repositories/student-statement.repository";
+// H3 — aggregate-only finance summary (no list loading), for KPIs / risk / portals.
+export {
+  getStudentFinanceSummary,
+  type StudentFinanceSummary,
+} from "../repositories/student-finance-summary.repository";
 import { getIntegrityReportKPIs, listIntegrityIssuesForReport } from "../repositories/integrity-report.repository";
 import { getStudentDebtKPIs, listStudentDebtRows } from "../repositories/student-debt.repository";
 import { getCollectionsKPIs, listCollectionsRows } from "../repositories/collections.repository";
