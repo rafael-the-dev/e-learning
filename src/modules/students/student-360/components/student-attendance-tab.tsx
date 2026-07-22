@@ -1,16 +1,15 @@
-import Link from "next/link";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { ExecutiveKpiGrid } from "@/shared/components/layout/executive-dashboard";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
 import { StatusBadge } from "@/shared/components/data/status-badge";
 import { EmptyState } from "@/shared/components/layout/empty-state";
-import { Button } from "@/shared/components/ui/button";
+import { AccessiblePagination } from "@/shared/components/data/accessible-pagination";
 import {
   SUBJECT_ATTENDANCE_VIEW_STATUS_LABELS,
   ATTENDANCE_JUSTIFICATION_STATUS_LABELS,
 } from "@/modules/attendance/types";
-import { Activity, ChevronLeft, ChevronRight, ClipboardList } from "lucide-react";
+import { Activity, ClipboardList } from "lucide-react";
 import type {
   SubjectAttendanceView,
   StudentAttendanceSummary,
@@ -107,7 +106,7 @@ export function StudentAttendanceTab({
             <EmptyState icon={<ClipboardList className="size-8" />} title="Sem registos" description="Nenhum registo de presença encontrado." />
           ) : (
             <div className="space-y-2">
-              <div className="rounded-md border overflow-x-auto">
+              <div id="student-attendance-records-table" className="rounded-md border overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr className="text-left text-xs text-muted-foreground">
@@ -133,35 +132,21 @@ export function StudentAttendanceTab({
                   </tbody>
                 </table>
               </div>
-              {records.totalPages > 1 && (
-                <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-                  <span>Página {records.page} de {records.totalPages}</span>
-                  <div className="flex items-center gap-1">
-                    {records.hasPreviousPage ? (
-                      <Button asChild variant="outline" size="icon" className="size-7">
-                        <Link href={`?tab=attendance&page=${records.page - 1}`}>
-                          <ChevronLeft className="size-3.5" />
-                        </Link>
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="icon" className="size-7" disabled>
-                        <ChevronLeft className="size-3.5" />
-                      </Button>
-                    )}
-                    {records.hasNextPage ? (
-                      <Button asChild variant="outline" size="icon" className="size-7">
-                        <Link href={`?tab=attendance&page=${records.page + 1}`}>
-                          <ChevronRight className="size-3.5" />
-                        </Link>
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="icon" className="size-7" disabled>
-                        <ChevronRight className="size-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
+              <AccessiblePagination
+                navLabel="Paginação da assiduidade"
+                previousLabel="Ir para a página anterior da assiduidade"
+                nextLabel="Ir para a página seguinte da assiduidade"
+                page={records.page}
+                pageSize={records.pageSize}
+                totalPages={records.totalPages}
+                totalItems={records.total}
+                itemsLabel="registos de assiduidade"
+                sectionLabel="da assiduidade"
+                hasPreviousPage={records.hasPreviousPage}
+                hasNextPage={records.hasNextPage}
+                hrefForPage={(p) => `?tab=attendance&page=${p}`}
+                controlsId="student-attendance-records-table"
+              />
             </div>
           )}
         </CardContent>

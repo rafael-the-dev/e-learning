@@ -1,16 +1,15 @@
-import Link from "next/link";
 import { StatCard } from "@/shared/components/layout/stat-card";
 import { ExecutiveKpiGrid } from "@/shared/components/layout/executive-dashboard";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
-import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/layout/empty-state";
+import { AccessiblePagination } from "@/shared/components/data/accessible-pagination";
 import {
   STUDENT_RESULT_STATUS_LABELS,
   GRADE_COMPONENT_TYPE_LABELS,
 } from "@/modules/grades/types";
 import { STUDENT_SUBJECT_PROGRESS_STATUS_LABELS } from "@/modules/assessments/types";
-import { BookOpen, CheckCircle2, XCircle, AlertTriangle, Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { BookOpen, CheckCircle2, XCircle, AlertTriangle, Clock } from "lucide-react";
 import type { StudentAssessmentResult } from "@/modules/grades/types";
 import type { StudentSubjectProgress } from "@/modules/assessments/types";
 import type { StudentAcademicSummary } from "@/modules/students/services/student-academic-summary.service";
@@ -59,7 +58,7 @@ export function StudentGradesTab({ assessments, subjectProgress, academicSummary
             <EmptyState icon={<BookOpen className="size-8" />} title="Sem avaliações" description="Nenhuma avaliação registada para este aluno." />
           ) : (
             <div className="space-y-2">
-              <div className="rounded-md border overflow-x-auto">
+              <div id="student-grades-assessments-table" className="rounded-md border overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr className="text-left text-xs text-muted-foreground">
@@ -91,35 +90,21 @@ export function StudentGradesTab({ assessments, subjectProgress, academicSummary
                   </tbody>
                 </table>
               </div>
-              {assessments.totalPages > 1 && (
-                <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-                  <span>Página {assessments.page} de {assessments.totalPages}</span>
-                  <div className="flex items-center gap-1">
-                    {assessments.hasPreviousPage ? (
-                      <Button asChild variant="outline" size="icon" className="size-7">
-                        <Link href={`?tab=grades&page=${assessments.page - 1}`}>
-                          <ChevronLeft className="size-3.5" />
-                        </Link>
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="icon" className="size-7" disabled>
-                        <ChevronLeft className="size-3.5" />
-                      </Button>
-                    )}
-                    {assessments.hasNextPage ? (
-                      <Button asChild variant="outline" size="icon" className="size-7">
-                        <Link href={`?tab=grades&page=${assessments.page + 1}`}>
-                          <ChevronRight className="size-3.5" />
-                        </Link>
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="icon" className="size-7" disabled>
-                        <ChevronRight className="size-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
+              <AccessiblePagination
+                navLabel="Paginação das notas"
+                previousLabel="Ir para a página anterior das notas"
+                nextLabel="Ir para a página seguinte das notas"
+                page={assessments.page}
+                pageSize={assessments.pageSize}
+                totalPages={assessments.totalPages}
+                totalItems={assessments.total}
+                itemsLabel="avaliações"
+                sectionLabel="das notas"
+                hasPreviousPage={assessments.hasPreviousPage}
+                hasNextPage={assessments.hasNextPage}
+                hrefForPage={(p) => `?tab=grades&page=${p}`}
+                controlsId="student-grades-assessments-table"
+              />
             </div>
           )}
         </CardContent>
