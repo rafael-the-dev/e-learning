@@ -114,6 +114,21 @@ M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip 
   `aria-disabled`), enabled controls as real links, `aria-controls` → table id. Both tabs
   migrated; query params / single-page behaviour unchanged. Tests: 14 component cases + 2 tab
   regression cases. See CHANGELOG.
+- **F-M8 — remove legacy dashboard/watchlist fallbacks → DONE.** Risk dashboards/watchlists now
+  read the canonical `StudentRiskProjection` ONLY (fail-closed). New `resolveRiskProjectionReadiness`
+  gate + `RiskMetric<T>` envelope (AVAILABLE vs UNAVAILABLE — real zero ≠ unavailable);
+  `buildCurrentVisibleRiskProjectionWhere` forces `sourceVersion = current` on every aggregate read.
+  Migrated: Executive (`studentsAtRisk`, health attendance axis), grades at-risk, teacher attendance
+  risk (explicit unavailable note), students page KPIs/insights. No feature flag (rollback = app
+  version). Per-org observability. Tests: readiness mapping, consumer gating (no legacy/no projection
+  read when not ready, real-zero vs unavailable), current-version filter, architecture import-ban.
+  See CHANGELOG.
+  - **F-M8 follow-ups (deferred, not blocking):** two legacy-only risk computations were left
+    `@deprecated` (never wired to the projection/gate): (1) `findRiskWatchlistStudents` — the
+    students-page risk watchlist (SUSPENDED + distinct FAILED-subject); migrate to the
+    projection-backed `findStudentRiskWatchlist` (already available) by mapping its rows to
+    `RiskStudent`. (2) `getTeacherGradeKPIs.atRiskStudentCount` — the teacher grades KPI (flat
+    FAILED-subject count); migrate to a teacher-scoped projection read (academic dimension).
 - **Still open from the review (Lows only; do NOT block the F-H cluster):** the Lows.
   F-L4 (unused var) fixed earlier.
 

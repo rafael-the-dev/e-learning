@@ -68,6 +68,24 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
     default to authorized, so those callers (which grant own-data / per-link access and gate
     exposure at their own layer) are unchanged.
 
+### Changed (risk convergence)
+- **Removed the hybrid legacy fallback from risk dashboards/watchlists** (review finding
+  **F-M8**). During the M11 rollout several consumers ran `coverage.ready ? projection : legacy`,
+  which meant two divergent sources of truth (canonical projection vs a legacy 75/85 threshold /
+  FAILED-subject re-derivation). They now read the canonical `StudentRiskProjection` **only**,
+  fail-closed: when an org is not READY the risk figures are returned as an explicit
+  **UNAVAILABLE** state (never a legacy number, never a `0` that reads as "none at risk").
+  - New single gate `resolveRiskProjectionReadiness` over the fail-closed coverage service, and a
+    `RiskMetric<T>` availability envelope so the UI distinguishes a real zero from "em preparação".
+  - Every aggregate read now filters `sourceVersion = CURRENT_STUDENT_RISK_SOURCE_VERSION`
+    (composing the F-M2 visible-where), so an old-version row can never leak into a KPI/watchlist.
+  - Migrated: Executive dashboard (`studentsAtRisk`, org-health attendance axis), grades page
+    at-risk count, teacher dashboard attendance risk (with an explicit "unavailable" note), and
+    the students page at-risk / low-attendance KPIs + insights.
+  - Per-org observability (no PII); no runtime feature flag — rollback is by application version.
+  - `findRiskWatchlistStudents` (students-page watchlist) and `getTeacherGradeKPIs.atRiskStudentCount`
+    were never wired to the projection and are left as-is but marked `@deprecated` with a follow-up.
+
 ### Accessibility
 - **Grades and attendance pagination** (review finding **F-M7**). The two icon-only prev/next
   pagers (`<Button><ChevronLeft/></Button>`) were announced only as "botão", were
