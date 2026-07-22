@@ -8,8 +8,11 @@ import type { Student360FinanceSection } from "@/modules/students/student-360/se
 
 // The operational summary (H7): a few purposeful cards, each answering — what's the state,
 // what's the main problem, what's the next action (via its link). Every domain metric
-// (média / assiduidade / dívida) appears ONCE, here — not also in a KPI band. The Financeiro
-// card is omitted entirely when finance is not authorized (no empty/nulled placeholder).
+// (média / assiduidade / dívida) appears ONCE, here — not also in a KPI band.
+//
+// F-M6: each card is omitted entirely when its dimension is not authorized — a null summary
+// (academic/attendance) or an unauthorized finance section. No empty/nulled placeholder is
+// rendered, so the card's absence carries the authorization state (matching the DTO).
 
 function attentionLine(dimension: RiskDimension | null): { text: string; alert: boolean } {
   const count = dimension?.reasons.length ?? 0;
@@ -61,35 +64,41 @@ export function StudentOperationalCards({
   riskSummary,
   finance,
 }: {
-  academicSummary: StudentAcademicSummary;
-  attendanceSummary: StudentAttendanceSummary;
+  academicSummary: StudentAcademicSummary | null;
+  attendanceSummary: StudentAttendanceSummary | null;
   riskSummary: StudentRiskSummary;
   finance: Student360FinanceSection | null;
 }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <OperationalCard
-        icon={<BookOpen className="size-3.5" />}
-        title="Académico"
-        value={
-          academicSummary.subjectAverage != null
-            ? `Média ${academicSummary.subjectAverage.toFixed(1)}`
-            : "Sem notas"
-        }
-        attention={attentionLine(riskSummary.academic)}
-        href="?tab=grades"
-      />
-      <OperationalCard
-        icon={<Activity className="size-3.5" />}
-        title="Assiduidade"
-        value={
-          attendanceSummary.attendancePercentage != null
-            ? `${attendanceSummary.attendancePercentage.toFixed(1)}%`
-            : "Sem dados"
-        }
-        attention={attentionLine(riskSummary.attendance)}
-        href="?tab=attendance"
-      />
+      {/* Académico disappears entirely without GRADES_VIEW (academic summary not authorized). */}
+      {academicSummary && (
+        <OperationalCard
+          icon={<BookOpen className="size-3.5" />}
+          title="Académico"
+          value={
+            academicSummary.subjectAverage != null
+              ? `Média ${academicSummary.subjectAverage.toFixed(1)}`
+              : "Sem notas"
+          }
+          attention={attentionLine(riskSummary.academic)}
+          href="?tab=grades"
+        />
+      )}
+      {/* Assiduidade disappears entirely without ATTENDANCE_SESSIONS_VIEW. */}
+      {attendanceSummary && (
+        <OperationalCard
+          icon={<Activity className="size-3.5" />}
+          title="Assiduidade"
+          value={
+            attendanceSummary.attendancePercentage != null
+              ? `${attendanceSummary.attendancePercentage.toFixed(1)}%`
+              : "Sem dados"
+          }
+          attention={attentionLine(riskSummary.attendance)}
+          href="?tab=attendance"
+        />
+      )}
       {/* Financeiro disappears entirely without permission (billing not authorized). */}
       {finance?.billing && (
         <OperationalCard

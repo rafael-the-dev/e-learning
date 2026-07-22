@@ -118,8 +118,11 @@ async function buildSelectedStudentData(
     canViewInvoices: permissions.canViewFinance,
     canViewWallet: permissions.canViewFinance,
   });
-  // Current level from the canonical academic summary (M1) — not re-resolved here.
-  const level = core.academicSummary.currentLevel;
+  // The aggregator is fetched with the non-finance dimensions authorized (F-M6: the view caps
+  // default to true) — the guardian's OWN per-link flags gate EXPOSURE below, so the summary is
+  // always present here. Current level from the canonical academic summary (M1).
+  const academicSummary = core.academicSummary!;
+  const level = academicSummary.currentLevel;
 
   const activeClassGroupIds = unique(
     core.activeEnrollments.map((e) => e.classGroupId).filter((id): id is string => Boolean(id))
@@ -203,7 +206,7 @@ async function buildSelectedStudentData(
   // Headline attendance % from the canonical summary (H5) — identical to Student 360 and
   // the Student portal; the per-status counts stay from the precise raw records.
   const attendanceKpis: StudentAttendanceKpis | null = permissions.canViewAttendance
-    ? { ...buildStudentAttendanceKpis(attendanceStatsRaw), attendancePercentage: core.attendanceSummary.attendancePercentage }
+    ? { ...buildStudentAttendanceKpis(attendanceStatsRaw), attendancePercentage: core.attendanceSummary?.attendancePercentage ?? null }
     : null;
   const attendanceTrend: StudentAttendanceMonthlyPoint[] = permissions.canViewAttendance
     ? buildStudentAttendanceTrend(attendanceStatsRaw)
@@ -255,7 +258,7 @@ async function buildSelectedStudentData(
 
   // Canonical average — the same "Média das Disciplinas" the student and Student 360 see
   // (StudentSubjectProgress.finalGrade), gated by academic visibility (H2 single source).
-  const overallAverage = permissions.canViewAcademic ? core.academicSummary.subjectAverage : null;
+  const overallAverage = permissions.canViewAcademic ? academicSummary.subjectAverage : null;
 
   return {
     studentId,
@@ -275,15 +278,15 @@ async function buildSelectedStudentData(
       courseName: permissions.canViewAcademic ? core.currentEnrollment?.courseName ?? null : null,
       currentLevelName: permissions.canViewAcademic ? level.name : null,
       classGroupName: permissions.canViewAcademic ? core.currentEnrollment?.classGroupName ?? null : null,
-      academicStatusLabel: permissions.canViewAcademic ? core.academicSummary.progressionStatus : null,
+      academicStatusLabel: permissions.canViewAcademic ? academicSummary.progressionStatus : null,
       overallAverage,
       attendancePercentage: attendanceKpis?.attendancePercentage ?? null,
     },
     kpis: {
       overallAverage,
-      approvedSubjects: permissions.canViewAcademic ? core.academicSummary.passedSubjects : null,
+      approvedSubjects: permissions.canViewAcademic ? academicSummary.passedSubjects : null,
       pendingSubjects: permissions.canViewAcademic
-        ? core.subjectProgress.length - core.academicSummary.passedSubjects
+        ? core.subjectProgress.length - academicSummary.passedSubjects
         : null,
       upcomingAssessments:
         permissions.canViewAcademic && assessments ? countUpcomingAssessments(assessments, windowStart) : null,

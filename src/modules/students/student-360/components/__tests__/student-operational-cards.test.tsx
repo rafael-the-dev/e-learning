@@ -95,6 +95,32 @@ describe("StudentOperationalCards", () => {
     expect(screen.getByText("Sem dados")).toBeTruthy();
   });
 
+  it("omits the Académico card ENTIRELY when academic is not authorized (summary null) — F-M6", () => {
+    render(
+      <StudentOperationalCards
+        academicSummary={null}
+        attendanceSummary={attendance()}
+        riskSummary={risk()}
+        finance={null}
+      />
+    );
+    expect(screen.queryByText("Académico")).toBeNull();
+    expect(screen.getByText("Assiduidade")).toBeTruthy();
+  });
+
+  it("omits the Assiduidade card ENTIRELY when attendance is not authorized (summary null) — F-M6", () => {
+    render(
+      <StudentOperationalCards
+        academicSummary={academic()}
+        attendanceSummary={null}
+        riskSummary={risk()}
+        finance={null}
+      />
+    );
+    expect(screen.queryByText("Assiduidade")).toBeNull();
+    expect(screen.getByText("Académico")).toBeTruthy();
+  });
+
   it("surfaces the main problem count per dimension", () => {
     render(
       <StudentOperationalCards

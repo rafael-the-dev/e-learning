@@ -93,10 +93,21 @@ describe("buildStudentRiskSummary", () => {
     expect(filtered.level).toBe("NONE"); // debt reason cannot leak through the global level
   });
 
-  // ── Documents ───────────────────────────────────────────────────────────────
+  // ── Documents (permission-aware, mirrors finance) ────────────────────────────
   it("no documents → HIGH documents reason", () => {
     const r = buildStudentRiskSummary(input({ documentCount: 0 }), NOW);
     expect(r.documents?.level).toBe("HIGH");
+  });
+
+  it("documentCount null (viewer lacks documents permission): dimension null, no reason, not inferred (F-M6)", () => {
+    // Same student with zero documents internally, but the viewer can't see documents.
+    // The engine must treat it like unauthorized finance: null dimension, no reason,
+    // and no contribution to the global level (no hidden-risk inference).
+    const r = buildStudentRiskSummary(input({ documentCount: null }), NOW);
+    expect(r.documents).toBeNull();
+    expect(r.reasons.some((x) => x.id === "missing-documents")).toBe(false);
+    expect(r.reasons.some((x) => x.dimension === "documents")).toBe(false);
+    expect(r.level).toBe("NONE"); // the missing-documents HIGH cannot leak through the level
   });
 
   // ── Precedence & combinations ────────────────────────────────────────────────

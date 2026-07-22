@@ -11,9 +11,22 @@
 // rather than "whoever sees invoices also sees the wallet": billing (invoices /
 // payments / dívida) ← INVOICES_VIEW; wallet (saldo / movimentos / reembolsos) ←
 // WALLETS_VIEW. Each half is fetched/derived/returned only when its capability holds.
+//
+// F-M6: the non-finance dimensions are also gated. The view flags are OPTIONAL and default
+// to TRUE when omitted — so callers that already grant full access (the Student Portal for a
+// student's own data; any caller that doesn't opt into per-dimension gating) are unaffected.
+// The /students/[studentId] page passes the viewer's REAL per-dimension permissions, so a
+// viewer without a dimension's permission gets NO query, NO DTO section, and NO risk reason
+// for that dimension (no inference via the global level).
 export interface Student360Capabilities {
   canViewInvoices: boolean;
   canViewWallet: boolean;
+  // Optional; undefined ⇒ authorized (default true).
+  canViewAcademic?: boolean;
+  canViewAttendance?: boolean;
+  canViewProgression?: boolean;
+  canViewDocuments?: boolean;
+  canViewTimeline?: boolean;
 }
 
 export type HealthScoreLabel = "EXCELLENT" | "HEALTHY" | "NEEDS_ATTENTION" | "CRITICAL";

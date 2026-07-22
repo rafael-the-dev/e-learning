@@ -110,22 +110,27 @@ export interface Student360Core {
   currentEnrollment: Enrollment | null;
   // null = finance not authorized (never fetched). See Student360FinanceSection.
   finance: Student360FinanceSection | null;
+  // Academic (F-M6): null when the viewer lacks academic permission — not fetched, not
+  // serialized. subjectProgress is [] in that case.
   subjectProgress: StudentSubjectProgress[];
+  // Progression (F-M6): [] when the viewer lacks progression permission.
   levelProgress: StudentLevelProgress[];
   courseProgress: StudentCourseProgress[];
   // Canonical academic headline figures (average/tallies/status) — the single source
-  // of truth all surfaces consume (H2). Derived once here from the persisted rollups.
-  academicSummary: StudentAcademicSummary;
-  // Canonical risk classification (H6) — the single answer to "at risk? why? severity?
-  // action?". Alerts, overview risk chips and the health card all read this; none re-derive.
+  // of truth all surfaces consume (H2). null when academic is not authorized (F-M6).
+  academicSummary: StudentAcademicSummary | null;
+  // Canonical risk classification (H6) — computed from ONLY the viewer's authorized
+  // dimensions, so the global level never leaks a hidden dimension (F-M6, like finance H1).
   riskSummary: StudentRiskSummary;
+  // Attendance (F-M6): null / [] when the viewer lacks attendance permission.
   attendanceSubjects: SubjectAttendanceView[];
-  // Canonical attendance read model (H5) — overall percentage + per-status counts,
-  // the single value/counts every surface displays. Never a mean of per-subject %.
-  attendanceSummary: StudentAttendanceSummary;
+  // Canonical attendance read model (H5). null when attendance is not authorized (F-M6).
+  attendanceSummary: StudentAttendanceSummary | null;
   lastActivityAt: Date | null;
+  // Recent activity filtered to the viewer's authorized dimensions (F-M6).
   recentTimeline: StudentTimelineEvent[];
-  documentCount: number;
+  // null when the viewer lacks documents permission (F-M6).
+  documentCount: number | null;
   pendingJustificationCount: number;
 }
 
@@ -185,81 +190,97 @@ export async function getStudent360Core(
   organizationId: string,
   capabilities: Student360Capabilities
 ): Promise<Student360Core> {
+  // F-M6: per-dimension gating. The view flags default to TRUE when omitted (portals rely on
+  // this); the /students page passes the viewer's real permissions. A false flag ⇒ NO query,
+  // NO DTO section, and NO risk reason for that dimension (no inference via the global level).
+  const canAcademic = capabilities.canViewAcademic ?? true;
+  const canAttendance = capabilities.canViewAttendance ?? true;
+  const canProgression = capabilities.canViewProgression ?? true;
+  const canDocuments = capabilities.canViewDocuments ?? true;
+  const canTimeline = capabilities.canViewTimeline ?? true;
+  const financeVisible = (capabilities.canViewInvoices || capabilities.canViewWallet) ?? true;
+
   const student = await getStudentById(studentId, organizationId);
 
-  // Finance is fetched in parallel with the rest, honouring the two capabilities.
-  // With neither authorized, no finance query is issued (security + performance).
+  // Finance is fetched honouring the two finance capabilities (no query if neither) — H1.
   const financePromise = loadFinanceSection(studentId, organizationId, capabilities);
+
+  // levelProgress/courseProgress are needed by the academic summary (currentLevel /
+  // progressionStatus) too, so they are fetched when EITHER academic or progression is
+  // authorized; the DTO arrays are still gated by canProgression below.
+  const needsProgressRows = canProgression || canAcademic;
 
   const [
     enrollmentsResult,
-    subjectProgressResult,
+    subjectProgress,
     levelProgress,
     courseProgress,
     lastActivityAt,
-    recentTimeline,
+    recentTimelineAll,
     documentCount,
-    justificationsResult,
+    pendingJustificationCount,
     finance,
   ] = await Promise.all([
     getEnrollmentsByOrganization(organizationId, { studentId, page: 1, pageSize: 50 }),
-    findProgressByOrganization(organizationId, { studentId, page: 1, pageSize: 200 }),
-    findLevelProgressByStudent(studentId, organizationId),
-    findCourseProgressByStudent(studentId, organizationId),
+    canAcademic
+      ? findProgressByOrganization(organizationId, { studentId, page: 1, pageSize: 200 }).then((r) => r.data)
+      : Promise.resolve([] as StudentSubjectProgress[]),
+    needsProgressRows ? findLevelProgressByStudent(studentId, organizationId) : Promise.resolve([] as StudentLevelProgress[]),
+    needsProgressRows ? findCourseProgressByStudent(studentId, organizationId) : Promise.resolve([] as StudentCourseProgress[]),
     findLastActivityAt(studentId, organizationId),
-    getRecentTimelineEvents(studentId, organizationId, 5),
-    getStudentDocumentCount(studentId, organizationId),
-    findJustificationsByOrganization(organizationId, { studentId, status: "PENDING", page: 1, pageSize: 1 }),
+    canTimeline ? getRecentTimelineEvents(studentId, organizationId, 5) : Promise.resolve([] as StudentTimelineEvent[]),
+    canDocuments ? getStudentDocumentCount(studentId, organizationId) : Promise.resolve<number | null>(null),
+    canAttendance
+      ? findJustificationsByOrganization(organizationId, { studentId, status: "PENDING", page: 1, pageSize: 1 }).then((r) => r.total)
+      : Promise.resolve(0),
     financePromise,
   ]);
 
   const enrollments = enrollmentsResult.data;
   const activeEnrollments = enrollments.filter((e) => e.status === "ACTIVE");
-
-  // Source of truth: persisted StudentSubjectAttendanceSummary (Phase 3), never
-  // recomputed on-read. Missing summaries surface as NOT_STARTED / null. The
-  // per-status counts come from the persisted period year-rollups (Phase 4).
-  const [attendanceSubjects, attendanceSummary] = await Promise.all([
-    getStudentSubjectAttendanceViews(
-      studentId,
-      activeEnrollments.map((e) => ({ id: e.id, classGroupId: e.classGroupId ?? null })),
-      organizationId
-    ).catch(() => [] as SubjectAttendanceView[]),
-    getStudentAttendanceSummary(studentId, organizationId).catch(
-      (): StudentAttendanceSummary => ({
-        totalSessions: 0, presentCount: 0, absentCount: 0, lateCount: 0, excusedCount: 0, remoteCount: 0,
-        attendancePercentage: null, attendedSessions: 0,
-      })
-    ),
-  ]);
-
   const currentEnrollment = activeEnrollments[0] ?? enrollments[0] ?? null;
 
-  // Single canonical academic read model — every surface reads these figures (H2).
-  const academicSummary = buildStudentAcademicSummary({
-    subjectProgress: subjectProgressResult.data,
-    levelProgress,
-    courseProgress,
-    currentEnrollment,
-  });
+  // Attendance read models (H5) — fetched only when authorized (F-M6). null summary ⇒ the
+  // attendance axis is excluded from health and produces no attendance risk reason.
+  const [attendanceSubjects, attendanceSummary] = canAttendance
+    ? await Promise.all([
+        getStudentSubjectAttendanceViews(
+          studentId,
+          activeEnrollments.map((e) => ({ id: e.id, classGroupId: e.classGroupId ?? null })),
+          organizationId
+        ).catch(() => [] as SubjectAttendanceView[]),
+        getStudentAttendanceSummary(studentId, organizationId).catch(
+          (): StudentAttendanceSummary => ({
+            totalSessions: 0, presentCount: 0, absentCount: 0, lateCount: 0, excusedCount: 0, remoteCount: 0,
+            attendancePercentage: null, attendedSessions: 0,
+          })
+        ),
+      ])
+    : [[] as SubjectAttendanceView[], null as StudentAttendanceSummary | null];
 
-  // Single canonical risk classification (H6), derived from the consolidated read models
-  // via the SHARED input assembler (the same mapping the persisted projection uses — M11).
-  // financial is null unless the viewer is authorized for finance → no hidden-risk inference.
+  // Single canonical academic read model (H2) — null when academic is not authorized (F-M6).
+  const academicSummary = canAcademic
+    ? buildStudentAcademicSummary({ subjectProgress, levelProgress, courseProgress, currentEnrollment })
+    : null;
+
+  // Single canonical risk classification (H6). Each dimension's signals are fed ONLY when the
+  // viewer is authorized for it — an unauthorized dimension contributes no reason and is
+  // excluded from the overall level, so the level can never leak a hidden dimension (F-M6,
+  // uniform with the H1 finance-null pattern).
   const financeAuthorized = finance != null && (finance.billing != null || finance.wallet != null);
   const riskInput: StudentRiskInput = assembleStudentRiskInput({
     enrollmentCount: enrollments.length,
     activeEnrollmentCount: activeEnrollments.length,
-    blockedLevelCount: levelProgress.filter((p) => p.status === "BLOCKED").length,
-    recoveryRequiredCount: levelProgress.filter((p) => p.status === "RECOVERY_REQUIRED").length,
-    failedSubjectCount: academicSummary.failedSubjects,
-    incompleteAssessmentCount: academicSummary.incompleteSubjects,
-    gradedSubjectCount: academicSummary.gradedSubjects,
-    subjectProgressCount: subjectProgressResult.data.length,
+    blockedLevelCount: canProgression ? levelProgress.filter((p) => p.status === "BLOCKED").length : 0,
+    recoveryRequiredCount: canProgression ? levelProgress.filter((p) => p.status === "RECOVERY_REQUIRED").length : 0,
+    failedSubjectCount: academicSummary?.failedSubjects ?? 0,
+    incompleteAssessmentCount: academicSummary?.incompleteSubjects ?? 0,
+    gradedSubjectCount: academicSummary?.gradedSubjects ?? 0,
+    subjectProgressCount: subjectProgress.length,
     belowRequiredAttendanceCount: attendanceSubjects.filter((s) => s.status === "BELOW_REQUIRED").length,
-    pendingJustificationCount: justificationsResult.total,
-    documentCount,
-    attendancePercentage: attendanceSummary.attendancePercentage,
+    pendingJustificationCount,
+    documentCount, // null when unauthorized → documents dimension excluded
+    attendancePercentage: attendanceSummary?.attendancePercentage ?? null,
     financial: financeAuthorized
       ? {
           overdueInvoiceCount: finance?.billing?.overdueInvoiceCount ?? 0,
@@ -275,18 +296,42 @@ export async function getStudent360Core(
     activeEnrollments,
     currentEnrollment,
     finance,
-    subjectProgress: subjectProgressResult.data,
-    levelProgress,
-    courseProgress,
+    subjectProgress,
+    levelProgress: canProgression ? levelProgress : [],
+    courseProgress: canProgression ? courseProgress : [],
     academicSummary,
     riskSummary,
     attendanceSubjects,
     attendanceSummary,
     lastActivityAt,
-    recentTimeline,
+    recentTimeline: filterRecentTimelineByCapabilities(recentTimelineAll, {
+      academic: canAcademic,
+      attendance: canAttendance,
+      progression: canProgression,
+      documents: canDocuments,
+      finance: financeVisible,
+    }),
     documentCount,
-    pendingJustificationCount: justificationsResult.total,
+    pendingJustificationCount,
   };
+}
+
+// F-M6: recent-activity gating. Each timeline event belongs to a dimension (by its eventType);
+// an event whose dimension the viewer can't see is dropped BEFORE serialization, so the count
+// and the list are already permission-correct. Enrollment/other events stay visible.
+function filterRecentTimelineByCapabilities(
+  events: StudentTimelineEvent[],
+  caps: { academic: boolean; attendance: boolean; progression: boolean; documents: boolean; finance: boolean }
+): StudentTimelineEvent[] {
+  return events.filter((e) => {
+    const t = e.eventType;
+    if (/INVOICE|PAYMENT|RECEIPT|WALLET|REFUND/.test(t)) return caps.finance;
+    if (/ATTENDANCE/.test(t)) return caps.attendance;
+    if (/SUBJECT|GRADE|ASSESSMENT/.test(t)) return caps.academic;
+    if (/DOCUMENT/.test(t)) return caps.documents;
+    if (/PROGRESSION|LEVEL_|COURSE_COMPLET/.test(t)) return caps.progression;
+    return true; // enrollment / notes / other → not gated
+  });
 }
 
 // Projects the canonical risk reasons (H6) into the StudentAlert shape the alerts panel
@@ -322,7 +367,7 @@ export function buildHealthScoreInput(core: Student360Core): HealthScoreInput {
       : null,
     // Canonical attendance percentage (H5) — the same value shown everywhere; null when
     // there are no scheduled sessions (the axis is then excluded, not treated as 0/100).
-    attendancePercentage: core.attendanceSummary.attendancePercentage,
+    attendancePercentage: core.attendanceSummary?.attendancePercentage ?? null,
     hasBelowRequiredAttendance: core.attendanceSubjects.some((s) => s.status === "BELOW_REQUIRED"),
     enrollmentStatuses: core.enrollments.map((e) => e.status),
     lastActivityAt: core.lastActivityAt,

@@ -26,7 +26,8 @@ export function StudentOverviewTab({
 }) {
   const { student, currentEnrollment, academicSummary } = core;
   // Current level comes from the canonical academic summary (M1) — not re-resolved here.
-  const currentLevel = academicSummary.currentLevel;
+  // May be absent when academic is not authorized (F-M6) → the level row shows "—".
+  const currentLevel = academicSummary?.currentLevel ?? null;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -81,7 +82,7 @@ export function StudentOverviewTab({
           ) : (
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <Row label="Curso" value={currentEnrollment.courseName ?? "—"} />
-              <Row label="Nível Atual" value={currentLevel.name ?? "—"} />
+              <Row label="Nível Atual" value={currentLevel?.name ?? "—"} />
               <Row label="Turma" value={currentEnrollment.classGroupName ?? "—"} />
               <Row label="Ano Letivo" value={currentEnrollment.academicYearName ?? "—"} />
               <Row label="Período" value={currentEnrollment.academicTermName ?? "—"} />

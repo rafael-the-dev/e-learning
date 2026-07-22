@@ -51,7 +51,9 @@ export function StudentStatusBand({
 }: {
   health: StudentHealthScore;
   risk: StudentRiskSummary;
-  academicStatusLabel: string;
+  // null when academic is not authorized (F-M6) → the academic status chip is omitted, not
+  // rendered empty, so the band never leaks a hidden dimension.
+  academicStatusLabel: string | null;
 }) {
   const styles = HEALTH_STYLES[health.label] ?? HEALTH_STYLES.NEEDS_ATTENTION;
 
@@ -83,8 +85,12 @@ export function StudentStatusBand({
                   {RISK_LEVEL_LABELS[risk.level]}
                 </Badge>
               </span>
-              <span className="text-muted-foreground/60">·</span>
-              <span>{academicStatusLabel}</span>
+              {academicStatusLabel && (
+                <>
+                  <span className="text-muted-foreground/60">·</span>
+                  <span>{academicStatusLabel}</span>
+                </>
+              )}
             </div>
           </div>
         </div>

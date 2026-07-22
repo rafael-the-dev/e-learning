@@ -21,6 +21,7 @@ import { calculateHealthScore } from "@/modules/students/student-360/services/st
 import {
   getStudent360TabAccess,
   resolveActiveStudent360Tab,
+  resolveStudent360Capabilities,
 } from "@/modules/students/student-360/services/student-360-access.service";
 import { StudentProfileHeader } from "@/modules/students/student-360/components/student-profile-header";
 import { StudentStatusBand } from "@/modules/students/student-360/components/student-status-band";
@@ -78,13 +79,18 @@ export default async function StudentDetailPage({
   const canViewInvoices = context.ability.can(PERMISSIONS.INVOICES_VIEW);
   const canViewWallet = context.ability.can(PERMISSIONS.WALLETS_VIEW);
 
+  // F-M6: resolve ALL per-dimension view capabilities from the viewer's permissions once.
+  // The aggregator then skips the query, the DTO section, and the risk reason for every
+  // dimension the viewer can't see — the section's absence carries the authorization state.
+  const capabilities = resolveStudent360Capabilities((permission) => context.ability.can(permission));
+
   let core;
   try {
     // Teacher-scoped users may only open a student enrolled in a class group they
     // teach — never any org student by id (IDOR). 404 (not 403) so we don't
     // disclose that the record exists. See docs/teacher-access-scope.md.
     await assertTeacherCanAccessStudent(context, studentId);
-    core = await getStudent360Core(studentId, context.organizationId, { canViewInvoices, canViewWallet });
+    core = await getStudent360Core(studentId, context.organizationId, capabilities);
   } catch (e) {
     if (e instanceof NotFoundError || e instanceof AuthorizationError) notFound();
     throw e;
@@ -126,7 +132,7 @@ export default async function StudentDetailPage({
       key: "documents",
       label: "Documentos",
       icon: <FileText className="size-3.5" />,
-      count: core.documentCount,
+      count: core.documentCount ?? undefined,
     });
   }
   if (visible.has("timeline")) {
@@ -150,7 +156,7 @@ export default async function StudentDetailPage({
         <StudentStatusBand
           health={health}
           risk={core.riskSummary}
-          academicStatusLabel={core.academicSummary.progressionStatus}
+          academicStatusLabel={core.academicSummary?.progressionStatus ?? null}
         />
 
         <StudentAlertsPanel alerts={alerts} />
@@ -275,6 +281,9 @@ async function ActiveTabPanel({
     }
 
     case "attendance": {
+      // The attendance tab is only reachable with ATTENDANCE_SESSIONS_VIEW, so the summary is
+      // present here; the guard is defence-in-depth against an unauthorized deep link (F-M6).
+      if (!core.attendanceSummary) return null;
       const { records, justifications } = await getAttendanceTabData(studentId, organizationId, page, 10);
       return (
         <StudentAttendanceTab
@@ -288,6 +297,8 @@ async function ActiveTabPanel({
     }
 
     case "grades": {
+      // Only reachable with GRADES_VIEW → academic summary is present (F-M6 defence-in-depth).
+      if (!core.academicSummary) return null;
       const { assessments } = await getGradesTabData(studentId, organizationId, page, 10);
       return (
         <StudentGradesTab
@@ -300,7 +311,9 @@ async function ActiveTabPanel({
 
     case "progress": {
       const { eligibility } = await getProgressTabData(organizationId, core.currentEnrollment);
-      const hasResolvedLevel = core.academicSummary.currentLevel.id != null;
+      // The progress tab needs only STUDENT_*_PROGRESS_VIEW, which does NOT imply GRADES_VIEW,
+      // so the academic summary may be absent here → treat the level as unresolved (F-M6).
+      const hasResolvedLevel = core.academicSummary?.currentLevel.id != null;
       return (
         <StudentProgressTab
           courseProgress={core.courseProgress}

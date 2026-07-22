@@ -69,8 +69,9 @@ export interface StudentRiskInput {
   // attendance (BELOW_REQUIRED decided per-subject against LevelSubject.minimum — H5)
   belowRequiredAttendanceCount: number;
   pendingJustificationCount: number;
-  // documents
-  documentCount: number;
+  // documents — null = not evaluable (viewer lacks documents permission) → dimension null,
+  // no documents reason, excluded from the overall level (same pattern as `financial`).
+  documentCount: number | null;
   // financial — null = not authorized → dimension null, no financial reasons, excluded
   financial: { overdueInvoiceCount: number; pendingRefundCount: number } | null;
   // data sufficiency — distinguishes NONE ("assessed, no risk") from UNKNOWN ("can't assess")
@@ -135,7 +136,8 @@ export interface StudentRiskSignals {
   subjectProgressCount: number;
   belowRequiredAttendanceCount: number;
   pendingJustificationCount: number;
-  documentCount: number;
+  // null → documents not evaluable (viewer lacks documents permission).
+  documentCount: number | null;
   attendancePercentage: number | null;
   // null → finance dimension not included (unauthorized viewer, or the finance-excluded pass).
   financial: { overdueInvoiceCount: number; pendingRefundCount: number } | null;
@@ -240,6 +242,7 @@ export function buildStudentRiskSummary(input: StudentRiskInput, now: Date = new
     });
   }
   if (input.documentCount === 0) {
+    // null documentCount = not evaluable (unauthorized) → no reason (excluded, like finance).
     reasons.push({
       id: "missing-documents",
       dimension: "documents",
@@ -296,7 +299,7 @@ export function buildStudentRiskSummary(input: StudentRiskInput, now: Date = new
     attendance: toDimension(byDim("attendance")),
     financial: input.financial ? toDimension(byDim("financial")) : null,
     progression: toDimension(byDim("progression")),
-    documents: toDimension(byDim("documents")),
+    documents: input.documentCount !== null ? toDimension(byDim("documents")) : null,
     recommendedAction: topReason?.recommendedAction ?? null,
     evaluatedAt: now,
   };

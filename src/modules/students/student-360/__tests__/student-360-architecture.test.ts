@@ -52,6 +52,7 @@ describe("Student 360 architecture (M1)", () => {
   it("the overview tab renders the current level from the summary, not by re-resolving it", () => {
     const src = read(OVERVIEW);
     expect(src).not.toContain("resolveCurrentEnrollmentLevel");
-    expect(src).toContain("academicSummary.currentLevel");
+    // Still sourced from the canonical academic summary (M1), now null-safe for F-M6 gating.
+    expect(src).toContain("academicSummary?.currentLevel");
   });
 });

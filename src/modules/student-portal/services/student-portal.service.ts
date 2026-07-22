@@ -64,10 +64,13 @@ function unique(values: string[]): string[] {
 }
 
 function buildAcademicOverview(core: Student360Core, studentName: string): StudentAcademicOverview {
+  // A student always sees their OWN academic data, so the portal never gates this dimension
+  // (F-M6: getStudent360Core defaults the view caps to true) — the summary is always present.
+  const academicSummary = core.academicSummary!;
   // Current level from the canonical academic summary (M1) — not re-resolved here.
-  const level = core.academicSummary.currentLevel;
+  const level = academicSummary.currentLevel;
   const totalSubjects = core.subjectProgress.length;
-  const passedSubjects = core.academicSummary.passedSubjects;
+  const passedSubjects = academicSummary.passedSubjects;
 
   return {
     studentName,
@@ -77,7 +80,7 @@ function buildAcademicOverview(core: Student360Core, studentName: string): Stude
     currentLevelName: level.name,
     classGroupName: core.currentEnrollment?.classGroupName ?? null,
     // Single canonical academic status label (H2) — same as Student 360 / Guardian.
-    academicStatusLabel: core.academicSummary.progressionStatus,
+    academicStatusLabel: academicSummary.progressionStatus,
     courseProgressPercent: totalSubjects > 0 ? Math.round((passedSubjects / totalSubjects) * 100) : null,
     hasActiveEnrollment: core.activeEnrollments.length > 0,
     blockedLevelCount: core.levelProgress.filter((p) => p.status === "BLOCKED").length,
@@ -191,7 +194,8 @@ export async function getStudentPortalData(
   // the monthly trend is per-month (a grain the year-rollups don't hold).
   const attendanceKpis = {
     ...buildStudentAttendanceKpis(attendanceStatsRaw),
-    attendancePercentage: core.attendanceSummary.attendancePercentage,
+    // A student always sees their own attendance (F-M6 caps default true) → summary present.
+    attendancePercentage: core.attendanceSummary?.attendancePercentage ?? null,
   };
   const attendanceTrend = buildStudentAttendanceTrend(attendanceStatsRaw);
   const attendanceSessions = attendanceRecords.data.map((r) => ({
@@ -274,9 +278,11 @@ function buildKpis(
   // Canonical average — the same "Média das Disciplinas" Student 360 and the Guardian
   // portal show (StudentSubjectProgress.finalGrade), NOT a mean of the legacy per-
   // assessment percentages, and never a paginated slice (H2 single source of truth).
-  const overallAverage = core.academicSummary.subjectAverage;
+  // A student always sees their own academic data (F-M6 caps default true) → summary present.
+  const academicSummary = core.academicSummary!;
+  const overallAverage = academicSummary.subjectAverage;
 
-  const approvedSubjects = core.academicSummary.passedSubjects;
+  const approvedSubjects = academicSummary.passedSubjects;
   const pendingSubjects = core.subjectProgress.length - approvedSubjects;
   const today = startOfDay(new Date());
   const upcomingAssessments = assessments.filter((a) => a.assessmentDate >= today).length;
