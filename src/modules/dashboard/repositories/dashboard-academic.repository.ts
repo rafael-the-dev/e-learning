@@ -4,7 +4,12 @@ import {
   getStudentRiskLevelCounts,
   getStudentRiskDimensionAtRiskCounts,
 } from "@/modules/students/repositories/student-risk-projection.repository";
-import { getStudentRiskProjectionCoverage } from "@/modules/students/services/student-risk-projection-coverage.service";
+import {
+  resolveRiskProjectionReadiness,
+  availableRiskMetric,
+  unavailableRiskMetric,
+  type RiskMetric,
+} from "@/modules/students/services/risk-projection-readiness.service";
 
 // =============================================================================
 // DASHBOARD ACADEMIC REPOSITORY
@@ -16,18 +21,20 @@ import { getStudentRiskProjectionCoverage } from "@/modules/students/services/st
 // =============================================================================
 
 // A class group counts as "low attendance" when its average student-subject
-// attendance falls below this absolute threshold. Mirrors the 75% default
-// already used by the Students module's per-student low-attendance count.
+// attendance falls below this absolute threshold. This is a class-group-level
+// OPERATIONAL signal (not a per-student risk classification), so it is kept as-is.
 const LOW_ATTENDANCE_THRESHOLD = 75;
 const WATCHLIST_ROW_LIMIT = 10;
 
 export interface AcademicRiskCounts {
   blockedStudents: number;
   recoveryRequired: number;
-  studentsAtRisk: number;
+  // F-M8: canonical per-student risk figures — wrapped so an unavailable projection is an
+  // EXPLICIT state, never a legacy re-derivation and never a 0 that reads as "none at risk".
+  studentsAtRisk: RiskMetric<number>;
   eligibleNoAction: number;
   overdueAssessments: number;
-  studentsLowAttendance: number;
+  studentsLowAttendance: RiskMetric<number>;
   classGroupsLowAttendance: number;
 }
 
@@ -35,89 +42,80 @@ export async function getAcademicRiskCounts(organizationId: string): Promise<Aca
   const db = await getDb();
   const now = new Date();
 
-  // M11.3: the RISK CLASSIFICATION fields (studentsAtRisk, studentsLowAttendance) come from
-  // the canonical projection once the org is backfilled — the SAME classification Student
-  // 360 shows, not a flat-75 re-derivation. Until coverage exists, fall back to the legacy
-  // queries below. The purely-operational counts (blocked / recovery / eligible / overdue /
-  // class-group attendance) are direct status counts, consistent by origin, and stay as-is.
-  const covered = (await getStudentRiskProjectionCoverage({ organizationId })).ready;
+  // F-M8: the RISK CLASSIFICATION fields (studentsAtRisk, studentsLowAttendance) come ONLY from
+  // the canonical projection — the SAME classification Student 360 shows. There is no legacy
+  // fallback: when the org is not READY these are returned as UNAVAILABLE. The purely-operational
+  // counts (blocked / recovery / eligible / overdue / class-group attendance) are direct status
+  // counts, consistent by origin, and stay as-is.
+  const readiness = await resolveRiskProjectionReadiness({ organizationId });
 
-  const [
-    blockedStudents,
-    levelRecovery,
-    courseRecovery,
-    eligibleNoAction,
-    overdueAssessments,
-    legacyLowAttendance,
-    classGroupRows,
-    projectionCounts,
-    projectionDimensions,
-  ] = await Promise.all([
-    db.studentLevelProgress.findMany({
-      where: { organizationId, status: "BLOCKED" },
-      select: { studentId: true },
-      distinct: ["studentId"],
-    }),
-    db.studentLevelProgress.findMany({
-      where: { organizationId, status: "RECOVERY_REQUIRED" },
-      select: { studentId: true },
-      distinct: ["studentId"],
-    }),
-    db.studentCourseProgress.findMany({
-      where: { organizationId, status: "RECOVERY_REQUIRED" },
-      select: { studentId: true },
-      distinct: ["studentId"],
-    }),
-    db.studentLevelProgress.count({
-      where: {
-        organizationId,
-        status: "ELIGIBLE_TO_PROGRESS",
-        enrollment: { levelProgressionRequests: { none: {} } },
-      },
-    }),
-    db.assessment.count({
-      where: { organizationId, deletedAt: null, status: "OPEN", assessmentDate: { lt: now } },
-    }),
-    // Legacy low-attendance count — only needed as the fallback when the projection is empty.
-    covered
-      ? Promise.resolve<Array<{ studentId: string }>>([])
-      : db.studentSubjectProgress.findMany({
-          where: { organizationId, attendancePercentage: { lt: LOW_ATTENDANCE_THRESHOLD, not: null } },
-          select: { studentId: true },
-          distinct: ["studentId"],
-        }),
-    db.$queryRaw<Array<{ classGroupId: string }>>(Prisma.sql`
-      SELECT cg.id AS classGroupId
-      FROM student_subject_progress ssp
-      JOIN enrollments e ON e.id = ssp.enrollmentId
-      JOIN class_groups cg ON cg.id = e.classGroupId
-      WHERE ssp.organizationId = ${organizationId}
-        AND ssp.attendancePercentage IS NOT NULL
-        AND cg.deletedAt IS NULL
-      GROUP BY cg.id
-      HAVING AVG(CAST(ssp.attendancePercentage AS FLOAT)) < ${LOW_ATTENDANCE_THRESHOLD}
-    `),
-    // The executive dashboard is finance-authorized (admin) → count with finance included.
-    covered ? getStudentRiskLevelCounts(organizationId, { financeAuthorized: true }) : Promise.resolve(null),
-    covered
-      ? getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true })
-      : Promise.resolve(null),
-  ]);
+  const [blockedStudents, levelRecovery, courseRecovery, eligibleNoAction, overdueAssessments, classGroupRows] =
+    await Promise.all([
+      db.studentLevelProgress.findMany({
+        where: { organizationId, status: "BLOCKED" },
+        select: { studentId: true },
+        distinct: ["studentId"],
+      }),
+      db.studentLevelProgress.findMany({
+        where: { organizationId, status: "RECOVERY_REQUIRED" },
+        select: { studentId: true },
+        distinct: ["studentId"],
+      }),
+      db.studentCourseProgress.findMany({
+        where: { organizationId, status: "RECOVERY_REQUIRED" },
+        select: { studentId: true },
+        distinct: ["studentId"],
+      }),
+      db.studentLevelProgress.count({
+        where: {
+          organizationId,
+          status: "ELIGIBLE_TO_PROGRESS",
+          enrollment: { levelProgressionRequests: { none: {} } },
+        },
+      }),
+      db.assessment.count({
+        where: { organizationId, deletedAt: null, status: "OPEN", assessmentDate: { lt: now } },
+      }),
+      db.$queryRaw<Array<{ classGroupId: string }>>(Prisma.sql`
+        SELECT cg.id AS classGroupId
+        FROM student_subject_progress ssp
+        JOIN enrollments e ON e.id = ssp.enrollmentId
+        JOIN class_groups cg ON cg.id = e.classGroupId
+        WHERE ssp.organizationId = ${organizationId}
+          AND ssp.attendancePercentage IS NOT NULL
+          AND cg.deletedAt IS NULL
+        GROUP BY cg.id
+        HAVING AVG(CAST(ssp.attendancePercentage AS FLOAT)) < ${LOW_ATTENDANCE_THRESHOLD}
+      `),
+    ]);
 
   const recoverySet = new Set([
     ...levelRecovery.map((r) => r.studentId),
     ...courseRecovery.map((r) => r.studentId),
   ]);
-  const legacyAtRisk = new Set([...blockedStudents.map((r) => r.studentId), ...recoverySet]);
+
+  let studentsAtRisk: RiskMetric<number>;
+  let studentsLowAttendance: RiskMetric<number>;
+  if (readiness.ready) {
+    // The executive dashboard is finance-authorized (admin) → count with finance included.
+    const [levelCounts, dimensionCounts] = await Promise.all([
+      getStudentRiskLevelCounts(organizationId, { financeAuthorized: true }),
+      getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true }),
+    ]);
+    studentsAtRisk = availableRiskMetric(levelCounts.atRisk, readiness.verifiedAt);
+    studentsLowAttendance = availableRiskMetric(dimensionCounts.attendance, readiness.verifiedAt);
+  } else {
+    studentsAtRisk = unavailableRiskMetric(readiness);
+    studentsLowAttendance = unavailableRiskMetric(readiness);
+  }
 
   return {
     blockedStudents: blockedStudents.length,
     recoveryRequired: recoverySet.size,
-    // Canonical at-risk classification when backfilled; legacy blocked∪recovery otherwise.
-    studentsAtRisk: projectionCounts ? projectionCounts.atRisk : legacyAtRisk.size,
+    studentsAtRisk,
     eligibleNoAction,
     overdueAssessments,
-    studentsLowAttendance: projectionDimensions ? projectionDimensions.attendance : legacyLowAttendance.length,
+    studentsLowAttendance,
     classGroupsLowAttendance: classGroupRows.length,
   };
 }

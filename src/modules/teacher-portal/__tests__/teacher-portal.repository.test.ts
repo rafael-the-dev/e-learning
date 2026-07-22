@@ -262,7 +262,9 @@ describe("findTeacherClassGroupAttendanceRates", () => {
 describe("findTeacherRiskRows", () => {
   it("returns an empty list without querying the database when the teacher has no active class groups", async () => {
     const result = await findTeacherRiskRows(TEACHER, ORG, []);
-    expect(result).toEqual([]);
+    expect(result.rows).toEqual([]);
+    // No active classes → attendance risk is trivially evaluable as empty (not "unavailable").
+    expect(result.attendanceRisk).toEqual(expect.objectContaining({ status: "AVAILABLE", data: 0 }));
     expect(mockStudentLevelProgressFindMany).not.toHaveBeenCalled();
   });
 
@@ -325,43 +327,33 @@ describe("findTeacherRiskRows", () => {
     mockStudentSubjectProgressFindMany.mockResolvedValue([]);
     mockAssessmentResultFindMany.mockResolvedValue([]);
 
-    const rows = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
-    expect(rows).toEqual([
+    const result = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
+    expect(result.rows).toEqual([
       expect.objectContaining({ studentId: "s1", riskType: "BLOCKED", severity: "CRITICAL" }),
     ]);
   });
 
-  it("splits low attendance into HIGH (below required) vs MEDIUM (declining trend)", async () => {
+  it("F-M8: when the projection is NOT ready, attendance risk is UNAVAILABLE and no attendance rows are added (no legacy 75/85)", async () => {
+    // Default coverage is not-ready (beforeEach).
     mockStudentLevelProgressFindMany.mockResolvedValue([]);
     mockStudentCourseProgressFindMany.mockResolvedValue([]);
-    // First call is the FAILED-subject query, second is the low-attendance query — see
-    // findTeacherRiskRows' Promise.all order.
-    mockStudentSubjectProgressFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
-      {
-        studentId: "s1",
-        attendancePercentage: 70,
-        student: { firstName: "Ana", lastName: "Silva" },
-        enrollment: { classGroup: { name: "Turma A" } },
-      },
-      {
-        studentId: "s2",
-        attendancePercentage: 80,
-        student: { firstName: "Bruno", lastName: "Costa" },
-        enrollment: { classGroup: { name: "Turma A" } },
-      },
-    ]);
+    mockStudentSubjectProgressFindMany.mockResolvedValue([]); // FAILED-subject source query only
     mockAssessmentResultFindMany.mockResolvedValue([]);
 
-    const rows = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
-    expect(rows.find((r) => r.studentId === "s1")).toMatchObject({ riskType: "LOW_ATTENDANCE", severity: "HIGH" });
-    expect(rows.find((r) => r.studentId === "s2")).toMatchObject({ riskType: "ATTENDANCE_TREND", severity: "MEDIUM" });
+    const result = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
+    expect(result.attendanceRisk.status).toBe("UNAVAILABLE");
+    expect(
+      result.rows.some((r) => r.riskType === "LOW_ATTENDANCE" || r.riskType === "ATTENDANCE_TREND")
+    ).toBe(false);
+    // No legacy attendance query is issued — only the single FAILED-subject source query runs.
+    expect(mockStudentSubjectProgressFindMany).toHaveBeenCalledTimes(1);
   });
 
-  it("M11.3: when the projection is backfilled, attendance risk uses the canonical decision (no flat 75/85 split)", async () => {
-    mockGetCoverage.mockResolvedValue({ ready: true }); // org fully covered (F-H1)
+  it("F-M8: when the projection is ready, attendance risk uses the canonical decision (no flat 75/85 split)", async () => {
+    mockGetCoverage.mockResolvedValue({ ready: true, sourceVersion: "student-risk-v1" });
     mockStudentLevelProgressFindMany.mockResolvedValue([]);
     mockStudentCourseProgressFindMany.mockResolvedValue([]);
-    mockStudentSubjectProgressFindMany.mockResolvedValue([]); // FAILED query only (legacy attendance skipped)
+    mockStudentSubjectProgressFindMany.mockResolvedValue([]); // FAILED query only
     mockAssessmentResultFindMany.mockResolvedValue([]);
     // Candidate students of the teacher's active class groups.
     mockEnrollmentFindMany.mockResolvedValue([
@@ -371,13 +363,14 @@ describe("findTeacherRiskRows", () => {
     // Canonical decision: only s1 is attendance at-risk (per-subject minimum), s2 is not.
     mockRiskProjectionFindMany.mockResolvedValue([{ studentId: "s1" }]);
 
-    const rows = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
-    // The legacy flat-threshold attendance query is not run when covered.
+    const result = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
+    // The legacy flat-threshold attendance query is not run.
     expect(mockStudentSubjectProgressFindMany).toHaveBeenCalledTimes(1);
-    expect(rows.find((r) => r.studentId === "s1")).toMatchObject({ riskType: "LOW_ATTENDANCE", severity: "HIGH" });
-    expect(rows.find((r) => r.studentId === "s2")).toBeUndefined(); // not at-risk → not listed
+    expect(result.attendanceRisk.status).toBe("AVAILABLE");
+    expect(result.rows.find((r) => r.studentId === "s1")).toMatchObject({ riskType: "LOW_ATTENDANCE", severity: "HIGH" });
+    expect(result.rows.find((r) => r.studentId === "s2")).toBeUndefined(); // not at-risk → not listed
     // No MEDIUM "trend" bucket exists in the canonical decision.
-    expect(rows.some((r) => r.riskType === "ATTENDANCE_TREND")).toBe(false);
+    expect(result.rows.some((r) => r.riskType === "ATTENDANCE_TREND")).toBe(false);
   });
 
   it("scopes missing-assessment risk via assessment.teacherId, not the active class group list", async () => {
@@ -392,9 +385,9 @@ describe("findTeacherRiskRows", () => {
       },
     ]);
 
-    const rows = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
+    const result = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
     expect(mockAssessmentResultFindMany.mock.calls[0][0].where.assessment).toEqual({ teacherId: TEACHER, deletedAt: null });
-    expect(rows).toEqual([
+    expect(result.rows).toEqual([
       expect.objectContaining({ studentId: "s3", riskType: "MISSING_ASSESSMENTS", severity: "MEDIUM" }),
     ]);
   });
@@ -426,9 +419,9 @@ describe("findTeacherRiskRows", () => {
       },
     ]);
 
-    const rows = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
-    expect(rows[0].severity).toBe("CRITICAL");
-    expect(rows[rows.length - 1].severity).toBe("MEDIUM");
+    const result = await findTeacherRiskRows(TEACHER, ORG, ["cg1"]);
+    expect(result.rows[0].severity).toBe("CRITICAL");
+    expect(result.rows[result.rows.length - 1].severity).toBe("MEDIUM");
   });
 });
 

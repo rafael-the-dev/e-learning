@@ -1,9 +1,16 @@
 import { getDb } from "@/server/db";
 import { getStudentRiskDimensionAtRiskCounts } from "@/modules/students/repositories/student-risk-projection.repository";
-import { getStudentRiskProjectionCoverage } from "@/modules/students/services/student-risk-projection-coverage.service";
+import {
+  resolveRiskProjectionReadiness,
+  availableRiskMetric,
+  unavailableRiskMetric,
+  type RiskMetric,
+} from "@/modules/students/services/risk-projection-readiness.service";
 
 export interface AcademicRiskStats {
-  atRiskStudentCount: number;
+  // F-M8: canonical academic-risk count — UNAVAILABLE (never a legacy FAILED-subject count,
+  // never a 0 that reads as "none at risk") when the projection is not ready.
+  atRiskStudentCount: RiskMetric<number>;
   pendingGradingCount: number;
   pendingSubmissionCount: number;
   failedThisMonth: number;
@@ -16,20 +23,12 @@ export async function getAcademicRiskStats(organizationId: string): Promise<Acad
   firstOfMonth.setDate(1);
   firstOfMonth.setHours(0, 0, 0, 0);
 
-  // M11.3: the at-risk classification comes from the canonical projection once backfilled
-  // (academic dimension = the SAME decision Student 360 shows); legacy FAILED-subject
-  // distinct count as the fallback. The operational assessment counts stay as-is.
-  const covered = (await getStudentRiskProjectionCoverage({ organizationId })).ready;
+  // F-M8: the at-risk classification comes ONLY from the canonical projection (academic
+  // dimension = the SAME decision Student 360 shows). No legacy fallback. The operational
+  // assessment counts (pending grading / submission / failed this month) stay as-is.
+  const readiness = await resolveRiskProjectionReadiness({ organizationId });
 
-  const [atRisk, pending, submitted, failedThisMonth, projectionDimensions] = await Promise.all([
-    // distinct students with at least one FAILED subject (fallback only)
-    covered
-      ? Promise.resolve<Array<{ studentId: string }>>([])
-      : db.studentSubjectProgress.groupBy({
-          by: ["studentId"],
-          where: { organizationId, status: "FAILED" },
-          _count: { _all: true },
-        }),
+  const [pending, submitted, failedThisMonth] = await Promise.all([
     db.studentAssessmentResult.count({ where: { organizationId, status: "DRAFT" } }),
     db.studentAssessmentResult.count({ where: { organizationId, status: "SUBMITTED" } }),
     db.studentSubjectProgress.count({
@@ -39,13 +38,17 @@ export async function getAcademicRiskStats(organizationId: string): Promise<Acad
         updatedAt: { gte: firstOfMonth },
       },
     }),
-    covered
-      ? getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true })
-      : Promise.resolve(null),
   ]);
 
+  const atRiskStudentCount: RiskMetric<number> = readiness.ready
+    ? availableRiskMetric(
+        (await getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true })).academic,
+        readiness.verifiedAt
+      )
+    : unavailableRiskMetric(readiness);
+
   return {
-    atRiskStudentCount: projectionDimensions ? projectionDimensions.academic : atRisk.length,
+    atRiskStudentCount,
     pendingGradingCount: pending,
     pendingSubmissionCount: submitted,
     failedThisMonth,

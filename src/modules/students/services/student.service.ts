@@ -16,6 +16,7 @@ import {
 import { countEnrollmentsByStatus } from "@/modules/enrollments/repositories/enrollment.repository";
 import { NotFoundError } from "@/shared/lib/command";
 import type { RiskStudent, TopCourseEnrollment, TopClassGroup } from "@/modules/students/types";
+import type { RiskMetric } from "@/modules/students/services/risk-projection-readiness.service";
 
 // =============================================================================
 // STUDENTS SERVICE
@@ -61,11 +62,11 @@ export async function getStudentsWithPendingPayments(organizationId: string): Pr
   return countStudentsWithPendingInvoices(organizationId);
 }
 
-export async function getStudentsAtAcademicRisk(organizationId: string): Promise<number> {
+export async function getStudentsAtAcademicRisk(organizationId: string): Promise<RiskMetric<number>> {
   return countStudentsAtAcademicRisk(organizationId);
 }
 
-export async function getStudentsWithLowAttendance(organizationId: string): Promise<number> {
+export async function getStudentsWithLowAttendance(organizationId: string): Promise<RiskMetric<number>> {
   return countStudentsWithLowAttendance(organizationId);
 }
 

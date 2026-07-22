@@ -93,7 +93,7 @@ export default async function TeacherPortalPage() {
               icon={<ShieldAlert className="size-4" />}
               badge={<span className="text-xs text-muted-foreground">{data.riskList.length}</span>}
             >
-              <TeacherStudentRiskList rows={data.riskList} />
+              <TeacherStudentRiskList rows={data.riskList} attendanceRisk={data.riskAttendance} />
             </DashboardSideCard>
 
             <DashboardSideCard

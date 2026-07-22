@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/shared/components/layout/page-header";
 import { StatCard } from "@/shared/components/layout/stat-card";
+import { riskMetricNumberDisplay } from "@/shared/lib/risk-metric-display";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -155,10 +156,12 @@ export default async function StudentsPage({
   const insights: { id: string; message: string; severity: "info" | "warning" | "critical"; linkHref?: string; linkLabel?: string }[] = [];
   if (withPendingPayments > 0)
     insights.push({ id: "payments", message: `${withPendingPayments} aluno(s) têm pagamentos pendentes ou em atraso`, severity: "warning", linkHref: "/invoices?status=PENDING", linkLabel: "Ver faturas" });
-  if (withLowAttendance > 0)
-    insights.push({ id: "attendance", message: `${withLowAttendance} aluno(s) estão abaixo da presença mínima`, severity: "critical" });
-  if (atAcademicRisk > 0)
-    insights.push({ id: "risk", message: `${atAcademicRisk} aluno(s) em risco académico (disciplinas reprovadas)`, severity: "critical" });
+  // F-M8: only surface these insights when the canonical figure is AVAILABLE and non-zero — an
+  // UNAVAILABLE projection must never read as "0 at risk".
+  if (withLowAttendance.status === "AVAILABLE" && withLowAttendance.data > 0)
+    insights.push({ id: "attendance", message: `${withLowAttendance.data} aluno(s) estão abaixo da presença mínima`, severity: "critical" });
+  if (atAcademicRisk.status === "AVAILABLE" && atAcademicRisk.data > 0)
+    insights.push({ id: "risk", message: `${atAcademicRisk.data} aluno(s) em risco académico`, severity: "critical" });
   if (statusCounts["PENDING"] > 0)
     insights.push({ id: "pending", message: `${statusCounts["PENDING"]} aluno(s) ainda não têm matrícula ativa`, severity: "warning", linkHref: `/students?status=PENDING`, linkLabel: "Ver pendentes" });
   if (topClassGroups[0]?.occupancyPct >= 90)
@@ -231,8 +234,18 @@ export default async function StudentsPage({
           {canViewPayments && (
             <StatCard title="Pag. Pendentes" value={withPendingPayments} icon={<AlertCircle className="size-4 text-red-500" />} description="faturas por liquidar" />
           )}
-          <StatCard title="Presença Abaixo" value={withLowAttendance} icon={<Clock className="size-4 text-amber-500" />} description="abaixo de 75%" />
-          <StatCard title="Risco Académico" value={atAcademicRisk} icon={<AlertTriangle className="size-4 text-red-500" />} description="com disciplinas reprovadas" />
+          <StatCard
+            title="Presença Abaixo"
+            value={riskMetricNumberDisplay(withLowAttendance).value}
+            icon={<Clock className="size-4 text-amber-500" />}
+            description={riskMetricNumberDisplay(withLowAttendance).description ?? "abaixo do mínimo"}
+          />
+          <StatCard
+            title="Risco Académico"
+            value={riskMetricNumberDisplay(atAcademicRisk).value}
+            icon={<AlertTriangle className="size-4 text-red-500" />}
+            description={riskMetricNumberDisplay(atAcademicRisk).description ?? "com risco académico"}
+          />
         </ExecutiveKpiGrid>
 
         {/* Two-column main content */}

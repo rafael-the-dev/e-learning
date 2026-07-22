@@ -3,7 +3,12 @@ import { buildSkipTake, buildPaginationMeta } from "@/shared/lib/pagination";
 import type { PaginatedResult, PaginationParams } from "@/shared/types/common";
 import type { Student, StudentBranch, RiskStudent, TopCourseEnrollment, TopClassGroup } from "@/modules/students/types";
 import { getStudentRiskDimensionAtRiskCounts } from "@/modules/students/repositories/student-risk-projection.repository";
-import { getStudentRiskProjectionCoverage } from "@/modules/students/services/student-risk-projection-coverage.service";
+import {
+  resolveRiskProjectionReadiness,
+  availableRiskMetric,
+  unavailableRiskMetric,
+  type RiskMetric,
+} from "@/modules/students/services/risk-projection-readiness.service";
 
 // =============================================================================
 // STUDENTS REPOSITORY
@@ -320,43 +325,22 @@ export async function countStudentsWithPendingInvoices(organizationId: string): 
   return rows.length;
 }
 
-export async function countStudentsAtAcademicRisk(organizationId: string): Promise<number> {
-  // M11.3: canonical academic-dimension at-risk count from the projection once backfilled
-  // (same classification as Student 360); legacy FAILED-subject count as the fallback.
-  if ((await getStudentRiskProjectionCoverage({ organizationId })).ready) {
-    const dims = await getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true });
-    return dims.academic;
-  }
-  const db = await getDb();
-  const rows = await db.studentSubjectProgress.findMany({
-    where: { organizationId, status: "FAILED" },
-    select: { studentId: true },
-    distinct: ["studentId"],
-  });
-  return rows.length;
+export async function countStudentsAtAcademicRisk(organizationId: string): Promise<RiskMetric<number>> {
+  // F-M8: canonical academic-dimension at-risk count from the projection ONLY (same classification
+  // as Student 360). No legacy FAILED-subject fallback — UNAVAILABLE when the org is not ready.
+  const readiness = await resolveRiskProjectionReadiness({ organizationId });
+  if (!readiness.ready) return unavailableRiskMetric(readiness);
+  const dims = await getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true });
+  return availableRiskMetric(dims.academic, readiness.verifiedAt);
 }
 
-export async function countStudentsWithLowAttendance(
-  organizationId: string,
-  threshold = 75
-): Promise<number> {
-  // M11.3: canonical attendance-dimension at-risk count from the projection once backfilled
-  // (per-subject minimum, not a flat threshold); the `threshold` arg applies only to the
-  // legacy fallback below.
-  if ((await getStudentRiskProjectionCoverage({ organizationId })).ready) {
-    const dims = await getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true });
-    return dims.attendance;
-  }
-  const db = await getDb();
-  const rows = await db.studentSubjectProgress.findMany({
-    where: {
-      organizationId,
-      attendancePercentage: { lt: threshold, not: null },
-    },
-    select: { studentId: true },
-    distinct: ["studentId"],
-  });
-  return rows.length;
+export async function countStudentsWithLowAttendance(organizationId: string): Promise<RiskMetric<number>> {
+  // F-M8: canonical attendance-dimension at-risk count from the projection ONLY (per-subject
+  // minimum, not a flat threshold). No legacy fallback — UNAVAILABLE when the org is not ready.
+  const readiness = await resolveRiskProjectionReadiness({ organizationId });
+  if (!readiness.ready) return unavailableRiskMetric(readiness);
+  const dims = await getStudentRiskDimensionAtRiskCounts(organizationId, { financeAuthorized: true });
+  return availableRiskMetric(dims.attendance, readiness.verifiedAt);
 }
 
 export async function findTopCoursesByEnrollment(
@@ -412,6 +396,16 @@ export async function findTopClassGroupsByOccupancy(
     .slice(0, limit);
 }
 
+/**
+ * The students-dashboard "risk watchlist".
+ *
+ * @deprecated F-M8: LEGACY risk computation — it lists SUSPENDED students + distinct FAILED-subject
+ * students, NOT the canonical StudentRiskProjection, and was never wired to the coverage gate. It
+ * is intentionally left as-is by F-M8 (which only removed the hybrid fallbacks). Follow-up: replace
+ * with the projection-backed `findStudentRiskWatchlist` (already available, canonical severity +
+ * finance-blind ranking) once its row shape is mapped to `RiskStudent` — see
+ * docs/student-360-backlog.md (F-M8 follow-ups). Do NOT wire new dashboards to this.
+ */
 export async function findRiskWatchlistStudents(
   organizationId: string,
   limit = 10

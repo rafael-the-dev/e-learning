@@ -36,6 +36,7 @@ import {
 import { getGradeInsights } from "@/modules/grades/services/grade-insights.service";
 import { getGradeWatchlist } from "@/modules/grades/services/grade-watchlist.service";
 import { getAcademicRiskStats } from "@/modules/grades/services/academic-risk.service";
+import { riskMetricNumberDisplay } from "@/shared/lib/risk-metric-display";
 import { GradeActionBar } from "@/modules/grades/components/grade-action-bar";
 import { GradeTableFilters } from "@/modules/grades/components/grade-table-filters";
 import { GradesTable } from "@/modules/grades/components/grades-table";
@@ -332,9 +333,11 @@ export default async function GradesPage({
           />
           <StatCard
             title="Alunos em Risco"
-            value={riskStats.atRiskStudentCount}
+            value={riskMetricNumberDisplay(riskStats.atRiskStudentCount).value}
             icon={<AlertTriangle className="size-4 text-red-500" />}
-            description="com disciplina reprovada"
+            description={
+              riskMetricNumberDisplay(riskStats.atRiskStudentCount).description ?? "com risco académico"
+            }
           />
           <StatCard
             title="Reprovações Este Mês"

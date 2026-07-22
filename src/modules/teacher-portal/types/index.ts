@@ -1,4 +1,5 @@
 import type { Notification } from "@/modules/notifications/types";
+import type { RiskMetric } from "@/modules/students/services/risk-projection-readiness.service";
 
 // =============================================================================
 // TEACHER PORTAL — TYPES
@@ -137,6 +138,8 @@ export interface TeacherPortalData {
   myClasses: TeacherClassGroupRow[];
   myClassesTotal: number;
   riskList: StudentRiskRow[];
+  // F-M8: availability of the canonical attendance-risk dimension in the risk list.
+  riskAttendance: RiskMetric<number>;
   notifications: Notification[];
   unreadNotificationCount: number;
   deadlines: TeacherDeadline[];

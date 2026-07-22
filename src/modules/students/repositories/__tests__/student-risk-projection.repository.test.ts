@@ -179,9 +179,9 @@ describe("getStudentRiskLevelCounts", () => {
     expect(counts.atRisk).toBe(2);
   });
 
-  it("filters by sourceVersion when provided", async () => {
+  it("ALWAYS filters by the current source version (F-M8 — no version-agnostic reads)", async () => {
     groupBy.mockResolvedValue([]);
-    await getStudentRiskLevelCounts(ORG, { financeAuthorized: true, sourceVersion: "student-risk-v1" });
+    await getStudentRiskLevelCounts(ORG, { financeAuthorized: true });
     expect(groupBy.mock.calls[0][0].where).toMatchObject({ organizationId: ORG, sourceVersion: "student-risk-v1" });
   });
 });

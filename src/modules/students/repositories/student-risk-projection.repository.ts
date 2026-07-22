@@ -17,6 +17,7 @@ import { getDb, type PrismaClientOrTx } from "@/server/db";
 import {
   riskLevelRank,
   isRiskLevelAtRisk,
+  CURRENT_STUDENT_RISK_SOURCE_VERSION,
   type StudentRiskLevel,
   type StudentRiskReason,
 } from "@/modules/students/services/student-risk.service";
@@ -40,6 +41,23 @@ const LOW_RANK = riskLevelRank("LOW");
  */
 function buildVisibleRiskProjectionWhere(organizationId: string): Prisma.StudentRiskProjectionWhereInput {
   return { organizationId, student: { organizationId, deletedAt: null } };
+}
+
+/**
+ * The canonical base filter for aggregated dashboard/watchlist reads (F-M8). Composes the
+ * F-M2 visible-where and ADDS `sourceVersion = CURRENT_STUDENT_RISK_SOURCE_VERSION`, so a row
+ * written by an older rules version (a stale rollout, a bad import, a reconcile regression) is
+ * excluded from every KPI/watchlist even if the coverage gate somehow let it through. Reads
+ * that intentionally target OTHER versions (e.g. the stale-projection reconcile sweep) do NOT
+ * use this — they build their own version filter.
+ */
+export function buildCurrentVisibleRiskProjectionWhere(
+  organizationId: string
+): Prisma.StudentRiskProjectionWhereInput {
+  return {
+    ...buildVisibleRiskProjectionWhere(organizationId),
+    sourceVersion: CURRENT_STUDENT_RISK_SOURCE_VERSION,
+  };
 }
 
 // ── Mapping ───────────────────────────────────────────────────────────────────
@@ -165,7 +183,7 @@ export async function findStudentRiskProjection(
  */
 export async function getStudentRiskLevelCounts(
   organizationId: string,
-  options: { financeAuthorized: boolean; sourceVersion?: string; studentIds?: string[] } = {
+  options: { financeAuthorized: boolean; studentIds?: string[] } = {
     financeAuthorized: true,
   }
 ): Promise<StudentRiskLevelCounts> {
@@ -174,9 +192,9 @@ export async function getStudentRiskLevelCounts(
   if (options.studentIds && options.studentIds.length === 0) {
     return { atRisk: 0, noRisk: 0, insufficientData: 0, byLevel: { UNKNOWN: 0, NONE: 0, LOW: 0, MODERATE: 0, HIGH: 0, CRITICAL: 0 } };
   }
+  // F-M8: always the current-version visible where — no version-agnostic reads.
   const where: Prisma.StudentRiskProjectionWhereInput = {
-    ...buildVisibleRiskProjectionWhere(organizationId),
-    ...(options.sourceVersion ? { sourceVersion: options.sourceVersion } : {}),
+    ...buildCurrentVisibleRiskProjectionWhere(organizationId),
     ...(options.studentIds ? { studentId: { in: options.studentIds } } : {}),
   };
 
@@ -213,15 +231,15 @@ const AT_RISK_LEVELS: StudentRiskLevel[] = ["LOW", "MODERATE", "HIGH", "CRITICAL
  */
 export async function getStudentRiskDimensionAtRiskCounts(
   organizationId: string,
-  options: { financeAuthorized: boolean; sourceVersion?: string; studentIds?: string[] }
+  options: { financeAuthorized: boolean; studentIds?: string[] }
 ): Promise<{ academic: number; attendance: number; financial: number; progression: number; documents: number }> {
   const db = await getDb();
   if (options.studentIds && options.studentIds.length === 0) {
     return { academic: 0, attendance: 0, financial: 0, progression: 0, documents: 0 };
   }
+  // F-M8: current-version visible where.
   const base: Prisma.StudentRiskProjectionWhereInput = {
-    ...buildVisibleRiskProjectionWhere(organizationId),
-    ...(options.sourceVersion ? { sourceVersion: options.sourceVersion } : {}),
+    ...buildCurrentVisibleRiskProjectionWhere(organizationId),
     ...(options.studentIds ? { studentId: { in: options.studentIds } } : {}),
   };
   const atRisk = { in: AT_RISK_LEVELS };
@@ -252,7 +270,7 @@ export async function getStudentIdsWithDimensionRisk(
   const db = await getDb();
   const rows = await db.studentRiskProjection.findMany({
     where: {
-      ...buildVisibleRiskProjectionWhere(organizationId),
+      ...buildCurrentVisibleRiskProjectionWhere(organizationId),
       studentId: { in: studentIds },
       [`${dimension}Level`]: { in: AT_RISK_LEVELS },
     },
@@ -268,7 +286,7 @@ export async function getStudentIdsWithDimensionRisk(
  */
 export async function findStudentRiskWatchlist(
   organizationId: string,
-  options: { financeAuthorized: boolean; limit?: number; sourceVersion?: string; studentIds?: string[] }
+  options: { financeAuthorized: boolean; limit?: number; studentIds?: string[] }
 ): Promise<StudentRiskWatchlistRow[]> {
   const db = await getDb();
   const limit = options.limit ?? 20;
@@ -276,9 +294,9 @@ export async function findStudentRiskWatchlist(
   if (options.studentIds && options.studentIds.length === 0) return [];
   // F-M2: soft-deleted students are excluded in the QUERY (before orderBy/take), so the list
   // never returns fewer than `limit` active students because of an in-memory post-filter.
+  // F-M8: current rules version only.
   const base: Prisma.StudentRiskProjectionWhereInput = {
-    ...buildVisibleRiskProjectionWhere(organizationId),
-    ...(options.sourceVersion ? { sourceVersion: options.sourceVersion } : {}),
+    ...buildCurrentVisibleRiskProjectionWhere(organizationId),
     ...(options.studentIds ? { studentId: { in: options.studentIds } } : {}),
   };
 

@@ -68,10 +68,15 @@ export async function getOrganizationHealthScore(organizationId: string): Promis
       Math.min(20, academicCounts.eligibleNoAction * 2)
   );
 
+  // F-M8: the per-student low-attendance penalty comes from the canonical projection. When the
+  // projection is UNAVAILABLE we exclude that term (no legacy re-derivation) and the attendance
+  // category degrades to the operational class-group signal — never a fabricated count.
+  const lowAttendancePenalty =
+    academicCounts.studentsLowAttendance.status === "AVAILABLE"
+      ? Math.min(60, academicCounts.studentsLowAttendance.data * 3)
+      : 0;
   const attendance = clamp(
-    100 -
-      Math.min(60, academicCounts.studentsLowAttendance * 3) -
-      Math.min(40, academicCounts.classGroupsLowAttendance * 8)
+    100 - lowAttendancePenalty - Math.min(40, academicCounts.classGroupsLowAttendance * 8)
   );
 
   const operational = clamp(
@@ -95,7 +100,11 @@ export async function getOrganizationHealthScore(organizationId: string): Promis
     criticalIntegrity: integritySeverity.CRITICAL,
     blockedStudents: academicCounts.blockedStudents,
     recoveryRequired: academicCounts.recoveryRequired,
-    studentsLowAttendance: academicCounts.studentsLowAttendance,
+    // Only surface the low-attendance line when the canonical figure is available (F-M8).
+    studentsLowAttendance:
+      academicCounts.studentsLowAttendance.status === "AVAILABLE"
+        ? academicCounts.studentsLowAttendance.data
+        : 0,
     noTeacherCount: operationalIssues.noTeacherCount,
   });
 

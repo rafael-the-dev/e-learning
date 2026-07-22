@@ -1,4 +1,5 @@
 import { findTeacherRiskRows } from "@/modules/teacher-portal/repositories/teacher-portal.repository";
+import type { RiskMetric } from "@/modules/students/services/risk-projection-readiness.service";
 import type { StudentRiskRow } from "@/modules/teacher-portal/types";
 
 const DISPLAY_LIMIT = 20;
@@ -6,6 +7,10 @@ const DISPLAY_LIMIT = 20;
 export interface TeacherStudentRiskList {
   rows: StudentRiskRow[];
   distinctStudentCount: number;
+  // F-M8: availability of the canonical attendance-risk dimension. When UNAVAILABLE the list's
+  // attendance rows are omitted and the KPI count excludes attendance risk — the UI surfaces
+  // an explicit "em preparação" note rather than implying there is no attendance risk.
+  attendanceRisk: RiskMetric<number>;
 }
 
 /**
@@ -33,10 +38,15 @@ export async function getTeacherStudentRiskList(
   organizationId: string,
   activeClassGroupIds: string[]
 ): Promise<TeacherStudentRiskList> {
-  const allRows = await findTeacherRiskRows(teacherId, organizationId, activeClassGroupIds);
+  const { rows: allRows, attendanceRisk } = await findTeacherRiskRows(
+    teacherId,
+    organizationId,
+    activeClassGroupIds
+  );
 
   return {
     rows: allRows.slice(0, DISPLAY_LIMIT),
     distinctStudentCount: new Set(allRows.map((r) => r.studentId)).size,
+    attendanceRisk,
   };
 }

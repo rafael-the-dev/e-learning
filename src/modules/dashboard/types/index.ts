@@ -2,6 +2,8 @@
 // EXECUTIVE DASHBOARD — TYPES
 // =============================================================================
 
+import type { RiskMetric } from "@/modules/students/services/risk-projection-readiness.service";
+
 export type DashboardSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 
 export const DASHBOARD_SEVERITY_LABELS: Record<DashboardSeverity, string> = {
@@ -50,7 +52,9 @@ export interface ExecutiveKpis {
   activeStudents: number;
   activeClassGroups: number;
   openAssessments: number;
-  studentsAtRisk: number;
+  // F-M8: canonical risk KPI — UNAVAILABLE (never 0, never legacy) when the projection is
+  // not ready for this org.
+  studentsAtRisk: RiskMetric<number>;
   monthlyReceipts: number;
   outstandingBalance: number;
   overdueInvoices: number;

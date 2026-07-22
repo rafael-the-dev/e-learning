@@ -14,6 +14,7 @@ import { requireRoleOrRedirect } from "@/server/auth/context";
 import { SYSTEM_ROLES } from "@/server/auth/permissions";
 import { PERMISSIONS } from "@/server/auth/permissions";
 import { getExecutiveDashboardData } from "@/modules/dashboard/services/dashboard.service";
+import { riskMetricNumberDisplay } from "@/shared/lib/risk-metric-display";
 import { OrganizationHealthCard } from "@/modules/dashboard/components/organization-health-card";
 import { DashboardQuickActions } from "@/modules/dashboard/components/dashboard-quick-actions";
 import { ExecutiveTrendCard } from "@/modules/dashboard/components/executive-trend-card";
@@ -68,7 +69,12 @@ export default async function DashboardPage() {
           <StatCard title="Alunos Ativos" value={kpis.activeStudents} icon={<Users className="size-4 text-blue-500" />} />
           <StatCard title="Turmas Ativas" value={kpis.activeClassGroups} icon={<GraduationCap className="size-4 text-indigo-500" />} />
           <StatCard title="Avaliações Abertas" value={kpis.openAssessments} icon={<ClipboardList className="size-4 text-violet-500" />} />
-          <StatCard title="Alunos em Risco" value={kpis.studentsAtRisk} icon={<AlertTriangle className="size-4 text-red-500" />} />
+          <StatCard
+            title="Alunos em Risco"
+            value={riskMetricNumberDisplay(kpis.studentsAtRisk).value}
+            description={riskMetricNumberDisplay(kpis.studentsAtRisk).description}
+            icon={<AlertTriangle className="size-4 text-red-500" />}
+          />
           <StatCard title="Recebimentos do Mês" value={formatCurrency(kpis.monthlyReceipts, kpis.currencySymbol)} icon={<Banknote className="size-4 text-emerald-500" />} />
           <StatCard title="Saldo em Dívida" value={formatCurrency(kpis.outstandingBalance, kpis.currencySymbol)} icon={<Wallet className="size-4 text-amber-500" />} />
           <StatCard title="Facturas Vencidas" value={kpis.overdueInvoices} icon={<FileWarning className="size-4 text-red-500" />} />

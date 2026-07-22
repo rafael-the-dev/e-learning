@@ -108,6 +108,15 @@ export function isRiskLevelAtRisk(level: StudentRiskLevel): boolean {
  */
 export const STUDENT_RISK_SOURCE_VERSION = "student-risk-v1";
 
+/**
+ * The rules version aggregate reads MUST match (F-M8). Every dashboard/watchlist read filters
+ * `sourceVersion = CURRENT_STUDENT_RISK_SOURCE_VERSION` so an old-version row (a stale rollout,
+ * a bad import, a reconcile regression) can never leak into a KPI or a watchlist even if it
+ * survived in the table. It is the same value as {@link STUDENT_RISK_SOURCE_VERSION} — the
+ * distinct name marks the "reads require the current version" intent at the call sites.
+ */
+export const CURRENT_STUDENT_RISK_SOURCE_VERSION = STUDENT_RISK_SOURCE_VERSION;
+
 const LEVEL_ORDER = RISK_LEVEL_ORDER;
 
 function maxLevel(levels: StudentRiskLevel[]): StudentRiskLevel {

@@ -248,7 +248,16 @@ export interface TeacherGradeKPIs {
   gradedCount: number;
   /** Average normalized grade across this teacher's GRADED results, or null. */
   avgNormalizedGrade: number | null;
-  /** Distinct students with a FAILED progress in one of the teacher's subjects. */
+  /**
+   * Distinct students with a FAILED progress in one of the teacher's subjects.
+   *
+   * @deprecated F-M8: LEGACY risk computation (flat FAILED-subject count), NOT the canonical
+   * StudentRiskProjection. It was never wired to the projection or the coverage gate, so it is
+   * intentionally left as-is by F-M8 (which only removed the hybrid fallbacks). Follow-up: move
+   * the teacher grades KPI to a teacher-scoped projection read (academic dimension, bounded to
+   * the teacher's students) so it matches Student 360 — see docs/student-360-backlog.md (F-M8
+   * follow-ups). Do NOT add new consumers of this field.
+   */
   atRiskStudentCount: number;
 }
 

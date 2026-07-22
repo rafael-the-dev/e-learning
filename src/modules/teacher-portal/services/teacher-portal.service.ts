@@ -116,6 +116,7 @@ export async function getTeacherPortalData(
     myClasses,
     myClassesTotal: counts.activeClassGroupCount,
     riskList: riskList.rows,
+    riskAttendance: riskList.attendanceRisk,
     notifications: latestNotifications,
     unreadNotificationCount,
     deadlines,

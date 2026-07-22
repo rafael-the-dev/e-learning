@@ -2,7 +2,12 @@ import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db";
 import { findUpcomingEventsByOrganization } from "@/modules/academic-calendar/repositories/academic-event.repository";
 import { getStudentIdsWithDimensionRisk } from "@/modules/students/repositories/student-risk-projection.repository";
-import { getStudentRiskProjectionCoverage } from "@/modules/students/services/student-risk-projection-coverage.service";
+import {
+  resolveRiskProjectionReadiness,
+  availableRiskMetric,
+  unavailableRiskMetric,
+  type RiskMetric,
+} from "@/modules/students/services/risk-projection-readiness.service";
 import type {
   TeacherTodaySession,
   AttendancePendingRow,
@@ -270,8 +275,6 @@ export async function findTeacherClassGroupAttendanceRates(
 
 // ── Risk list — scoped to the teacher's active class groups only ──────────────
 
-const LOW_ATTENDANCE_THRESHOLD = 75;
-const ATTENDANCE_TREND_THRESHOLD = 85;
 /**
  * Safety cap on every risk source query — defense in depth alongside the
  * activeClassGroupIds scoping. The final display list is sliced to 20 rows
@@ -281,22 +284,31 @@ const ATTENDANCE_TREND_THRESHOLD = 85;
  */
 const RISK_SOURCE_QUERY_LIMIT = 200;
 
+export interface TeacherRiskRowsResult {
+  rows: StudentRiskRow[];
+  // F-M8: the attendance dimension is canonical (projection-only). When the projection is not
+  // ready its rows are omitted (never a legacy 75/85 re-derivation) and this carries the
+  // explicit unavailable state so the UI can say "em preparação" instead of "no attendance risk".
+  attendanceRisk: RiskMetric<number>;
+}
+
 export async function findTeacherRiskRows(
   teacherId: string,
   organizationId: string,
   activeClassGroupIds: string[]
-): Promise<StudentRiskRow[]> {
-  if (activeClassGroupIds.length === 0) return [];
+): Promise<TeacherRiskRowsResult> {
+  if (activeClassGroupIds.length === 0) {
+    // No active classes → nothing in scope; attendance risk is trivially evaluable as empty.
+    return { rows: [], attendanceRisk: availableRiskMetric(0, new Date()) };
+  }
   const db = await getDb();
 
-  // M11.3: the attendance risk decision comes from the canonical projection once the org is
-  // backfilled (per-subject minimum — the SAME decision Student 360 uses), collapsing the
-  // flat LOW=75 / TREND=85 split into one at-risk answer. Until coverage exists, fall back to
-  // the legacy percentage thresholds. The other sources are teacher-scoped status/assessment
-  // signals not represented in the projection, so they stay.
-  const covered = (await getStudentRiskProjectionCoverage({ organizationId })).ready;
+  // F-M8: the attendance risk decision comes ONLY from the canonical projection (per-subject
+  // minimum — the SAME decision Student 360 uses). No legacy 75/85 fallback. The other sources
+  // are teacher-scoped status/assessment signals not represented in the projection, so they stay.
+  const readiness = await resolveRiskProjectionReadiness({ organizationId });
 
-  const [blocked, levelRecovery, courseRecovery, failedSubjects, legacyLowAttendance, missingAssessments] =
+  const [blocked, levelRecovery, courseRecovery, failedSubjects, missingAssessments] =
     await Promise.all([
       db.studentLevelProgress.findMany({
         where: { organizationId, status: "BLOCKED", enrollment: { classGroupId: { in: activeClassGroupIds } } },
@@ -343,30 +355,6 @@ export async function findTeacherRiskRows(
         },
         take: RISK_SOURCE_QUERY_LIMIT,
       }),
-      // Legacy attendance source — only used as the fallback when the projection is empty.
-      covered
-        ? Promise.resolve<
-            Array<{
-              studentId: string;
-              attendancePercentage: unknown;
-              student: { firstName: string; lastName: string };
-              enrollment: { classGroup: { name: string } | null };
-            }>
-          >([])
-        : db.studentSubjectProgress.findMany({
-            where: {
-              organizationId,
-              attendancePercentage: { not: null, lt: ATTENDANCE_TREND_THRESHOLD },
-              enrollment: { classGroupId: { in: activeClassGroupIds } },
-            },
-            select: {
-              studentId: true,
-              attendancePercentage: true,
-              student: { select: { firstName: true, lastName: true } },
-              enrollment: { select: { classGroup: { select: { name: true } } } },
-            },
-            take: RISK_SOURCE_QUERY_LIMIT,
-          }),
       db.assessmentResult.findMany({
         where: { organizationId, status: "MISSING", deletedAt: null, assessment: { teacherId, deletedAt: null } },
         select: {
@@ -412,8 +400,11 @@ export async function findTeacherRiskRows(
     });
   }
 
-  // Attendance rows — canonical projection decision when covered, else legacy thresholds.
-  if (covered) {
+  // Attendance rows — canonical projection decision ONLY (F-M8). When the projection is not
+  // ready, no attendance rows are added and `attendanceRisk` reports the explicit unavailable
+  // state (never a 75/85 legacy re-derivation, never silently "no attendance risk").
+  let attendanceRisk: RiskMetric<number>;
+  if (readiness.ready) {
     const candidates = await db.enrollment.findMany({
       where: { organizationId, status: "ACTIVE", deletedAt: null, classGroupId: { in: activeClassGroupIds } },
       select: {
@@ -441,19 +432,9 @@ export async function findTeacherRiskRows(
         detail: "Assiduidade abaixo do mínimo",
       });
     }
+    attendanceRisk = availableRiskMetric(seen.size, readiness.verifiedAt);
   } else {
-    for (const r of legacyLowAttendance) {
-      const pct = Number(r.attendancePercentage);
-      const isHigh = pct < LOW_ATTENDANCE_THRESHOLD;
-      rows.push({
-        studentId: r.studentId,
-        studentName: `${r.student.firstName} ${r.student.lastName}`,
-        classGroupName: r.enrollment.classGroup?.name ?? "—",
-        riskType: isHigh ? "LOW_ATTENDANCE" : "ATTENDANCE_TREND",
-        severity: isHigh ? "HIGH" : "MEDIUM",
-        detail: `Presença em ${pct.toFixed(0)}%`,
-      });
-    }
+    attendanceRisk = unavailableRiskMetric(readiness);
   }
 
   for (const r of missingAssessments) {
@@ -470,7 +451,7 @@ export async function findTeacherRiskRows(
   const severityRank: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
   rows.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
 
-  return rows;
+  return { rows, attendanceRisk };
 }
 
 // ── Upcoming deadlines — next 14 days, scoped to this teacher ─────────────────
