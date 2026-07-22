@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { recalc } = vi.hoisted(() => ({ recalc: vi.fn() }));
-vi.mock("@/modules/students/services/student-risk-projection.service", () => ({
-  recalculateStudentRiskProjection: recalc,
+const { schedule } = vi.hoisted(() => ({ schedule: vi.fn() }));
+vi.mock("@/modules/students/services/student-risk-recompute-scheduler", () => ({
+  scheduleStudentRiskRecompute: schedule,
 }));
 
 import {
@@ -32,7 +32,7 @@ function event(over: Partial<PersistedDomainEvent> = {}): PersistedDomainEvent {
 
 const handler = new StudentRiskProjectionHandler();
 
-beforeEach(() => recalc.mockReset());
+beforeEach(() => schedule.mockReset());
 
 describe("StudentRiskProjectionHandler", () => {
   it("handles EVERY event in the centralized F-H2 recalculation contract", () => {
@@ -66,15 +66,15 @@ describe("StudentRiskProjectionHandler", () => {
     expect(handler.canHandle(event({ eventType: DomainEventType.WALLET_DEPOSIT_CREATED }))).toBe(false); // not a risk input
   });
 
-  it("recomputes the projection for the payload's student, scoped to the event's org", async () => {
-    recalc.mockResolvedValue({ changed: true });
+  it("SCHEDULES (coalesced) a recompute for the payload's student, scoped to the event's org", async () => {
     await handler.handle(event({ organizationId: "org-9", payload: { studentId: "stu-7" } }));
-    expect(recalc).toHaveBeenCalledWith({ organizationId: "org-9", studentId: "stu-7" });
+    // F-M4: it schedules (dedupe/batch), never recomputes inline.
+    expect(schedule).toHaveBeenCalledWith({ organizationId: "org-9", studentId: "stu-7" });
   });
 
   it("no-ops when the payload has no studentId", async () => {
     await handler.handle(event({ payload: { invoiceId: "i1" } }));
-    expect(recalc).not.toHaveBeenCalled();
+    expect(schedule).not.toHaveBeenCalled();
   });
 
   // NOTE: the handler wraps the recompute in try/catch and logs on failure so a projection

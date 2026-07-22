@@ -90,10 +90,15 @@ M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip 
   both finance paths — + version-stale reconcile helper); filter in the query before
   orderBy/take; hardens tenant scoping + excludes orphans; watchlist gains a deterministic
   tertiary sort. Rows are NOT deleted on soft-delete. See CHANGELOG.
+- **F-M4 — recompute burst → DONE.** The risk handler now SCHEDULES via a coalescing
+  `student-risk-recompute-scheduler` (dedupe by org+student within a window) that flushes
+  unique students through a canonical `recalculateStudentRiskProjectionsBatch` (dedupe, empty
+  no-op, bounded concurrency [1,20] default 5 via a real pool — no unbounded Promise.all,
+  chunking [10,200] default 50, per-student isolation, counters/metrics). Idempotency +
+  reconcile remain the correctness backstop; event semantics unchanged. See CHANGELOG.
 - **Still open from the review (Mediums/Lows, do NOT block the F-H cluster):**
-  F-M4 (synchronous recompute burst on bulk attendance/session recalc), F-M6 (non-finance
-  card/alert permission gating), F-M7 (pager aria-labels), plus the Lows. F-L4 (unused var)
-  fixed earlier.
+  F-M6 (non-finance card/alert permission gating), F-M7 (pager aria-labels), plus the Lows.
+  F-L4 (unused var) fixed earlier.
 
 ### Context
 H6 introduced the single canonical per-student risk engine (`buildStudentRiskSummary` →

@@ -167,6 +167,7 @@ vi.mock("@/modules/students/services/student-risk-projection-coverage.service", 
 import {
   recalculateStudentRiskProjection,
   reconcileStudentRiskProjectionsForOrg,
+  recalculateStudentRiskProjectionsBatch,
 } from "@/modules/students/services/student-risk-projection.service";
 
 const ORG = "org-1";
@@ -332,5 +333,64 @@ describe("reconcileStudentRiskProjectionsForOrg (M11.4 backfill / reconciliation
     expect(h.markIncomplete).toHaveBeenCalledWith(
       expect.objectContaining({ organizationId: ORG, missingStudentCount: 1, expectedStudentCount: 5 })
     );
+  });
+});
+
+describe("recalculateStudentRiskProjectionsBatch (F-M4)", () => {
+  beforeEach(() => {
+    Object.values(h).forEach((m) => m.mockReset());
+    primeEmptyLoaders();
+    h.getStudentById.mockImplementation(async (studentId: string) => ({ id: studentId, organizationId: ORG }));
+    h.findStudentRiskProjection.mockResolvedValue(null); // → always "changed"
+    h.upsertStudentRiskProjection.mockImplementation(async (d) => ({ ...d, id: "p", levelRank: 0, levelWithoutFinanceRank: 0, createdAt: NOW, updatedAt: NOW }));
+  });
+
+  it("deduplicates studentIds and recomputes each unique student once", async () => {
+    const result = await recalculateStudentRiskProjectionsBatch({
+      organizationId: ORG,
+      studentIds: ["A", "A", "B", "A", "C", "B"],
+    });
+    expect(result.requested).toBe(6);
+    expect(result.unique).toBe(3);
+    expect(result.succeeded).toBe(3);
+    // recalc (→ getStudentById) ran once per UNIQUE student.
+    expect(h.getStudentById).toHaveBeenCalledTimes(3);
+    expect([...new Set(h.getStudentById.mock.calls.map((c) => c[0]))].sort()).toEqual(["A", "B", "C"]);
+  });
+
+  it("is a no-op for an empty list (no queries)", async () => {
+    const result = await recalculateStudentRiskProjectionsBatch({ organizationId: ORG, studentIds: [] });
+    expect(result).toEqual({ requested: 0, unique: 0, succeeded: 0, failed: 0, skipped: 0 });
+    expect(h.getStudentById).not.toHaveBeenCalled();
+  });
+
+  it("isolates a per-student failure — the rest still complete", async () => {
+    h.getStudentById.mockImplementation(async (studentId: string) => {
+      if (studentId === "bad") throw new Error("NotFound"); // e.g. cross-org / deleted → isolated
+      return { id: studentId, organizationId: ORG };
+    });
+    const result = await recalculateStudentRiskProjectionsBatch({
+      organizationId: ORG,
+      studentIds: ["A", "bad", "C"],
+    });
+    expect(result.succeeded).toBe(2);
+    expect(result.failed).toBe(1);
+    expect(result.unique).toBe(3);
+  });
+
+  it("never exceeds the concurrency limit (no unbounded Promise.all)", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    h.getStudentById.mockImplementation(async (studentId: string) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight--;
+      return { id: studentId, organizationId: ORG };
+    });
+    const ids = Array.from({ length: 12 }, (_, i) => `s${i}`);
+    await recalculateStudentRiskProjectionsBatch({ organizationId: ORG, studentIds: ids, concurrency: 3 });
+    expect(peak).toBeLessThanOrEqual(3);
+    expect(peak).toBeGreaterThan(1); // actually ran concurrently
   });
 });

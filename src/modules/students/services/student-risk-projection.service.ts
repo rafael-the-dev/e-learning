@@ -223,6 +223,103 @@ export async function recalculateStudentRiskProjection(params: {
   return { changed: true, projection };
 }
 
+// ─── Batch recompute (F-M4) ─────────────────────────────────────────────────────
+// The canonical primitive for recomputing MANY students at once (bulk attendance /
+// session recompute, the scheduler flush, targeted ops). Deduplicates, caps concurrency,
+// chunks, isolates per-student failure, and returns counters — so a bulk operation triggers
+// ONE controlled batch instead of hundreds of independent synchronous recomputes.
+
+export interface RiskProjectionBatchResult {
+  requested: number;
+  unique: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+}
+
+const RECOMPUTE_CONCURRENCY_DEFAULT = 5;
+const RECOMPUTE_CONCURRENCY_MIN = 1;
+const RECOMPUTE_CONCURRENCY_MAX = 20;
+const RECOMPUTE_CHUNK_DEFAULT = 50;
+const RECOMPUTE_CHUNK_MIN = 10;
+const RECOMPUTE_CHUNK_MAX = 200;
+
+function clamp(value: number | undefined, def: number, min: number, max: number): number {
+  const v = value ?? def;
+  if (!Number.isFinite(v) || v <= 0) return def;
+  return Math.max(min, Math.min(max, Math.floor(v)));
+}
+
+export function resolveRecomputeConcurrency(requested?: number): number {
+  const envDefault = Number(process.env.STUDENT_RISK_RECOMPUTE_CONCURRENCY);
+  return clamp(
+    requested ?? (Number.isFinite(envDefault) ? envDefault : undefined),
+    RECOMPUTE_CONCURRENCY_DEFAULT,
+    RECOMPUTE_CONCURRENCY_MIN,
+    RECOMPUTE_CONCURRENCY_MAX
+  );
+}
+
+/** Run `worker` over `items` with at most `limit` in flight (never an unbounded Promise.all). */
+async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      await worker(item);
+    }
+  });
+  await Promise.all(runners);
+}
+
+/**
+ * Recompute the projection for a set of students, deduped, with bounded concurrency and
+ * chunking. Empty/duplicate input is handled; each student is tenant-guarded (recalc calls
+ * getStudentById) and isolated (one failure never aborts the batch). Post-commit only — never
+ * call inside a domain mutation's transaction.
+ */
+export async function recalculateStudentRiskProjectionsBatch(params: {
+  organizationId: string;
+  studentIds: string[];
+  concurrency?: number;
+  batchSize?: number;
+  now?: Date;
+}): Promise<RiskProjectionBatchResult> {
+  const requested = params.studentIds.length;
+  const unique = [...new Set(params.studentIds)];
+  if (unique.length === 0) {
+    return { requested, unique: 0, succeeded: 0, failed: 0, skipped: 0 };
+  }
+  const now = params.now ?? new Date();
+  const concurrency = resolveRecomputeConcurrency(params.concurrency);
+  const chunkSize = clamp(params.batchSize, RECOMPUTE_CHUNK_DEFAULT, RECOMPUTE_CHUNK_MIN, RECOMPUTE_CHUNK_MAX);
+
+  let succeeded = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize);
+    await runWithConcurrency(chunk, concurrency, async (studentId) => {
+      try {
+        const r = await recalculateStudentRiskProjection({ organizationId: params.organizationId, studentId, now });
+        if (r.changed) succeeded++;
+        else skipped++;
+      } catch {
+        // Per-student failure is isolated (no PII persisted); the reconcile sweep heals it.
+        failed++;
+      }
+    });
+  }
+
+  // Metrics: proves the F-M4 collapse (requested vs unique) + the outcome split.
+  console.info(
+    `[risk-recompute-batch] org=${params.organizationId} requested=${requested} unique=${unique.length} ` +
+      `succeeded=${succeeded} skipped=${skipped} failed=${failed} concurrency=${concurrency} chunk=${chunkSize}`
+  );
+
+  return { requested, unique: unique.length, succeeded, failed, skipped };
+}
+
 export interface ReconcileStudentRiskProjectionsResult {
   processed: number;
   changed: number;

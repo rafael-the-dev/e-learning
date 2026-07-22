@@ -69,6 +69,27 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   and the Visão Geral tab no longer duplicates the domain tabs' tables/metrics (it holds
   identity, enrolment, portal account and guardians only).
 
+- Batched + deduplicated risk-projection recomputes (review finding **F-M4**). A bulk
+  attendance / session recompute used to fan out to hundreds of **synchronous per-event** risk
+  recomputes (and recomputed the *same* student several times when they appeared in several
+  events). The risk handler now **schedules** instead of recomputing inline:
+  - New coalescing `student-risk-recompute-scheduler` buffers requests keyed by
+    `(organizationId, studentId)` within a short window, then flushes the **unique** students
+    (grouped by org) through the batch API. Same-student events in a burst collapse to one
+    recompute; distinct students are processed with bounded concurrency, not a per-event burst.
+  - New canonical batch primitive `recalculateStudentRiskProjectionsBatch({ organizationId,
+    studentIds, concurrency?, batchSize? })` — deduplicates, ignores an empty list, caps
+    concurrency (`STUDENT_RISK_RECOMPUTE_CONCURRENCY`, default 5, clamp [1,20]) via a real
+    pool (never an unbounded `Promise.all`), chunks (default 50, clamp [10,200]), isolates
+    per-student failure, and returns counters `{ requested, unique, succeeded, failed,
+    skipped }` (logged as metrics that prove the collapse, e.g. 250 events → 87 unique).
+  - The `StudentRiskProjectionHandler` change is transparent — it still reacts to the same
+    events post-commit and never fails the dispatch; correctness still rests on the idempotent
+    recompute and the F-H3 reconcile, so the in-process dedupe is a pure cost/latency
+    optimization (a flush lost to a suspended process is healed by the reconcile). The risk
+    rules, the projection, coverage semantics, the event set and the post-commit guarantee are
+    unchanged; event semantics are untouched (the attendance events still publish for their
+    other subscribers).
 - Excluded **soft-deleted students** from every risk-projection aggregate read (review finding
   **F-M2**). A `StudentRiskProjection` row is intentionally kept when its student is soft-deleted
   (audit / restore / reconcile), but it must not inflate KPIs or watchlists. All aggregate reads

@@ -1,7 +1,7 @@
 import type { DomainEventHandler } from "../event-handlers";
 import type { PersistedDomainEvent } from "../domain-event";
 import { DomainEventType } from "../event-types";
-import { recalculateStudentRiskProjection } from "@/modules/students/services/student-risk-projection.service";
+import { scheduleStudentRiskRecompute } from "@/modules/students/services/student-risk-recompute-scheduler";
 
 // =============================================================================
 // STUDENT RISK PROJECTION HANDLER (M11.4 + F-H2)
@@ -84,15 +84,10 @@ export class StudentRiskProjectionHandler implements DomainEventHandler {
     const identity = resolveStudentRiskProjectionIdentity(event);
     if (!identity) return; // no reliable student to scope the recompute to
 
-    try {
-      await recalculateStudentRiskProjection(identity);
-    } catch (error) {
-      // Read-model maintenance is best-effort — never fail the dispatch or the mutation.
-      // The reconciliation sweep (F-H3) heals a row left stale by a failed recompute.
-      console.error(
-        `[StudentRiskProjectionHandler] recompute failed for student ${identity.studentId} on ${event.eventType}:`,
-        error
-      );
-    }
+    // F-M4: SCHEDULE (coalesce), don't recompute inline. On a bulk attendance/session
+    // operation the same student's many events collapse to one recompute, and distinct
+    // students are flushed through the bounded-concurrency batch instead of a synchronous
+    // per-event burst. Best-effort; the reconcile sweep is the correctness backstop.
+    scheduleStudentRiskRecompute(identity);
   }
 }
