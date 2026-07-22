@@ -96,9 +96,19 @@ M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip 
   no-op, bounded concurrency [1,20] default 5 via a real pool — no unbounded Promise.all,
   chunking [10,200] default 50, per-student isolation, counters/metrics). Idempotency +
   reconcile remain the correctness backstop; event semantics unchanged. See CHANGELOG.
+- **F-M6 — non-finance card/alert permission gating → DONE.** The H1 finance boundary is now
+  uniform across ALL dimensions. `resolveStudent360Capabilities` (single source, same predicate
+  as tab access) → optional per-dimension view flags on `Student360Capabilities` (default true,
+  so the Student/Guardian portals stay behaviour-neutral); the `/students` page passes the
+  viewer's real flags. `getStudent360Core` skips the query, DTO section and risk signals of any
+  unauthorized dimension → no card, no alert, no reason; global level excludes it (no-inference,
+  same pattern as `financial`); `documentCount` made nullable to mirror finance; recent activity
+  filtered by event dimension before serialization (count post-gate). Tests: dimension-gate
+  suite (no-query + DTO-absence via `JSON.stringify` + no-inference + activity filter),
+  capability-resolver cases, risk-engine null-documentCount, hidden-card component cases. See
+  CHANGELOG.
 - **Still open from the review (Mediums/Lows, do NOT block the F-H cluster):**
-  F-M6 (non-finance card/alert permission gating), F-M7 (pager aria-labels), plus the Lows.
-  F-L4 (unused var) fixed earlier.
+  F-M7 (pager aria-labels), plus the Lows. F-L4 (unused var) fixed earlier.
 
 ### Context
 H6 introduced the single canonical per-student risk engine (`buildStudentRiskSummary` →

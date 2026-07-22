@@ -40,6 +40,33 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
   excluded and the weights renormalized when billing is not authorized; `overdue-balance`
   alerts require `INVOICES_VIEW` and `pending-refund` alerts require `WALLETS_VIEW`. Same
   boundary fixed in the Guardian Portal (previously masked at render but still fetched).
+- **Per-dimension permission boundary for ALL operational cards and non-financial alerts**
+  (review finding **F-M6**). The finance boundary above is now extended uniformly to every
+  Student 360 dimension — academic, attendance, progression, documents and timeline. A
+  viewer without a dimension's permission gets **no query, no DTO section, and no risk
+  reason** for it; the section's absence carries the authorization state (never a masked or
+  nulled value fetched anyway). Concretely:
+  - `resolveStudent360Capabilities` maps the viewer's permissions to per-dimension view
+    flags (grades → academic, attendance sessions → attendance, level|course progress →
+    progression, documents → documents, timeline → timeline), from the same predicate that
+    drives tab access. The `/students/[studentId]` page resolves these once and passes them
+    to the aggregator.
+  - `getStudent360Core` skips each unauthorized dimension's query, builds the academic /
+    attendance summaries only when authorized (else `null`), and gates the progression DTO
+    arrays. The academic/attendance operational cards, the status-band academic chip and the
+    overview level row disappear entirely when unauthorized.
+  - The risk engine is fed **only authorized signals**, so an unauthorized dimension
+    contributes no reason and is excluded from the global level — the level can never leak a
+    hidden dimension (no-inference), and `recommendedAction`/alert **count** are computed
+    after gating. `documentCount` is now nullable (mirroring `financial`): `null` ⇒ the
+    documents dimension is null and excluded, so the "no documents" reason is never produced
+    for a viewer who cannot see documents.
+  - Recent activity is filtered by each event's dimension **before serialization**, so both
+    the list and its count are permission-correct (a finance/attendance event is dropped for
+    a viewer without that permission; enrollment/other events stay visible).
+  - The Student and Guardian portals are behaviour-neutral: the view flags are optional and
+    default to authorized, so those callers (which grant own-data / per-link access and gate
+    exposure at their own layer) are unchanged.
 
 ### Changed
 - Standardized the displayed academic average across Student 360, Student Portal and
