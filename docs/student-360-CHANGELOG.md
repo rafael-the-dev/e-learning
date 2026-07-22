@@ -68,6 +68,19 @@ validation at commit: `tsc` 0 · 228 module tests · `eslint` 0.
     default to authorized, so those callers (which grant own-data / per-link access and gate
     exposure at their own layer) are unchanged.
 
+### Accessibility
+- **Grades and attendance pagination** (review finding **F-M7**). The two icon-only prev/next
+  pagers (`<Button><ChevronLeft/></Button>`) were announced only as "botão", were
+  indistinguishable from one another, and never announced the current page. New shared
+  `AccessiblePagination` component wraps URL-driven pagination in a `<nav>` landmark with a
+  section-specific accessible name ("Paginação das notas" / "Paginação da assiduidade"), gives
+  the prev/next controls contextual accessible names, marks the chevrons `aria-hidden`, adds an
+  `aria-live="polite"` page status ("Página X de Y …") plus an `aria-describedby` results
+  summary ("A mostrar 11–20 de 47 …"), uses the **native `disabled`** attribute at the page
+  boundaries (never a clickable `aria-disabled` link), keeps enabled controls as real links, and
+  wires `aria-controls` to the paginated table. Purely presentational — the query params and
+  single-page behaviour are unchanged.
+
 ### Changed
 - Standardized the displayed academic average across Student 360, Student Portal and
   Guardian Portal.

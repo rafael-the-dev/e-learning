@@ -107,8 +107,15 @@ M11.3→M11.4 as long as the deploy runbook backfills before the dashboard flip 
   suite (no-query + DTO-absence via `JSON.stringify` + no-inference + activity filter),
   capability-resolver cases, risk-engine null-documentCount, hidden-card component cases. See
   CHANGELOG.
-- **Still open from the review (Mediums/Lows, do NOT block the F-H cluster):**
-  F-M7 (pager aria-labels), plus the Lows. F-L4 (unused var) fixed earlier.
+- **F-M7 — grades/attendance pagination accessibility → DONE.** New shared
+  `AccessiblePagination` (src/shared/components/data): `<nav>` landmark with section-specific
+  accessible name, contextual prev/next names, `aria-hidden` chevrons, `aria-live` page status +
+  `aria-describedby` results summary, native `disabled` at boundaries (not clickable
+  `aria-disabled`), enabled controls as real links, `aria-controls` → table id. Both tabs
+  migrated; query params / single-page behaviour unchanged. Tests: 14 component cases + 2 tab
+  regression cases. See CHANGELOG.
+- **Still open from the review (Lows only; do NOT block the F-H cluster):** the Lows.
+  F-L4 (unused var) fixed earlier.
 
 ### Context
 H6 introduced the single canonical per-student risk engine (`buildStudentRiskSummary` →
