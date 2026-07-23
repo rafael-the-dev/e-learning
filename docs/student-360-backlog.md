@@ -231,3 +231,42 @@ Brief pointers so the review's remaining findings have one home.
   granular Suspense; `findLastActivityAt` index; browser-tab title is the UUID; dead
   whitespace when no alerts; `formatCurrency` duplicated; stale [docs/student-360.md]
   (says teacher scoping not implemented, but it is).
+
+---
+
+## Evolution & Technical Cleanup roadmap (post-hardening)
+
+The Student 360 hardening cluster is functionally + architecturally approved. The next phase is
+debt reduction / consolidation, NOT new features. Three EPICs, strictly ordered:
+
+### EPIC M11 — Deploy Cleanup (short) — **BLOCKED on production rollout**
+Remove the temporary migration infrastructure. **Preconditions (none met yet — the branch
+`feat/transcript-engine` is not merged/deployed):** all orgs `coverage = READY`, backfill done,
+daily reconcile stable for a while, no production regressions. Starting M11 before these deletes
+the fail-closed safety net (legacy fallback + `@deprecated` consumers) before the projection has
+ever run in production. Stories: (1) migrate + delete the `@deprecated` consumers
+(`findRiskWatchlistStudents`, `getTeacherGradeKPIs.atRiskStudentCount`) — see F-M8 follow-ups;
+(2) remove legacy risk builders/thresholds/calculators/adapters; (3) simplify
+`student-risk-projection.repository.ts` (base-where → compose → aggregate); (4) remove temporary
+rollout docs (keep permanent operational docs); (5) trim rollout-only observability (keep
+freshness / coverage health / reconcile duration / failures).
+
+### EPIC M12 — Risk Platform Cleanup (medium) — system-wide risk platform
+Stories: (1) Projection SDK (`RiskProjectionClient`: getCounts/getWatchlist/getStudent/
+getDistribution — no module knows Prisma); (2) Risk UI Kit (RiskBadge/Chip/Legend/MetricCard/
+UnavailableCard/DistributionChart); (3) Risk Events SDK (`RiskProjectionPublisher.studentChanged`
+— SDK owns scheduler/dedupe/batching); (4) Projection benchmark (100→50k students baselines);
+(5) Projection Health dashboard (admin-only: coverage/version/freshness/failures/reconcile+backfill
+history/rate/duration); (6) **Property-based tests — DONE** (`student-risk.property.test.ts`,
+5000 seeded combos, projection==engine invariants); (7) **Mutation Audit — DONE**
+(`risk-projection-mutation-audit.test.ts`, CI fails if a risk-subscribed event has no publisher);
+(8) **Consumer Contract tests — DONE** (`risk-consumer-contract.test.ts`, same READY dataset ⇒
+consistent numbers; not-ready ⇒ all UNAVAILABLE). Stories 6-8 were done EARLY as additive
+de-risking (they remove nothing and make the deploy + M11 safer).
+
+### EPIC M13 — Functional Evolution (future) — only after M11+M12
+Risk Trends (30-day HIGH/MEDIUM/LOW), Explainable Risk (drill-down into the reasons), Predictive
+Risk (dropout probability from attendance+grades+payments trends), Advisor (auto next-action per
+role).
+
+**Order:** M11 → M12 → M13. Do NOT build new features on the current architecture before M11.
