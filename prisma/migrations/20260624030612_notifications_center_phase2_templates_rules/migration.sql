@@ -3,7 +3,14 @@ BEGIN TRY
 BEGIN TRAN;
 
 -- AlterTable
-ALTER TABLE [dbo].[notifications] DROP CONSTRAINT [notifications_updatedAt_df];
+-- F-M8/release-validation fix: this migration (03:06) sorts BEFORE the phase-1 migration
+-- (13:00) that CREATES this default, so on a clean replay the constraint does not yet exist
+-- here and an unconditional DROP fails (SQL Server error 3728). Guard it so the clean replay
+-- no-ops here; a later corrective migration drops the default once phase-1 has created it, so
+-- fresh and existing databases converge on "no default". Existing DBs are unaffected
+-- (already-applied migrations are not re-run by `migrate deploy`).
+IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE [name] = 'notifications_updatedAt_df')
+    ALTER TABLE [dbo].[notifications] DROP CONSTRAINT [notifications_updatedAt_df];
 
 -- CreateTable
 CREATE TABLE [dbo].[notification_templates] (
