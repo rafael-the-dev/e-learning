@@ -270,3 +270,26 @@ Risk (dropout probability from attendance+grades+payments trends), Advisor (auto
 role).
 
 **Order:** M11 → M12 → M13. Do NOT build new features on the current architecture before M11.
+
+---
+
+## REL — Release readiness (from the local final-gate run, 2026-07-26)
+
+- **Migration clean-replay fix — DONE** (`fix(prisma)` commit): the notifications phase1/phase2
+  timestamp inversion broke fresh-DB provisioning (SQL Server 3728). Guarded `IF EXISTS` +
+  corrective converging migration; verified `migrate reset` replays the full chain + seed on a
+  disposable DB. Placed at the **PR1 base** so every stacked PR is independently clean-replayable.
+- **Build/typecheck heap — DONE** (`build(scripts)` commit): `pnpm build`/`pnpm typecheck` OOM at
+  the default heap; scripts now raise it via `cross-env` (portable) — no hidden env var needed.
+- **Seed production guard — DONE** (`fix(seed)` commit): `prisma/seed.ts` fails closed on
+  `NODE_ENV=production` unless `ALLOW_PRODUCTION_SEED=true`, before any destructive call.
+- **REL-02 — Canonical Realistic Dataset (OPEN, required before full operational validation, does
+  NOT block the technical PRs).** There is no from-scratch realistic seed (`seed.ts` = perms/roles
+  only; `db:seed-academic` needs a pre-existing org with hardcoded IDs), so backfill/reconcile
+  can't be validated live on a clean DB. Scope: 1 org · 1 course/2 levels · subjects+policies ·
+  1–2 class groups · 10–20 students spanning no-risk/academic/attendance/financial/documental/
+  combined cases · enrolments, progress, sessions, attendance, invoices, documents · documented
+  expected results. Must be **deterministic, idempotent, no real PII, separate from the structural
+  permissions seed, dev/test/demo-only**. Suggested command: `pnpm db:seed-risk-scenario` (do NOT
+  fold into `db:seed`). Rationale: backfill ran against real SQL Server, and pause/resume + mutation
+  audit + consumer contract + property-based tests are green — the gap is only the live realistic run.
