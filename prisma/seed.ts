@@ -112,7 +112,58 @@ async function validatePermissionsSeeded(db: PrismaClient): Promise<void> {
   );
 }
 
+// =============================================================================
+// PRODUCTION SEED GUARD (deploy-blocker, not a nice-to-have)
+// This seed performs destructive work (cleanupStalePermissions deletes rows). It
+// must NEVER run against production unless the operator explicitly opts in via an
+// ENV VARIABLE (not a --force flag, which generic scripts can pass inadvertently).
+// The guard runs BEFORE any getDb()/transaction/destructive call.
+// =============================================================================
+function describeTarget(): string {
+  const url = process.env.DATABASE_URL ?? "";
+  const host = (url.match(/sqlserver:\/\/([^;]+)/) || [])[1] ?? "unknown-host";
+  const database = (url.match(/database=([^;]+)/) || [])[1] ?? "unknown-db";
+  return `${host} / ${database}`; // host + database only — password is never printed
+}
+
+function assertSeedAllowed(): void {
+  const env = process.env.NODE_ENV ?? "development";
+  const explicitConsent = process.env.ALLOW_PRODUCTION_SEED === "true";
+  const target = describeTarget();
+
+  if (env !== "production") {
+    console.log(`▶ Seed permitido — ambiente="${env}", alvo=${target}, ação=seed permissions/roles (+ cleanup de permissions obsoletas).`);
+    return;
+  }
+
+  if (!explicitConsent) {
+    console.error(
+      [
+        "✗ SEED ABORTADO — recusa de segurança antes de qualquer operação destrutiva.",
+        `  Ambiente : ${env}`,
+        `  Alvo     : ${target}`,
+        "  Ação     : cleanupStalePermissions APAGA linhas Permission/RolePermission + upserts de roles.",
+        "  Motivo   : NODE_ENV=production sem autorização explícita.",
+        "  Para autorizar (com plena consciência): defina ALLOW_PRODUCTION_SEED=true.",
+      ].join("\n")
+    );
+    process.exit(1);
+  }
+
+  console.warn(
+    [
+      "⚠ SEED DE PRODUÇÃO AUTORIZADO — a prosseguir com operações destrutivas.",
+      `  Ambiente : ${env} (ALLOW_PRODUCTION_SEED=true)`,
+      `  Alvo     : ${target}`,
+      "  Ação     : cleanupStalePermissions APAGA linhas + upserts de roles/permissions.",
+    ].join("\n")
+  );
+}
+
 async function main() {
+  // Fail-closed BEFORE opening any connection or running a destructive statement.
+  assertSeedAllowed();
+
   const db = await getDb();
 
   console.log("Seeding permissions...");
