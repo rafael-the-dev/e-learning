@@ -135,9 +135,15 @@ async function main() {
       where: { organizationId: null, name: roleName },
     });
     const role = existing
-      ? await db.role.update({ where: { id: existing.id }, data: { isSystem: true } })
+      ? await db.role.update({ where: { id: existing.id }, data: { isSystem: true, code: roleName } })
       : await db.role.create({
-          data: { name: roleName, isSystem: true, description: `System role: ${roleName}` },
+          // `code` is REQUIRED here (not left to db:backfill-role-codes): the
+          // roles UNIQUE([organizationId], [code]) is a plain constraint, so on a
+          // clean database every system role (organizationId=null) with a null code
+          // would collide on the 2nd insert (SQL Server treats NULLs as equal). Set
+          // code = role name (the same value backfill-role-codes assigns) so the seed
+          // is self-sufficient on a fresh database. See docs / migration gotchas.
+          data: { name: roleName, code: roleName, isSystem: true, description: `System role: ${roleName}` },
         });
 
     const permissionsForRole = ROLE_PERMISSIONS[roleName];
