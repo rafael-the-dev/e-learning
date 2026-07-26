@@ -177,6 +177,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 2.1.0
         version: 2.1.0(vitest@2.1.0(@types/node@20.19.41)(happy-dom@15.11.7)(lightningcss@1.32.0))
+      cross-env:
+        specifier: ^10.1.0
+        version: 10.1.0
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
