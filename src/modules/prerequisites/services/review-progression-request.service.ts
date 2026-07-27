@@ -1,5 +1,8 @@
-"use server";
-
+// NOTE: service module (plain server-side code), NOT a server-actions module — must NOT carry
+// a "use server" directive: such a module may export ONLY async functions, but this file also
+// exports a class + result interfaces. The illegal non-async export made Turbopack drop the whole
+// module ("no exports at all"), breaking `next build` (BUG-PREREQ-001). Server-action entrypoints
+// live in actions/prerequisite.actions.ts ("use server"), which call these functions.
 import { getDb } from "@/server/db";
 import {
   decideCourseCompletion,

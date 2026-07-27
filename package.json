@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 4047",
-    "build": "next build",
+    "typecheck": "cross-env NODE_OPTIONS=--max-old-space-size=8192 tsc --noEmit",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next build",
     "start": "next start -p 4047",
     "lint": "eslint",
     "test": "vitest run",
@@ -87,6 +88,7 @@
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
